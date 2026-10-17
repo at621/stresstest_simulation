@@ -15,12 +15,23 @@ How this repository is organised and what is enforced. The engine design is in [
 
 "Locked" means Claude Code's Edit and Write tools are denied there. Only code writes these folders, so changing their content means changing the code and rerunning the step. The deny rules also cover shell writes that Claude Code recognises, such as redirects, `tee`, `mv` and `rm`. A script can still write these folders, which is how the one-off steps and the run work.
 
-## 2. Import rules
+## 2. Code rules
 
-These are checked with `lint-imports`, configured in `pyproject.toml`:
+Checked by `lint-imports`, configured in `pyproject.toml`:
 
 - `foundation` and `stress` never import each other.
 - Pipeline steps are independent packages that share only `stress.contracts`, and `cli.py` wires them in order. A step gets another step's output as a table defined in `contracts`, never by importing that step.
+
+Held by the engine and its tests:
+
+- Every input enters through R2. No later step reads a file.
+- R5 is the only step that creates cash flows. They are contractual and the same in every scenario.
+- One Z per segment, country, year and scenario drives the PD matrix, LGD and prepayment. Nothing is stressed twice.
+- Missing is never zero. Every input value carries a status, and a missing value blocks the calculation that needs it.
+- Amounts are in EUR, and rates and probabilities are decimal fractions, held as float64 and unrounded until R10.
+- A run folder is write-once, and a rerun is a new folder. Baseline and adverse are never blended.
+- No number is typed by hand. Expected values come from `docs/spec/`, and computed values come from code.
+- Every test carries `@pytest.mark.at(...)`, `req(...)` or `control(...)`. Requirement and acceptance-case IDs are never reused (requirements §1.3).
 
 ## 3. Runs
 

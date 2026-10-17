@@ -1,48 +1,47 @@
 # Stress engine (EBA 2027 preparation)
 
-Deterministic engine projecting stage migration, PD, LGD, EAD and provisions for a synthetic €11bn EUR, amortised-cost book over 2027–2029, baseline and adverse.
+A deterministic credit stress-test engine. It projects stage migration, PD, LGD, EAD and provisions for a synthetic €11bn EUR, amortised-cost book over 2027–2029, in a baseline and an adverse scenario.
 
-- Design, leading: `docs/stress-engine-code-flow.html`. Where anything disagrees with it, it wins; raise the conflict rather than pick a side.
-- Requirements: `docs/spec/EBA_2027_Credit_Portfolio_Stress_Test_Requirements.md`.
-- Repository rules: `docs/architecture.md`.
+## Where to look
 
-## Map
+| For | Read |
+|---|---|
+| What to build next | `docs/plan.md` |
+| How the engine works | `docs/stress-engine-code-flow.html`, the design |
+| What the engine must do, and the acceptance cases | `docs/spec/EBA_2027_Credit_Portfolio_Stress_Test_Requirements.md` |
+| Code and repository rules | `docs/architecture.md` |
+| Rules for one step | the `CLAUDE.md` in that step's folder, where there is one |
 
-- `foundation/`: Part 1, one-off steps O1–O4. Their only products are files in `docs/spec/` and `inputs/<hash>/`.
-- `src/stress/`: Part 2, the engine. One package per pipeline step (R1–R11), plus `contracts/` and `cli.py`.
-- `docs/spec/`, `inputs/<hash>/`: locked outputs of the one-off steps.
-- `runs/<run_id>/`: one folder per run (manifest, config, data, results). See `runs/README.md`.
-- `tests/`: `unit/`, `acceptance/` (one test per AT, reads `docs/spec/` oracles), `controls/`.
+The design leads. If another document disagrees with it, follow the design and tell the user about the conflict so it can be resolved.
 
-## Off-limits and locked
+## How to work
 
-- `archive/`: never read, list, search, reference or write it, and never run a tool against it. If something you need seems to be there, ask the user.
-- `inputs/bank/`: protected. Never read it.
-- `docs/spec/`, `inputs/<hash>/` and `runs/<run_id>/` are never edited by hand. Only one-off code (O1–O4) and the run (R1–R11) write them.
+- Build in the step order of `docs/plan.md`. When a step's outcomes are met, set its status to Done.
+- Keep to the code rules in `docs/architecture.md` §2.
+- When something is unclear or a tool call is blocked, ask instead of guessing or working around it.
 
-All of these are enforced by `.claude/settings.json` and `.claude/hooks/guard_paths.py`. Don't work around a block; ask.
+## Layout
 
-## Invariants
+- `foundation/`: the one-off steps O1–O4. They build the spec data and the synthetic input set once, and their only products are files.
+- `src/stress/`: the engine. One package per run step R1–R11, plus `contracts/` for the tables the steps share and `cli.py`, which wires the steps.
+- `tests/`: `unit/`, `acceptance/` (one test per AT) and `controls/`.
+- `docs/spec/`, `inputs/<hash>/`, `runs/<run_id>/`: written only by code; see below.
 
-1. `foundation` and `stress` never import each other. Pipeline steps share only `stress.contracts`; `cli.py` wires them. Checked by `lint-imports`.
-2. Every input enters through R2. No later step reads a file.
-3. R5 is the only step that creates cash flows. They are contractual and the same in every scenario.
-4. One Z per segment, country, year and scenario drives the PD matrix, LGD and prepayment. Nothing is stressed twice.
-5. No number is typed by hand. Expected values come from `docs/spec/`; computed values come from code. Never work out an oracle yourself.
-6. Missing is never zero. Every input value carries a status, and a missing value blocks the calculation that needs it.
-7. Amounts in EUR, rates and probabilities as decimal fractions, float64, unrounded until R10.
-8. A run folder is write-once; a rerun is a new folder. Baseline and adverse are never blended.
-9. Every test carries `@pytest.mark.at(...)`, `req(...)` or `control(...)`. Requirement and acceptance-case IDs are never reused (requirements §1.3).
+## Protected folders
 
-## Open values
+| Path | Rule |
+|---|---|
+| `archive/` | Never read, list, search, write or reference it, and never run a tool against it. If something you need seems to be there, ask. |
+| `inputs/bank/` | Never read it. |
+| `docs/spec/`, `inputs/<hash>/`, `runs/<run_id>/` | Never edit by hand. Only the one-off steps (O1–O4) and the run (R1–R11) write them. |
 
-N, ρ, k, β, μ, σ, w, CPR_TTC and v per segment, and the oracle values of AT-48, AT-51 and AT-52, are supplied by the project owner. Never fill them in yourself.
+`.claude/settings.json` and `.claude/hooks/guard_paths.py` enforce these rules.
 
 ## Commands
 
 After `uv sync`:
 
-- `uv run pytest`: all tests; `-m at` for acceptance cases only
-- `uv run lint-imports`: import contracts
+- `uv run pytest`: all tests; add `-m at` for acceptance cases only
+- `uv run lint-imports`: import rules
 - `uv run ruff check`: lint
-- `uv run stress run --inputs inputs/<hash> --scenarios baseline,adverse --variant core` (once the engine exists)
+- `uv run stress run --inputs inputs/<hash> --scenarios baseline,adverse --variant core`: a full run, once the engine exists
