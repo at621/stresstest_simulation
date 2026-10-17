@@ -17,6 +17,7 @@ The design leads. If another document disagrees with it, follow the design and t
 ## How to work
 
 - Build in the step order of `docs/plan.md`. When a step's outcomes are met, set its status to Done.
+- Do all new work on a dedicated branch, never directly on `main`. Merge into `main` only when the user explicitly permits it.
 - Keep to the code rules in `docs/architecture.md` §2.
 - When something is unclear or a tool call is blocked, ask instead of guessing or working around it.
 
