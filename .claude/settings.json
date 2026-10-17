@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(/archive)",
+      "Read(/archive/**)",
+      "Edit(/archive)",
+      "Edit(/archive/**)",
+      "Read(/inputs/bank)",
+      "Read(/inputs/bank/**)",
+      "Edit(/inputs/bank)",
+      "Edit(/inputs/bank/**)",
+      "Edit(/docs/spec/**)",
+      "Edit(/inputs/*/**)",
+      "Edit(/runs/*/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_paths.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

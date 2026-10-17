@@ -1,0 +1,73 @@
+[project]
+name = "stress-engine"
+version = "0.1.0"
+description = "Credit stress-test engine for EBA 2027 preparation (EUR only, amortised cost, no climate)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "pyarrow>=16.0",
+    "pyyaml>=6.0",
+    "scipy>=1.13",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "import-linter>=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stress", "foundation"]
+
+# archive/ is off-limits to Claude Code, and inputs/ and runs/ hold data, so no tool scans them.
+
+[tool.ruff]
+line-length = 100
+src = ["src", ".", "tests"]
+extend-exclude = ["archive", "inputs", "runs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+norecursedirs = ["archive", "inputs", "runs", ".*"]
+addopts = ["--import-mode=importlib", "--strict-markers"]
+markers = [
+    "at(id): acceptance case this test proves, e.g. at('AT-25')",
+    "req(*ids): requirement IDs this test proves, e.g. req('PD-03')",
+    "control(name): requirements section 12.2 control this test proves",
+]
+
+# Architecture contracts, checked with `lint-imports`.
+
+[tool.importlinter]
+root_packages = ["stress", "foundation"]
+
+[[tool.importlinter.contracts]]
+name = "The engine imports nothing from the one-off steps"
+type = "forbidden"
+source_modules = ["stress"]
+forbidden_modules = ["foundation"]
+
+[[tool.importlinter.contracts]]
+name = "The one-off steps import nothing from the engine"
+type = "forbidden"
+source_modules = ["foundation"]
+forbidden_modules = ["stress"]
+
+[[tool.importlinter.contracts]]
+name = "Pipeline steps share only contracts; cli wires them"
+type = "layers"
+layers = [
+    "stress.cli",
+    "stress.lineage | stress.ingest | stress.validate | stress.scenario | stress.cashflows | stress.params | stress.projection | stress.ecl | stress.accounting | stress.report | stress.capital",
+    "stress.contracts",
+]

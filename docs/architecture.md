@@ -1,0 +1,73 @@
+# Repository rules
+
+How this repository is organised and what is enforced. The engine design is in [stress-engine-code-flow.html](stress-engine-code-flow.html), and the [README](../README.md) gives the overview.
+
+## 1. Who writes what
+
+| Folder | Written by | Protection |
+|---|---|---|
+| `docs/spec/` | O1 (`foundation/transcribe`); requirements text by the project owner | Locked |
+| `inputs/<hash>/` | O2–O4 (`foundation/matrices`, `foundation/synth`) | Locked; R2 checks every file's hash |
+| `runs/<run_id>/` | R1–R11 | Locked; write-once, sealed by R11 |
+| `foundation/`, `src/stress/`, `tests/`, rest of `docs/` | People and Claude Code | Normal review |
+| `archive/` | People only | Claude Code fully blocked; not in git |
+| `inputs/bank/` | Nobody yet | Claude Code fully blocked; not in git |
+
+"Locked" means Claude Code's Edit and Write tools are denied there. Only code writes these folders, so changing their content means changing the code and rerunning the step. The deny rules also cover shell writes that Claude Code recognises, such as redirects, `tee`, `mv` and `rm`. A script can still write these folders, which is how the one-off steps and the run work.
+
+## 2. Import rules
+
+These are checked with `lint-imports`, configured in `pyproject.toml`:
+
+- `foundation` and `stress` never import each other.
+- Pipeline steps are independent packages that share only `stress.contracts`, and `cli.py` wires them in order. A step gets another step's output as a table defined in `contracts`, never by importing that step.
+
+## 3. Runs
+
+One folder per run, holding the manifest, the config used, a copy of the input set and the results. See [runs/README.md](../runs/README.md).
+
+## 4. Archive
+
+`archive/` is the shelf for material people keep but that must not feed the build. Only people put things in or take them out, and anything the build needs stays outside it.
+
+On native Windows, Claude Code's sandbox doesn't run, so protection uses several layers:
+
+1. **Deny rules** in `.claude/settings.json` for Read and Edit on `/archive` and `/archive/**`. On a best-effort basis these also cover Grep, Glob, `@` mentions, the file open in VS Code, and simple shell commands such as `cat`. A leading `/` means the project root, so start Claude Code from the repo root.
+2. **Hook** `.claude/hooks/guard_paths.py`, run before every tool call, including calls by subagents.
+   - It blocks any call whose path, glob or command names `archive` as a path segment, regardless of case or slash direction.
+   - It also blocks `git grep`.
+3. **Git and search:**
+   - `archive/` is in `.gitignore`, so git never tracks or shows it. `archive/** -diff` in `.gitattributes` is a second guard in case the folder is ever force-added.
+   - `.ignore` keeps ripgrep out when a search starts from the repo root.
+4. **Tool excludes:** ruff and pytest skip `archive/`.
+5. **CLAUDE.md** says the archive is off-limits and to ask instead.
+
+`inputs/bank/` gets the same treatment.
+
+**Remaining gaps:**
+- This is not an OS-level block. A script that walks the whole tree could still read the archive.
+- The hook is deliberately strict, so a command that merely mentions `archive` is also blocked.
+
+Check the protection with [runbook.md](runbook.md) after any change to `.claude/`.
+
+## 5. Claude Code setup
+
+**In place:**
+- **CLAUDE.md files:** at the root, plus one each in `src/stress/params/` and `src/stress/ecl/`. Those two list the "apply once" rules for R6 and R8.
+- **`.claude/settings.json`:** deny rules for the archive, `inputs/bank/` and the locked folders.
+- **The guard hook.**
+
+**Planned**, added when there is code to build:
+- a `/build-step` skill that builds one step until its acceptance cases pass;
+- a `step-reviewer` agent that must approve every step;
+- a test gate that runs when Claude stops;
+- a git pre-commit hook.
+
+## 6. Open items
+
+1. **Parameter values and oracle values** (requirements §1.5).
+2. **LGD-01 and LGD-04:** keep them for later production work, or remove them (requirements §1.5).
+3. **SYN-PAR-09 (opening allowances):** it uses "PD curves from the TTC matrix (Z = 0)". Under PD-10 the PiT matrix at Z = 0 is not the TTC matrix. Confirm which one is meant.
+4. **§8.7 opening performing LGD:** the column has no stated use now that LGD comes from LGD_TTC and the Z-score. Confirm whether it is the reference LGD_TTC or can go.
+5. **`inputs/bank/`:** protected and not in git. Delete it by hand, or keep it as the future place for real data (OPS-05).
+6. **Fail-closed hook:** the terminal `claude` CLI is 2.1.263. After updating it to 2.1.295 or later, add `"onFailure": "block"` to the hook so it fails closed.

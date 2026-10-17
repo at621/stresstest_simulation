@@ -1,0 +1,3 @@
+# ripgrep and fd skip these paths, including searches started from the repo root.
+archive/
+inputs/bank/

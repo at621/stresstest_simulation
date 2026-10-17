@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.import_linter_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Run folders stay local; approved runs go to the bank's retention store (OPS-03)
+runs/*
+!runs/README.md
+
+# Protected; never committed
+inputs/bank/
+
+# People only; off-limits to Claude Code and kept out of git
+archive/

@@ -1,0 +1,242 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="diagram" viewBox="-14 -14 1068 878" width="1068" height="878" role="img" aria-label="Five input groups enter only through R2. Data ingestion is R2 load and R3 validate and route. Calculation is R4 scenarios and Z-score, R5 cash flows from EAD, rate and maturity, R6 PiT matrices, PD and LGD, then R7 to R9 repeated per year. Output is R10 report and R11 seal.">
+  <title>Run pipeline R1–R11</title>
+  <style>
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #e9edf2;
+  --fg: #17202b;
+  --muted: #566272;
+  --line: #d0d7e0;
+  --run: #2652c4;
+  --run-soft: #e8eefb;
+  --run-line: #9cb1e8;
+  --once: #9a5900;
+  --once-soft: #faf0df;
+  --once-line: #e0b26f;
+  --cf: #07788a;
+  --cf-soft: #dff3f5;
+  --frozen: #4b5665;
+  --frozen-soft: #e6eaef;
+  --s3: #7a4590;
+  --s3-soft: #f3e9f7;
+  --block: #b3302d;
+  --block-soft: #fbe8e7;
+  --ok: #276f50;
+  --ok-soft: #e3f3ea;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+    --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+    --cf: #5ccbdb; --cf-soft: #112f37;
+    --frozen: #b2bcc8; --frozen-soft: #212932;
+    --s3: #cf9fe3; --s3-soft: #2b1f33;
+    --block: #ff8a83; --block-soft: #3a1c1c;
+    --ok: #74d3a3; --ok-soft: #16302a;
+    color-scheme: dark;
+  }
+}
+.diagram { color: var(--muted); font-family: var(--sans); }
+.diagram .bg { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.diagram .lane-once { fill: var(--once-soft); }
+.diagram .band { fill: var(--run-soft); }
+.diagram .group-run { fill: var(--run-soft); stroke: var(--run-line); stroke-width: 1; }
+.diagram .box { fill: var(--surface); stroke-width: 1.25; }
+.diagram .box-once { stroke: var(--once-line); }
+.diagram .box-run { stroke: var(--run-line); }
+.diagram .box-plain { stroke: var(--line); }
+.diagram .box-s2 { fill: var(--once-soft); stroke: var(--once-line); stroke-width: 1.25; }
+.diagram .box-cf { fill: var(--cf-soft); stroke: var(--cf); stroke-width: 2; }
+.diagram .box-cf-out { fill: var(--cf-soft); stroke: var(--cf); stroke-width: 1.1; }
+.diagram .box-out { fill: var(--surface); stroke: var(--line); stroke-width: 1.1; }
+.diagram .box-s3 { fill: var(--s3-soft); stroke: var(--s3); }
+.diagram .box-block { fill: var(--block-soft); stroke: var(--block); }
+.diagram .store { fill: var(--frozen-soft); stroke: var(--frozen); stroke-width: 1.1; }
+.diagram .doc { fill: var(--frozen-soft); stroke: var(--frozen); stroke-width: 1.1; }
+.diagram .blk-s1 { fill: var(--surface-2); }
+.diagram .blk-s2 { fill: var(--once-soft); }
+.diagram .blk-s3 { fill: var(--s3-soft); }
+.diagram .blk-none { fill: var(--surface); }
+.diagram .part { stroke: var(--fg); stroke-width: 1.6; }
+.diagram .frame { fill: none; stroke: var(--line); stroke-width: 1.2; }
+.diagram .label-bg { fill: var(--surface); }
+.diagram .sicr { stroke: var(--once); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.diagram .t-title { font-size: 13px; font-weight: 600; fill: var(--fg); }
+.diagram .t-sub { font-size: 11.5px; fill: var(--muted); }
+.diagram .t-out { font-size: 12px; fill: var(--fg); }
+.diagram .t-mono { font-family: var(--mono); }
+.diagram .t-id-once { font: 600 12px var(--mono); fill: var(--once); }
+.diagram .t-id-run { font: 600 12px var(--mono); fill: var(--run); }
+.diagram .t-id-cf { font: 600 12px var(--mono); fill: var(--cf); }
+.diagram .t-label { font-size: 11px; fill: var(--muted); }
+.diagram .t-label-run { font-size: 11px; fill: var(--run); font-weight: 600; }
+.diagram .t-label-once { font-size: 11px; fill: var(--once); font-weight: 600; }
+.diagram .t-label-cf { font-size: 11.5px; fill: var(--cf); font-weight: 600; }
+.diagram .t-lane-once { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--once); }
+.diagram .t-lane-run { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--run); }
+.diagram .t-lane-cf { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--cf); }
+.diagram .t-lane-frozen { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--frozen); }
+.diagram .t-lane-muted { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--muted); }
+.diagram .t-band { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; fill: var(--run); }
+.diagram .t-lanesub { font-size: 12px; fill: var(--muted); font-weight: 400; letter-spacing: 0; }
+.diagram .t-cell { font: 12.5px var(--mono); fill: var(--fg); }
+.diagram .t-cell-hd { font: 600 11.5px var(--sans); fill: var(--muted); }
+.diagram .t-on { font: 600 11px var(--sans); fill: var(--bg); }
+.diagram .t-ok { font-size: 11.5px; font-weight: 600; fill: var(--ok); }
+.diagram .t-s3 { font-size: 11.5px; font-weight: 600; fill: var(--s3); }
+.diagram .t-prof-cf { font-size: 13px; font-weight: 600; fill: var(--cf); }
+.diagram .t-prof-run { font-size: 13px; font-weight: 600; fill: var(--run); }
+.diagram .t-prof-mut { font-size: 13px; font-weight: 600; fill: var(--muted); }
+.diagram .edge { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.diagram .edge-once { stroke: var(--once); stroke-width: 1.3; fill: none; }
+.diagram .edge-run { stroke: var(--run); stroke-width: 1.4; fill: none; }
+.diagram .edge-cf { stroke: var(--cf); stroke-width: 1.4; fill: none; }
+.diagram .edge-s3 { stroke: var(--s3); stroke-width: 1.4; fill: none; }
+.diagram .edge-block { stroke: var(--block); stroke-width: 1.3; fill: none; }
+.diagram .ah-mut { fill: var(--muted); }
+.diagram .ah-once { fill: var(--once); }
+.diagram .ah-run { fill: var(--run); }
+.diagram .ah-cf { fill: var(--cf); }
+.diagram .ah-s3 { fill: var(--s3); }
+.diagram .ah-block { fill: var(--block); }
+.diagram .grid { stroke: var(--line); stroke-width: 1; }
+.diagram .axis { stroke: var(--muted); stroke-width: 1.2; }
+.diagram .badge-ok { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1; }
+.diagram .band-run { fill: var(--run); }
+.diagram .band-rev { fill: var(--run-soft); stroke: var(--run-line); }
+.diagram .band-flat { fill: var(--frozen-soft); stroke: var(--line); }
+.diagram .mk-s1 { fill: var(--run); }
+.diagram .mk-s2 { fill: var(--run-soft); stroke: var(--run); stroke-width: 1.1; }
+.diagram .rowline { stroke: var(--line); stroke-width: 1; }
+.diagram .ln-bullet { stroke: var(--cf); stroke-width: 2.6; fill: none; }
+.diagram .ln-annuity { stroke: var(--run); stroke-width: 1.8; fill: none; }
+.diagram .ln-linear { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+  </style>
+  <rect class="bg" x="-13.5" y="-13.5" width="1067" height="877" rx="10"/>
+
+          <defs>
+            <marker id="f2-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-mut"/></marker>
+            <marker id="f2-run" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-run"/></marker>
+            <marker id="f2-cf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-cf"/></marker>
+            <marker id="f2-block" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-block"/></marker>
+          </defs>
+
+          <text class="t-lane-frozen" x="20" y="24">INPUT SET</text>
+          <text class="t-lane-run" x="340" y="24">RUN PIPELINE</text>
+          <text class="t-lane-muted" x="700" y="24">WRITTEN BY THE STEP</text>
+
+          <!-- input documents -->
+          <path class="doc" d="M20,60 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,60 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="80">portfolio</text><text class="t-sub" x="34" y="97">facilities, obligors, commitments</text>
+          <path class="doc" d="M20,116 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,116 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="136">opening provisions</text><text class="t-sub" x="34" y="153">allowances, provisions, overlays</text>
+          <path class="doc" d="M20,172 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,172 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="192">TTC PD matrices</text><text class="t-sub" x="34" y="209">one per segment, grades + D</text>
+          <path class="doc" d="M20,228 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,228 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="248">scenarios</text><text class="t-sub" x="34" y="265">paths, units, provenance</text>
+          <path class="doc" d="M20,284 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,284 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="304">parameter set</text><text class="t-sub" x="34" y="321">Z weights, ρ, w, k, CCF, CPR</text>
+
+          <line class="edge" x1="250" y1="83" x2="280" y2="83"/>
+          <line class="edge" x1="250" y1="139" x2="280" y2="139"/>
+          <line class="edge" x1="250" y1="195" x2="280" y2="195"/>
+          <line class="edge" x1="250" y1="251" x2="280" y2="251"/>
+          <line class="edge" x1="250" y1="307" x2="280" y2="307"/>
+          <line class="edge" x1="280" y1="83" x2="280" y2="307"/>
+          <line class="edge" x1="280" y1="164" x2="338" y2="164" marker-end="url(#f2-mut)"/>
+
+          <!-- stage bands -->
+          <rect class="band" x="322" y="112" width="336" height="146" rx="8"/>
+          <text class="t-band" x="334" y="129">DATA INGESTION</text>
+          <rect class="band" x="322" y="270" width="336" height="400" rx="8"/>
+          <text class="t-band" x="334" y="287">CALCULATION</text>
+          <rect class="band" x="322" y="682" width="336" height="152" rx="8"/>
+          <text class="t-band" x="334" y="699">OUTPUT</text>
+
+          <!-- steps -->
+          <rect class="box box-run" x="340" y="48" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="68">R1</text><text class="t-title" x="390" y="68">Open run</text>
+            <text class="t-sub" x="390" y="86">run ID · input set by hash · label</text>
+          <rect class="box box-run" x="340" y="140" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="160">R2</text><text class="t-title" x="390" y="160">Load inputs</text>
+            <text class="t-sub" x="390" y="178">hash check · typed tables · raw kept</text>
+          <rect class="box box-run" x="340" y="202" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="222">R3</text><text class="t-title" x="390" y="222">Validate and route</text>
+            <text class="t-sub" x="390" y="240">scope gate · reason codes · routes</text>
+          <rect class="box box-run" x="340" y="302" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="322">R4</text><text class="t-title" x="390" y="322">Scenarios and Z-score</text>
+            <text class="t-sub" x="390" y="340">compound indices · Z by year</text>
+          <rect class="box box-cf" x="340" y="364" width="300" height="48" rx="6"/>
+            <text class="t-id-cf" x="356" y="384">R5</text><text class="t-title" x="390" y="384">Generate cash flows</text>
+            <text class="t-sub" x="390" y="402">balance · rate · maturity → schedule</text>
+          <rect class="box box-run" x="340" y="426" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="446">R6</text><text class="t-title" x="390" y="446">Build parameters</text>
+            <text class="t-sub" x="390" y="464">PD · LGD · prepayment · EAD[k]</text>
+          <rect class="box box-run" x="340" y="488" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="508">R7</text><text class="t-title" x="390" y="508">Project the year</text>
+            <text class="t-sub" x="390" y="526">grade migration → stage · cohorts</text>
+          <rect class="box box-run" x="340" y="550" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="570">R8</text><text class="t-title" x="390" y="570">Year-end provisions</text>
+            <text class="t-sub" x="390" y="588">S1 12m · S2 lifetime · S3 floor</text>
+          <rect class="box box-run" x="340" y="612" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="632">R9</text><text class="t-title" x="390" y="632">Stock to flow</text>
+            <text class="t-sub" x="390" y="650">charge = closing − opening</text>
+          <rect class="box box-run" x="340" y="714" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="734">R10</text><text class="t-title" x="390" y="734">Aggregate and report</text>
+            <text class="t-sub" x="390" y="752">weighted ratios · round at output</text>
+          <rect class="box box-run" x="340" y="776" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="796">R11</text><text class="t-title" x="390" y="796">Seal the run</text>
+            <text class="t-sub" x="390" y="814">manifest · reproducibility check</text>
+
+          <line class="edge-run" x1="490" y1="96" x2="490" y2="138" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="188" x2="490" y2="200" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="250" x2="490" y2="300" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="350" x2="490" y2="362" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="412" x2="490" y2="424" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="474" x2="490" y2="486" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="536" x2="490" y2="548" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="598" x2="490" y2="610" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="660" x2="490" y2="712" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="762" x2="490" y2="774" marker-end="url(#f2-run)"/>
+
+          <path class="edge-run" d="M640,636 H668 V512 H643" marker-end="url(#f2-run)"/>
+          <text class="t-label-run" x="676" y="570">per year</text>
+          <text class="t-label-run" x="676" y="585">2027–29</text>
+
+          <text class="t-label-cf" x="306" y="392" text-anchor="end">the only step that creates cash flows</text>
+          <line class="edge-cf" x1="310" y1="388" x2="338" y2="388" marker-end="url(#f2-cf)"/>
+
+          <!-- step outputs -->
+          <line class="edge" x1="640" y1="164" x2="698" y2="164" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="149" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="169">raw files kept + typed tables</text>
+          <line class="edge-block" x1="640" y1="226" x2="698" y2="226" marker-end="url(#f2-block)"/>
+          <rect class="box-block" x="700" y="211" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="231">rejection log with reason codes</text>
+          <line class="edge" x1="640" y1="326" x2="698" y2="326" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="311" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="331">driver table · Z by segment, country, year</text>
+
+          <line class="edge-cf" x1="640" y1="388" x2="698" y2="373" marker-end="url(#f2-cf)"/>
+          <line class="edge-cf" x1="640" y1="388" x2="698" y2="405" marker-end="url(#f2-cf)"/>
+          <rect class="box-cf-out" x="700" y="360" width="320" height="26" rx="4"/>
+          <text class="t-out" x="712" y="378"><tspan class="t-mono">cf_schedule</tspan> · contractual balance by year</text>
+          <rect class="box-cf-out" x="700" y="392" width="320" height="26" rx="4"/>
+          <text class="t-out" x="712" y="410">B[k] and DF[k] per default date</text>
+
+          <line class="edge" x1="640" y1="450" x2="698" y2="450" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="437" width="320" height="26" rx="4"/>
+          <text class="t-out" x="712" y="455">PiT matrices · EAD[k] · ParameterRecords</text>
+          <line class="edge" x1="640" y1="738" x2="698" y2="738" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="723" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="743">four v1 reports</text>
+          <line class="edge" x1="640" y1="800" x2="698" y2="800" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="785" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="805"><tspan class="t-mono">runs/&lt;run_id&gt;/manifest.json</tspan></text>
+        
+</svg>

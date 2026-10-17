@@ -1,0 +1,1545 @@
+<title>Stress Engine Code Flow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one reading column for prose, full-width figures. Ochre = one-off work and S2, blue = the run, teal = cash flows, grey = files, plum = S3, red = rejected or blocking. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #e9edf2;
+  --fg: #17202b;
+  --muted: #566272;
+  --line: #d0d7e0;
+  --run: #2652c4;
+  --run-soft: #e8eefb;
+  --run-line: #9cb1e8;
+  --once: #9a5900;
+  --once-soft: #faf0df;
+  --once-line: #e0b26f;
+  --cf: #07788a;
+  --cf-soft: #dff3f5;
+  --frozen: #4b5665;
+  --frozen-soft: #e6eaef;
+  --s3: #7a4590;
+  --s3-soft: #f3e9f7;
+  --block: #b3302d;
+  --block-soft: #fbe8e7;
+  --ok: #276f50;
+  --ok-soft: #e3f3ea;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+    --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+    --cf: #5ccbdb; --cf-soft: #112f37;
+    --frozen: #b2bcc8; --frozen-soft: #212932;
+    --s3: #cf9fe3; --s3-soft: #2b1f33;
+    --block: #ff8a83; --block-soft: #3a1c1c;
+    --ok: #74d3a3; --ok-soft: #16302a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+  --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+  --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+  --cf: #5ccbdb; --cf-soft: #112f37;
+  --frozen: #b2bcc8; --frozen-soft: #212932;
+  --s3: #cf9fe3; --s3-soft: #2b1f33;
+  --block: #ff8a83; --block-soft: #3a1c1c;
+  --ok: #74d3a3; --ok-soft: #16302a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
+.page {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 44px 80px;
+}
+a { color: var(--run); }
+a:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; border-radius: 3px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+p code, li code, h3 code, td code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+/* Masthead */
+.masthead { display: grid; gap: 18px; }
+.eyebrow { margin: 0; font: 500 12px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(2.1rem, 5vw, 3.2rem); line-height: 1.02; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; max-width: 70ch; font-size: 1.06rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--muted); }
+.legend li { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1.5px solid; }
+.sw-once { background: var(--once-soft); border-color: var(--once); }
+.sw-run { background: var(--run-soft); border-color: var(--run); }
+.sw-cf { background: var(--cf-soft); border-color: var(--cf); }
+.sw-file { background: var(--frozen-soft); border-color: var(--frozen); }
+.sw-s3 { background: var(--s3-soft); border-color: var(--s3); }
+.sw-block { background: var(--block-soft); border-color: var(--block); }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; padding-top: 6px; border-top: 1px solid var(--line); }
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+/* Sections */
+section { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--line); display: grid; gap: 16px; }
+section > * { margin: 0; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; line-height: 1.15; text-wrap: balance; }
+h2 .kicker { display: block; font: 600 12px/1.6 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.k-once { color: var(--once); }
+.k-run { color: var(--run); }
+.k-cf { color: var(--cf); }
+.k-neutral { color: var(--muted); }
+.prose { max-width: 70ch; }
+.prose p { margin: 0; }
+.prose p + p { margin-top: 10px; }
+.cmd { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 13.5px/1.5 var(--mono); color: var(--fg); }
+.cmd .dim { color: var(--muted); }
+
+/* Figures */
+figure { margin: 0; display: grid; gap: 10px; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+figcaption { color: var(--muted); font-size: 13.5px; max-width: 86ch; }
+.diagram { display: block; width: 100%; height: auto; color: var(--muted); font-family: var(--sans); }
+.diagram .lane-once { fill: var(--once-soft); }
+.diagram .band { fill: var(--run-soft); }
+.diagram .group-run { fill: var(--run-soft); stroke: var(--run-line); stroke-width: 1; }
+.diagram .box { fill: var(--surface); stroke-width: 1.25; }
+.diagram .box-once { stroke: var(--once-line); }
+.diagram .box-run { stroke: var(--run-line); }
+.diagram .box-plain { stroke: var(--line); }
+.diagram .box-s2 { fill: var(--once-soft); stroke: var(--once-line); stroke-width: 1.25; }
+.diagram .box-cf { fill: var(--cf-soft); stroke: var(--cf); stroke-width: 2; }
+.diagram .box-cf-out { fill: var(--cf-soft); stroke: var(--cf); stroke-width: 1.1; }
+.diagram .box-out { fill: var(--surface); stroke: var(--line); stroke-width: 1.1; }
+.diagram .box-s3 { fill: var(--s3-soft); stroke: var(--s3); }
+.diagram .box-block { fill: var(--block-soft); stroke: var(--block); }
+.diagram .store { fill: var(--frozen-soft); stroke: var(--frozen); stroke-width: 1.1; }
+.diagram .doc { fill: var(--frozen-soft); stroke: var(--frozen); stroke-width: 1.1; }
+.diagram .blk-s1 { fill: var(--surface-2); }
+.diagram .blk-s2 { fill: var(--once-soft); }
+.diagram .blk-s3 { fill: var(--s3-soft); }
+.diagram .blk-none { fill: var(--surface); }
+.diagram .part { stroke: var(--fg); stroke-width: 1.6; }
+.diagram .frame { fill: none; stroke: var(--line); stroke-width: 1.2; }
+.diagram .label-bg { fill: var(--surface); }
+.diagram .sicr { stroke: var(--once); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.diagram .t-title { font-size: 13px; font-weight: 600; fill: var(--fg); }
+.diagram .t-sub { font-size: 11.5px; fill: var(--muted); }
+.diagram .t-out { font-size: 12px; fill: var(--fg); }
+.diagram .t-mono { font-family: var(--mono); }
+.diagram .t-id-once { font: 600 12px var(--mono); fill: var(--once); }
+.diagram .t-id-run { font: 600 12px var(--mono); fill: var(--run); }
+.diagram .t-id-cf { font: 600 12px var(--mono); fill: var(--cf); }
+.diagram .t-label { font-size: 11px; fill: var(--muted); }
+.diagram .t-label-run { font-size: 11px; fill: var(--run); font-weight: 600; }
+.diagram .t-label-once { font-size: 11px; fill: var(--once); font-weight: 600; }
+.diagram .t-label-cf { font-size: 11.5px; fill: var(--cf); font-weight: 600; }
+.diagram .t-lane-once { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--once); }
+.diagram .t-lane-run { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--run); }
+.diagram .t-lane-cf { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--cf); }
+.diagram .t-lane-frozen { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--frozen); }
+.diagram .t-lane-muted { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--muted); }
+.diagram .t-band { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; fill: var(--run); }
+.diagram .t-lanesub { font-size: 12px; fill: var(--muted); font-weight: 400; letter-spacing: 0; }
+.diagram .t-cell { font: 12.5px var(--mono); fill: var(--fg); }
+.diagram .t-cell-hd { font: 600 11.5px var(--sans); fill: var(--muted); }
+.diagram .t-on { font: 600 11px var(--sans); fill: var(--bg); }
+.diagram .t-ok { font-size: 11.5px; font-weight: 600; fill: var(--ok); }
+.diagram .t-s3 { font-size: 11.5px; font-weight: 600; fill: var(--s3); }
+.diagram .t-prof-cf { font-size: 13px; font-weight: 600; fill: var(--cf); }
+.diagram .t-prof-run { font-size: 13px; font-weight: 600; fill: var(--run); }
+.diagram .t-prof-mut { font-size: 13px; font-weight: 600; fill: var(--muted); }
+.diagram .edge { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.diagram .edge-once { stroke: var(--once); stroke-width: 1.3; fill: none; }
+.diagram .edge-run { stroke: var(--run); stroke-width: 1.4; fill: none; }
+.diagram .edge-cf { stroke: var(--cf); stroke-width: 1.4; fill: none; }
+.diagram .edge-s3 { stroke: var(--s3); stroke-width: 1.4; fill: none; }
+.diagram .edge-block { stroke: var(--block); stroke-width: 1.3; fill: none; }
+.diagram .ah-mut { fill: var(--muted); }
+.diagram .ah-once { fill: var(--once); }
+.diagram .ah-run { fill: var(--run); }
+.diagram .ah-cf { fill: var(--cf); }
+.diagram .ah-s3 { fill: var(--s3); }
+.diagram .ah-block { fill: var(--block); }
+.diagram .grid { stroke: var(--line); stroke-width: 1; }
+.diagram .axis { stroke: var(--muted); stroke-width: 1.2; }
+.diagram .badge-ok { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1; }
+.diagram .band-run { fill: var(--run); }
+.diagram .band-rev { fill: var(--run-soft); stroke: var(--run-line); }
+.diagram .band-flat { fill: var(--frozen-soft); stroke: var(--line); }
+.diagram .mk-s1 { fill: var(--run); }
+.diagram .mk-s2 { fill: var(--run-soft); stroke: var(--run); stroke-width: 1.1; }
+.diagram .rowline { stroke: var(--line); stroke-width: 1; }
+.diagram .ln-bullet { stroke: var(--cf); stroke-width: 2.6; fill: none; }
+.diagram .ln-annuity { stroke: var(--run); stroke-width: 1.8; fill: none; }
+.diagram .ln-linear { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+.diagram a { cursor: pointer; }
+.diagram a:hover .box, .diagram a:focus-visible .box { stroke-width: 2.4; }
+.diagram a:focus { outline: none; }
+
+/* Step rows */
+.steps { display: grid; gap: 0; border-bottom: 1px solid var(--line); }
+.step {
+  display: grid; grid-template-columns: 52px minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 8px 26px; padding-block: 18px; border-top: 1px solid var(--line);
+  scroll-margin-top: 16px;
+}
+.step:target { background: linear-gradient(90deg, var(--run-soft), transparent 70%); }
+.step.once:target { background: linear-gradient(90deg, var(--once-soft), transparent 70%); }
+.step.cf { background: linear-gradient(90deg, var(--cf-soft), transparent 75%); }
+.step-id { font: 600 20px/1.2 var(--mono); padding-top: 2px; }
+.once .step-id { color: var(--once); }
+.run .step-id { color: var(--run); }
+.cf .step-id { color: var(--cf); }
+.step-body { min-width: 0; display: grid; gap: 6px; }
+.step-body h3 { margin: 0; font-size: 1.05rem; font-weight: 600; line-height: 1.35; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.step-body h3 .comp { font: 500 12px var(--mono); color: var(--muted); }
+.step-body h3 .loop, .step-body h3 .stage { font: 600 11px var(--mono); padding: 1px 7px; border-radius: 999px; }
+.step-body h3 .loop { color: var(--run); background: var(--run-soft); }
+.step-body h3 .stage { color: var(--muted); background: var(--surface-2); }
+.step-body h3 .stage.cfs { color: var(--cf); background: var(--surface); border: 1px solid var(--cf); }
+.step-body p { margin: 0; max-width: 68ch; }
+.step-meta { margin: 0; min-width: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; align-content: start; font-size: 13.5px; }
+.step-meta dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 3px; }
+.step-meta dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.step-meta dd.text { display: block; }
+.step-meta dd.blocks { display: block; color: var(--block); }
+.chip { font: 500 11.5px/1.5 var(--mono); padding: 1px 7px; border-radius: 4px; background: var(--surface-2); color: var(--fg); white-space: nowrap; }
+.chip.at { background: var(--ok-soft); color: var(--ok); }
+.chip.at-new { background: var(--surface); color: var(--ok); border: 1px dashed var(--ok); }
+.chip.st { background: var(--run-soft); color: var(--run); }
+.chip.so { background: var(--once-soft); color: var(--once); }
+.chip.sc { background: var(--cf-soft); color: var(--cf); }
+
+/* Input table */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.data { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+.data th, .data td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.data tr:last-child td { border-bottom: 0; }
+.data th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+.data td.file { font: 600 12.5px var(--mono); white-space: nowrap; }
+.data td.key { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+.data td.refs { white-space: nowrap; }
+.data .grp td { background: var(--surface-2); font: 600 11.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-block: 6px; }
+.data mark { background: var(--cf-soft); color: var(--fg); padding: 0 3px; border-radius: 3px; }
+.data mark.pd { background: var(--once-soft); }
+
+/* Formula cards */
+.formulas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.formulas.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.fcard .tag { font: 600 11.5px var(--mono); color: var(--run); letter-spacing: 0.03em; }
+.fcard h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.fcard .eq { font: 13.5px/1.7 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
+.fcard p { margin: 0; font-size: 14px; }
+.fcard ul { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 4px; }
+
+/* Trace */
+.trace { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.trace li { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.trace .tr-step { font: 600 11.5px var(--mono); color: var(--run); letter-spacing: 0.03em; }
+.trace li.cfl .tr-step { color: var(--cf); }
+.trace .tr-in { font-size: 13px; color: var(--muted); }
+.trace .tr-out { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.trace li.final { border-color: var(--run-line); background: var(--run-soft); }
+
+/* Code layout + contracts */
+.two { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.tree { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; overflow-x: auto; font: 12.75px/1.65 var(--mono); color: var(--fg); }
+.tree .c { color: var(--muted); }
+.tree .tg-once { color: var(--once); font-weight: 600; }
+.tree .tg-run { color: var(--run); font-weight: 600; }
+.tree .tg-cf { color: var(--cf); font-weight: 600; }
+.tree .tg-lock { color: var(--frozen); font-weight: 600; }
+.contracts { display: grid; gap: 12px; }
+.contract { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; min-width: 0; }
+.contract.cfc { border-color: var(--cf); }
+.contract h3 { margin: 0; font-size: 0.98rem; font-weight: 600; }
+.contract p { margin: 0; font-size: 13.75px; }
+.contract .fields { font: 12.25px/1.6 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.contract .refs { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Decisions */
+.decisions { list-style: none; margin: 0; padding: 0; display: grid; border-bottom: 1px solid var(--line); }
+.decisions li { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 160px); gap: 6px 22px; padding-block: 16px; border-top: 1px solid var(--line); }
+.decisions .d-id { font: 600 18px/1.3 var(--mono); color: var(--fg); display: grid; gap: 4px; align-content: start; justify-items: start; }
+.decisions .d-body { display: grid; gap: 4px; min-width: 0; }
+.decisions h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.decisions p { margin: 0; max-width: 72ch; }
+.decisions .rec { font-weight: 500; }
+.decisions .rec::before { content: "Proposal  "; font: 600 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ok); }
+.decisions .why { color: var(--muted); font-size: 14px; }
+.decisions .d-tags { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; justify-content: flex-end; }
+
+.outside { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.outside div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; min-width: 0; }
+.outside h3 { margin: 0 0 6px; font-size: 0.98rem; font-weight: 600; }
+.outside ul { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 4px; }
+.foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; max-width: 86ch; }
+
+@media (max-width: 820px) {
+  .step { grid-template-columns: 40px minmax(0, 1fr); }
+  .step-meta { grid-column: 2; }
+  .decisions li { grid-template-columns: 52px minmax(0, 1fr); }
+  .decisions .d-tags { grid-column: 2; justify-content: flex-start; }
+  .two, .outside, .formulas, .formulas.c3 { grid-template-columns: minmax(0, 1fr); }
+  .step-id { font-size: 17px; }
+}
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <p class="eyebrow">Proposal for agreement · 17 October 2026 · built from the requirements</p>
+    <h1>Stress engine code flow</h1>
+    <p class="lede">The engine projects stage migration, PD, LGD, EAD and provisions for the synthetic €11bn EUR, amortised-cost book over 2027–2029, baseline and adverse. The code has two separate parts that share no code. One-off steps build the synthetic starting point and the test material once. The run pipeline is the engine. It ingests an input set and builds each facility's contractual cash flows from balance, interest rate and maturity. One Z-score per segment and year moves the TTC rating matrix, the TTC LGD and the prepayment rate with the economy. EAD per default date is the contractual balance after prepayment. Rating grades then decide stages, and the run projects and reports provisions.</p>
+    <ul class="legend">
+      <li><span class="sw sw-once"></span>One-off · S2 grades</li>
+      <li><span class="sw sw-run"></span>Every run</li>
+      <li><span class="sw sw-cf"></span>Cash-flow generation</li>
+      <li><span class="sw sw-file"></span>File or input dataset</li>
+      <li><span class="sw sw-s3"></span>Default (S3)</li>
+      <li><span class="sw sw-block"></span>Rejected or blocking</li>
+    </ul>
+    <nav class="toc" aria-label="Sections">
+      <a href="#oneoff">One-off steps</a>
+      <a href="#pipeline">Run pipeline</a>
+      <a href="#ingestion">Data ingestion</a>
+      <a href="#cashflows">Cash flows</a>
+      <a href="#ead">Prepayment and EAD</a>
+      <a href="#matrix">TTC PD matrix and stages</a>
+      <a href="#lgd">LGD</a>
+      <a href="#year">One projection year</a>
+      <a href="#buckets">Future buckets</a>
+      <a href="#trace">AT-42 trace</a>
+      <a href="#layout">Code layout</a>
+      <a href="#decisions">Decisions to agree</a>
+    </nav>
+  </header>
+
+  <!-- ============ ONE-OFF ============ -->
+  <section id="oneoff">
+    <h2><span class="kicker k-once">Part 1 · One-off</span>Build once, then lock</h2>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1000 206" style="min-width: 760px" role="img" aria-label="Two independent one-off chains: O1 writes the locked spec tables to docs/spec/, and O2 TTC matrices, O3 portfolio and O4 opening allowances write the hashed starting-point files.">
+          <defs>
+            <marker id="f1-once" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-once"/></marker>
+          </defs>
+          <text x="22" y="22"><tspan class="t-lane-once">ONE-OFF</tspan><tspan class="t-lanesub" dx="8">run once · output locked and hashed · rerun only when the spec changes</tspan></text>
+          <rect class="lane-once" x="10" y="34" width="980" height="162" rx="10"/>
+
+          <a href="#o1"><rect class="box box-once" x="30" y="52" width="290" height="56" rx="6"/>
+            <text class="t-id-once" x="46" y="75">O1</text><text class="t-title" x="76" y="75">Transcribe spec into data</text>
+            <text class="t-sub" x="76" y="94">§5, §6.2, §8.7, §12.1 tables</text></a>
+          <line class="edge-once" x1="320" y1="80" x2="698" y2="80" marker-end="url(#f1-once)"/>
+          <text class="t-label-once" x="509" y="73" text-anchor="middle">calibration targets · scenarios · AT oracles</text>
+          <path class="store" d="M700,62 v36 a135,8 0 0 0 270,0 v-36"/>
+          <ellipse class="store" cx="835" cy="62" rx="135" ry="8"/>
+          <text class="t-title t-mono" x="835" y="86" text-anchor="middle">docs/spec/</text>
+          <text class="t-sub" x="835" y="101" text-anchor="middle">locked</text>
+
+          <a href="#o2"><rect class="box box-once" x="30" y="130" width="200" height="56" rx="6"/>
+            <text class="t-id-once" x="46" y="153">O2</text><text class="t-title" x="76" y="153">TTC PD matrices</text>
+            <text class="t-sub" x="76" y="172">per segment · calibrated</text></a>
+          <line class="edge-once" x1="230" y1="158" x2="248" y2="158" marker-end="url(#f1-once)"/>
+          <a href="#o3"><rect class="box box-once" x="250" y="130" width="200" height="56" rx="6"/>
+            <text class="t-id-once" x="266" y="153">O3</text><text class="t-title" x="296" y="153">Generate portfolio</text>
+            <text class="t-sub" x="296" y="172">seeded · fits §5 targets</text></a>
+          <line class="edge-once" x1="450" y1="158" x2="468" y2="158" marker-end="url(#f1-once)"/>
+          <a href="#o4"><rect class="box box-once" x="470" y="130" width="200" height="56" rx="6"/>
+            <text class="t-id-once" x="486" y="153">O4</text><text class="t-title" x="516" y="153">Opening allowances</text>
+            <text class="t-sub" x="516" y="172">own formula, frozen</text></a>
+          <line class="edge-once" x1="670" y1="158" x2="698" y2="158" marker-end="url(#f1-once)"/>
+          <text class="t-label-once" x="684" y="151" text-anchor="middle">hash</text>
+          <path class="store" d="M700,140 v36 a135,8 0 0 0 270,0 v-36"/>
+          <ellipse class="store" cx="835" cy="140" rx="135" ry="8"/>
+          <text class="t-title t-mono" x="835" y="164" text-anchor="middle">starting-point files</text>
+          <text class="t-sub" x="835" y="179" text-anchor="middle">portfolio, provisions, matrices</text>
+        </svg>
+      </div>
+      <figcaption>Two independent chains. Their only products are files. The one-off code lives in its own <code>foundation/</code> package. It imports nothing from the engine and the engine imports nothing from it.</figcaption>
+    </figure>
+    <div class="steps">
+      <article class="step once" id="o1">
+        <div class="step-id">O1</div>
+        <div class="step-body">
+          <h3>Transcribe the spec into data <code>foundation/transcribe</code> → <code>docs/spec/</code></h3>
+          <p>The §8.7 table, whose S1 and S2 PDs are the calibration targets for the TTC matrices. The §6.2 scenario paths with units and SYNTHETIC status. The §5.1–5.5 portfolio targets. Every acceptance case as an oracle record: input, expected value, tolerance, and the named wrong answer ("not 27", "not 36").</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Checked by</dt><dd class="text">Step reviewer and you, then locked. Claude cannot edit it.</dd>
+          <dt>Rerun when</dt><dd class="text">The requirements document changes version (GOV-03).</dd>
+        </dl>
+      </article>
+      <article class="step once" id="o2">
+        <div class="step-id">O2</div>
+        <div class="step-body">
+          <h3>Build the TTC PD matrices <code>foundation/matrices</code></h3>
+          <p>For each of the seven reference segments, a one-year TTC transition matrix on a shared master scale of N performing grades plus default D (D13). Every row sums to 1, D is absorbing, and PD rises with the grade. Calibrated so the average PD of the grades holding S1 and S2 exposures matches §8.7, for example 0.80% and 4.00% for P01.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">PD-04</span><span class="chip">PD-09</span><span class="chip">MIG-01</span><span class="chip">SYN-PAR-05</span><span class="chip">§8.7 targets</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-45</span><span class="chip at">AT-46</span></dd>
+          <dt>Rerun when</dt><dd class="text">The master scale or the targets change</dd>
+        </dl>
+      </article>
+      <article class="step once" id="o3">
+        <div class="step-id">O3</div>
+        <div class="step-body">
+          <h3>Generate the synthetic portfolio <code>foundation/synth</code></h3>
+          <p>With a fixed seed, writes facilities, obligors and groups, and off-balance commitments. Each facility gets a current grade, an origination grade, a TTC LGD, an interest rate, a residual maturity and a repayment profile. Grades are chosen so the stage rule gives back the facility's §5.2 stage (D3). It hits every target exactly: 10,000 facilities, €11,000m GCA, €2,000m undrawn, stage counts 8,345 / 1,324 / 331 with matching GCA, the country split, IRB €5,694m vs STA €5,306m, the NACE shares, P06 at 60/40, and the top ten groups at 20% of P05 and 25% of P04.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">§5.1–5.5</span><span class="chip">SYN-01–04</span><span class="chip">SYN-PAR-08</span><span class="chip">DAT-01</span><span class="chip">DAT-04</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-01</span><span class="chip at">AT-22</span><span class="chip at">AT-44 opening</span></dd>
+          <dt>Rerun when</dt><dd class="text">Targets change. It writes a new file set and never edits an old one.</dd>
+        </dl>
+      </article>
+      <article class="step once" id="o4">
+        <div class="step-id">O4</div>
+        <div class="step-body">
+          <h3>Compute and freeze opening allowances <code>foundation/synth</code></h3>
+          <p>Calculates each facility's end-2026 allowance with the generator's own formula: PD curves from the TTC matrix, TTC LGD, the TTC prepayment rate and the facility's own schedule (D8). Writes the results as the opening-provisions file, hashes the whole file set and records the approval. Raw data, adjustments and the final starting point stay separate.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">§5.2 frozen allowances</span><span class="chip">SYN-PAR-09</span><span class="chip">DAT-03</span></dd>
+          <dt>Rerun when</dt><dd class="text">Only together with a new O3 file set</dd>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ PIPELINE ============ -->
+  <section id="pipeline">
+    <h2><span class="kicker k-run">Part 2 · Every run</span>The run pipeline</h2>
+    <pre class="cmd"><span class="dim">$</span> stress run --inputs inputs/&lt;hash&gt; --scenarios baseline,adverse --variant core</pre>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1040 850" style="min-width: 800px" role="img" aria-label="Five input groups enter only through R2. Data ingestion is R2 load and R3 validate and route. Calculation is R4 scenarios and Z-score, R5 cash flows from EAD, rate and maturity, R6 PiT matrices, PD and LGD, then R7 to R9 repeated per year. Output is R10 report and R11 seal.">
+          <defs>
+            <marker id="f2-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-mut"/></marker>
+            <marker id="f2-run" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-run"/></marker>
+            <marker id="f2-cf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-cf"/></marker>
+            <marker id="f2-block" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-block"/></marker>
+          </defs>
+
+          <text class="t-lane-frozen" x="20" y="24">INPUT SET</text>
+          <text class="t-lane-run" x="340" y="24">RUN PIPELINE</text>
+          <text class="t-lane-muted" x="700" y="24">WRITTEN BY THE STEP</text>
+
+          <!-- input documents -->
+          <path class="doc" d="M20,60 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,60 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="80">portfolio</text><text class="t-sub" x="34" y="97">facilities, obligors, commitments</text>
+          <path class="doc" d="M20,116 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,116 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="136">opening provisions</text><text class="t-sub" x="34" y="153">allowances, provisions, overlays</text>
+          <path class="doc" d="M20,172 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,172 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="192">TTC PD matrices</text><text class="t-sub" x="34" y="209">one per segment, grades + D</text>
+          <path class="doc" d="M20,228 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,228 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="248">scenarios</text><text class="t-sub" x="34" y="265">paths, units, provenance</text>
+          <path class="doc" d="M20,284 h218 l12,12 v34 h-230 z"/><path class="doc" d="M238,284 v12 h12" style="fill:none"/>
+          <text class="t-title t-mono" x="34" y="304">parameter set</text><text class="t-sub" x="34" y="321">Z weights, ρ, w, k, CCF, CPR</text>
+
+          <line class="edge" x1="250" y1="83" x2="280" y2="83"/>
+          <line class="edge" x1="250" y1="139" x2="280" y2="139"/>
+          <line class="edge" x1="250" y1="195" x2="280" y2="195"/>
+          <line class="edge" x1="250" y1="251" x2="280" y2="251"/>
+          <line class="edge" x1="250" y1="307" x2="280" y2="307"/>
+          <line class="edge" x1="280" y1="83" x2="280" y2="307"/>
+          <line class="edge" x1="280" y1="164" x2="338" y2="164" marker-end="url(#f2-mut)"/>
+
+          <!-- stage bands -->
+          <rect class="band" x="322" y="112" width="336" height="146" rx="8"/>
+          <text class="t-band" x="334" y="129">DATA INGESTION</text>
+          <rect class="band" x="322" y="270" width="336" height="400" rx="8"/>
+          <text class="t-band" x="334" y="287">CALCULATION</text>
+          <rect class="band" x="322" y="682" width="336" height="152" rx="8"/>
+          <text class="t-band" x="334" y="699">OUTPUT</text>
+
+          <!-- steps -->
+          <a href="#r1"><rect class="box box-run" x="340" y="48" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="68">R1</text><text class="t-title" x="390" y="68">Open run</text>
+            <text class="t-sub" x="390" y="86">run ID · input set by hash · label</text></a>
+          <a href="#r2"><rect class="box box-run" x="340" y="140" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="160">R2</text><text class="t-title" x="390" y="160">Load inputs</text>
+            <text class="t-sub" x="390" y="178">hash check · typed tables · raw kept</text></a>
+          <a href="#r3"><rect class="box box-run" x="340" y="202" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="222">R3</text><text class="t-title" x="390" y="222">Validate and route</text>
+            <text class="t-sub" x="390" y="240">scope gate · reason codes · routes</text></a>
+          <a href="#r4"><rect class="box box-run" x="340" y="302" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="322">R4</text><text class="t-title" x="390" y="322">Scenarios and Z-score</text>
+            <text class="t-sub" x="390" y="340">compound indices · Z by year</text></a>
+          <a href="#r5"><rect class="box box-cf" x="340" y="364" width="300" height="48" rx="6"/>
+            <text class="t-id-cf" x="356" y="384">R5</text><text class="t-title" x="390" y="384">Generate cash flows</text>
+            <text class="t-sub" x="390" y="402">balance · rate · maturity → schedule</text></a>
+          <a href="#r6"><rect class="box box-run" x="340" y="426" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="446">R6</text><text class="t-title" x="390" y="446">Build parameters</text>
+            <text class="t-sub" x="390" y="464">PD · LGD · prepayment · EAD[k]</text></a>
+          <a href="#r7"><rect class="box box-run" x="340" y="488" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="508">R7</text><text class="t-title" x="390" y="508">Project the year</text>
+            <text class="t-sub" x="390" y="526">grade migration → stage · cohorts</text></a>
+          <a href="#r8"><rect class="box box-run" x="340" y="550" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="570">R8</text><text class="t-title" x="390" y="570">Year-end provisions</text>
+            <text class="t-sub" x="390" y="588">S1 12m · S2 lifetime · S3 floor</text></a>
+          <a href="#r9"><rect class="box box-run" x="340" y="612" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="632">R9</text><text class="t-title" x="390" y="632">Stock to flow</text>
+            <text class="t-sub" x="390" y="650">charge = closing − opening</text></a>
+          <a href="#r10"><rect class="box box-run" x="340" y="714" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="734">R10</text><text class="t-title" x="390" y="734">Aggregate and report</text>
+            <text class="t-sub" x="390" y="752">weighted ratios · round at output</text></a>
+          <a href="#r11"><rect class="box box-run" x="340" y="776" width="300" height="48" rx="6"/>
+            <text class="t-id-run" x="356" y="796">R11</text><text class="t-title" x="390" y="796">Seal the run</text>
+            <text class="t-sub" x="390" y="814">manifest · reproducibility check</text></a>
+
+          <line class="edge-run" x1="490" y1="96" x2="490" y2="138" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="188" x2="490" y2="200" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="250" x2="490" y2="300" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="350" x2="490" y2="362" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="412" x2="490" y2="424" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="474" x2="490" y2="486" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="536" x2="490" y2="548" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="598" x2="490" y2="610" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="660" x2="490" y2="712" marker-end="url(#f2-run)"/>
+          <line class="edge-run" x1="490" y1="762" x2="490" y2="774" marker-end="url(#f2-run)"/>
+
+          <path class="edge-run" d="M640,636 H668 V512 H643" marker-end="url(#f2-run)"/>
+          <text class="t-label-run" x="676" y="570">per year</text>
+          <text class="t-label-run" x="676" y="585">2027–29</text>
+
+          <text class="t-label-cf" x="306" y="392" text-anchor="end">the only step that creates cash flows</text>
+          <line class="edge-cf" x1="310" y1="388" x2="338" y2="388" marker-end="url(#f2-cf)"/>
+
+          <!-- step outputs -->
+          <line class="edge" x1="640" y1="164" x2="698" y2="164" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="149" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="169">raw files kept + typed tables</text>
+          <line class="edge-block" x1="640" y1="226" x2="698" y2="226" marker-end="url(#f2-block)"/>
+          <rect class="box-block" x="700" y="211" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="231">rejection log with reason codes</text>
+          <line class="edge" x1="640" y1="326" x2="698" y2="326" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="311" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="331">driver table · Z by segment, country, year</text>
+
+          <line class="edge-cf" x1="640" y1="388" x2="698" y2="373" marker-end="url(#f2-cf)"/>
+          <line class="edge-cf" x1="640" y1="388" x2="698" y2="405" marker-end="url(#f2-cf)"/>
+          <rect class="box-cf-out" x="700" y="360" width="320" height="26" rx="4"/>
+          <text class="t-out" x="712" y="378"><tspan class="t-mono">cf_schedule</tspan> · contractual balance by year</text>
+          <rect class="box-cf-out" x="700" y="392" width="320" height="26" rx="4"/>
+          <text class="t-out" x="712" y="410">B[k] and DF[k] per default date</text>
+
+          <line class="edge" x1="640" y1="450" x2="698" y2="450" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="437" width="320" height="26" rx="4"/>
+          <text class="t-out" x="712" y="455">PiT matrices · EAD[k] · ParameterRecords</text>
+          <line class="edge" x1="640" y1="738" x2="698" y2="738" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="723" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="743">four v1 reports</text>
+          <line class="edge" x1="640" y1="800" x2="698" y2="800" marker-end="url(#f2-mut)"/>
+          <rect class="box-out" x="700" y="785" width="320" height="30" rx="4"/>
+          <text class="t-out" x="712" y="805"><tspan class="t-mono">runs/&lt;run_id&gt;/manifest.json</tspan></text>
+        </svg>
+      </div>
+      <figcaption>Every input enters through R2, and nothing enters later. R5 is the only step that creates cash flows: the contractual schedule, the same in every scenario. R6 applies the scenario. It uses each year's Z to turn the TTC matrices, TTC LGDs and prepayment rates into values for that year, and it computes EAD from the contractual balance after prepayment. R7 moves grades with those matrices, and every grade decides its stage. R7–R9 repeat for 2027, 2028 and 2029. Click a box to jump to its step.</figcaption>
+    </figure>
+    <div class="prose">
+      <p>One command runs both scenarios through the same code. R5 does not depend on the scenario, so it runs once per facility and serves both. Baseline parameters are built before adverse, because adverse buckets after 2029 revert toward baseline 2029. The two result sets are kept apart and never blended (REG-07). A sensitivity such as the AT-35 utilisation case runs as a separate <code>--variant</code>, with its own label.</p>
+    </div>
+    <div class="steps">
+      <article class="step run" id="r1">
+        <div class="step-id">R1</div>
+        <div class="step-body">
+          <h3>Open the run <code>lineage/</code></h3>
+          <p>Create the run ID. Fix the input set by its content hash. Record the git SHA, the rule version and the parameter-set version. Set the status label, which is SYNTHETIC for every preparation run.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">OPS-01</span><span class="chip">OPS-04</span><span class="chip">SCN-04</span><span class="chip">REG-01</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Synthetic scenario labelled official · regulatory mode requested</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r2">
+        <div class="step-id">R2</div>
+        <div class="step-body">
+          <h3>Load inputs <code>ingest/</code> <span class="stage">data ingestion</span></h3>
+          <p>Read the seven datasets of the input set (<a href="#ingestion">table</a>). Check each file's hash against R1. Parse into typed tables, with amounts in EUR, rates and probabilities as decimals, and a value status on every field. Keep the raw files unchanged next to the typed tables. Record row counts and control totals for each file.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">§4.2</span><span class="chip">DAT-02</span><span class="chip">DAT-03</span><span class="chip">OPS-01</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Hash mismatch · unreadable file or unknown column · scenario value without a unit</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r3">
+        <div class="step-id">R3</div>
+        <div class="step-body">
+          <h3>Validate and route <code>validate/</code> <span class="stage">data ingestion</span></h3>
+          <p>Check the schema and referential integrity across tables. Enforce EUR only, and AC only for on-balance records; off-balance records take "not applicable". Check every TTC matrix: rows sum to 1, no negative cell, and D is absorbing. Check that each facility's grade gives back its reported stage. Send each record down one route (<a href="#ingestion">figure</a>). A rejected record goes to the log with a reason code and never reaches a total. Reconcile the starting point to the §5 targets.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">DAT-01</span><span class="chip">DAT-04</span><span class="chip">SCP-02</span><span class="chip">SCP-06</span><span class="chip">MIG-01</span><span class="chip">MIG-07</span><span class="chip">§12.2</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-01</span><span class="chip at">AT-21</span><span class="chip at">AT-22</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Duplicate facility · non-EUR or missing currency · non-AC on-balance · missing CCF on positive undrawn · matrix row ≠ 1 · stage the grade cannot explain · missing grade, TTC LGD, rate or maturity</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r4">
+        <div class="step-id">R4</div>
+        <div class="step-body">
+          <h3>Scenarios and Z-score <code>scenario/</code></h3>
+          <p>Compound property price changes into indices (adverse residential 88.00 → 79.20 → 76.824). Standardise the macro drivers and combine them into one Z-score per segment, country, year and scenario. A positive Z means a better economy than average. The same Z drives the PD matrix, LGD and prepayment. Extend Z past 2029 with the terminal rule (D5).</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">SCN-01–05</span><span class="chip">SCN-08</span><span class="chip">ECL-10</span><span class="chip">REG-07</span><span class="chip">PD-04</span><span class="chip">LGD-10</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-16</span><span class="chip at">AT-52</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Missing scenario value for a year or country · missing Z coefficient for a segment</dd>
+        </dl>
+      </article>
+      <article class="step cf" id="r5">
+        <div class="step-id">R5</div>
+        <div class="step-body">
+          <h3>Generate cash flows <code>cashflows/</code> <span class="stage cfs">only cash-flow step</span></h3>
+          <p>For each facility, start from the drawn balance D, with accrued interest counted once. With the interest rate r and residual maturity M, build a yearly contractual schedule to maturity: opening balance, interest, principal and closing balance. The repayment profile sets the principal (D12). From the schedule come the contractual balance B[k] at every default date and DF[k] from the same rate. Nothing scenario-dependent happens here: prepayment, default and drawdown all belong to R6.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">EAD-01</span><span class="chip">EAD-05</span><span class="chip">EAD-08</span><span class="chip">EAD-10</span><span class="chip">ECL-08</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-37</span><span class="chip at">AT-51</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Missing or non-positive maturity on a performing facility · missing rate, or rate ≤ −100%</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r6">
+        <div class="step-id">R6</div>
+        <div class="step-body">
+          <h3>Build parameters <code>params/</code></h3>
+          <p>Builds every scenario-dependent value for each facility, scenario and default bucket. <strong>PD:</strong> shift each segment's TTC matrix by the year's Z to get M(y) (<a href="#matrix">formula</a>). F[k] is the default column of M(y+1) × … × M(y+k), and m and S follow PD-03. <strong>LGD:</strong> Φ(Φ⁻¹(LGD_TTC) − w × Z[k]). <strong>Prepayment and EAD:</strong> the year's prepayment rate gives the share of the balance not yet prepaid at date k. EAD[k] is B[k] from R5 times that share, plus undrawn × CCF. Drawn, undrawn and total are stored separately (<a href="#ead">section</a>). The regulatory EAD bridge is kept apart. Buckets after 2029 use the reverted Z. Each value is a ParameterRecord under the MOD-06 key.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">PD-01–07</span><span class="chip">PD-09–11</span><span class="chip">MIG-01</span><span class="chip">LGD-08</span><span class="chip">LGD-10–12</span><span class="chip">EAD-02–04</span><span class="chip">EAD-06–07</span><span class="chip">EAD-11</span><span class="chip">SYN-PAR-04</span><span class="chip">SYN-PAR-06</span><span class="chip">MOD-02</span><span class="chip">MOD-06</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-08</span><span class="chip at">AT-25</span><span class="chip at">AT-28</span><span class="chip at">AT-33 zero EAD</span><span class="chip at">AT-34 EAD</span><span class="chip at">AT-35</span><span class="chip at">AT-36</span><span class="chip at">AT-38</span><span class="chip at">AT-46</span><span class="chip at">AT-47</span><span class="chip at">AT-49</span><span class="chip at">AT-50</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">PiT row ≠ 1 beyond 1e-10 · identity residual &gt; 1e-10 · missing terminal bucket · duplicate or missing key · missing TTC LGD, Z or prepayment rate · CCF outside [0, 1]</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r7">
+        <div class="step-id">R7</div>
+        <div class="step-body">
+          <h3>Project the year <code>projection/</code> <span class="loop">loops 2027 → 2029</span></h3>
+          <p>Move each facility's grade distribution one year: closing = opening × M(y). Whatever reaches D becomes a new S3 cohort, which keeps its entry year and origin stage. Every grade slice takes its stage from the SICR rule against the facility's origination grade (D2). Stage flows are therefore sums of matrix cells and need no separate shares. S3 never cures. Total GCA and undrawn stay at end-2026 levels, and a facility that matures is replaced like for like (<a href="#year">figure</a>).</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">EXP-01–03</span><span class="chip">EXP-05</span><span class="chip">MIG-01–08</span><span class="chip">PD-05</span><span class="chip">PD-06</span><span class="chip">REG-02</span><span class="chip">REG-04</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-02</span><span class="chip at">AT-29</span><span class="chip at">AT-44</span><span class="chip at">AT-48</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Unexplained change in total GCA · PD applied to a flow that is already default-weighted</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r8">
+        <div class="step-id">R8</div>
+        <div class="step-body">
+          <h3>Year-end provisions <code>ecl/</code> <span class="loop">loops 2027 → 2029</span></h3>
+          <p>S1 grades: ECL = Σ m[k] · EAD[k] · LGD[k] · DF[k] over bucket y+1 only. S2 grades: the same sum from y+1 to maturity. S1 at end-2029 uses the interpolated 2030 loss rate. Original S3: max(GCA × LGD of the year, prior allowance), checked per exposure. New S3: flow × LGD of the default year, booked once and floored after that. The drawn part goes to the on-balance allowance and the undrawn part to the off-balance provision. Raw and constrained values are both kept.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">ECL-01–11</span><span class="chip">EAD-08</span><span class="chip">REG-05</span><span class="chip">REG-06</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-03–06</span><span class="chip at">AT-18</span><span class="chip at">AT-34</span><span class="chip at">AT-39–41</span><span class="chip at">AT-42</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Missing 2030 or terminal input (never set to zero) · PD, LGD and EAD from different scenarios, dates, buckets or event bases</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r9">
+        <div class="step-id">R9</div>
+        <div class="step-body">
+          <h3>Stock to flow <code>accounting/</code> <span class="loop">loops 2027 → 2029</span></h3>
+          <p>Charge(y) = closing − opening allowance, separately for on-balance and off-balance. FX movement is fixed at zero. Overlays are tracked by risk and year so none is counted twice.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">ACC-01–04</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-07</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Any movement that is not permitted</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r10">
+        <div class="step-id">R10</div>
+        <div class="step-body">
+          <h3>Aggregate and report <code>report/</code> <code>capital/</code></h3>
+          <p>Sum money from facility and bucket results. Ratios carry their numerator and denominator (exposure-weighted PD, loss-weighted LGD). The v1 outputs are the starting-point reconciliation, stage migration (with the grade-level detail behind it), parameter and impairment reports. Rounding happens only here. The REA floor arithmetic exists as functions, but nothing in v1 feeds it portfolio REA.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">RPT-01</span><span class="chip">RPT-05</span><span class="chip">RPT-06</span><span class="chip">§11.3</span><span class="chip">CAP-03</span><span class="chip">CAP-04</span></dd>
+          <dt>Proven by</dt><dd><span class="chip at">AT-10</span><span class="chip at">AT-11</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">Reconciliation outside the §12.3 tolerance</dd>
+        </dl>
+      </article>
+      <article class="step run" id="r11">
+        <div class="step-id">R11</div>
+        <div class="step-body">
+          <h3>Seal the run <code>lineage/</code></h3>
+          <p>Write <code>manifest.json</code> with hashes of every input and output, the versions and the status. A rerun from the manifest must give identical output hashes.</p>
+        </div>
+        <dl class="step-meta">
+          <dt>Requirements</dt><dd><span class="chip">OPS-01</span><span class="chip">§12.2 reproducibility</span></dd>
+          <dt>Blocks on</dt><dd class="blocks">An output hash differs on rerun</dd>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ INGESTION ============ -->
+  <section id="ingestion">
+    <h2><span class="kicker k-run">Inside R2–R3</span>Data ingestion</h2>
+    <div class="prose">
+      <p>The run reads one input set: seven datasets in a fixed schema. It treats synthetic and real data the same way. This is the full list of what comes in. No later step reads a file. Fields that R5 uses for cash flows are highlighted in teal, and fields that set PD and stage in ochre.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Dataset</th><th>Contents</th><th>Key</th><th>Requirements</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="4">portfolio</td></tr>
+          <tr><td class="file">facilities</td><td>Product, segment, IFRS stage, POCI flag, accounting category, <mark>drawn balance (GCA with accrued interest)</mark>, contractual limit, <mark>interest rate (EIR)</mark>, fixed/floating, <mark>residual maturity</mark>, <mark>repayment profile</mark>, regulatory approach and class, <mark class="pd">current rating grade</mark>, <mark class="pd">origination grade</mark>, TTC LGD, DPD, watchlist and forbearance flags, default and stage entry dates</td><td class="key">facility_id</td><td class="refs"><span class="chip">§4.2</span> <span class="chip">PD-01</span> <span class="chip">EAD-01</span></td></tr>
+          <tr><td class="file">obligors</td><td>Country, counterparty sector, NACE code and version, SME flag, connected group, regulatory default</td><td class="key">obligor_id, group_id</td><td class="refs"><span class="chip">DAT-01</span> <span class="chip">DAT-04</span> <span class="chip">SYN-01</span></td></tr>
+          <tr><td class="file">commitments</td><td>Off-balance nominal undrawn, accounting CCF and its source, linked facility, asset category "not applicable"</td><td class="key">commitment_id</td><td class="refs"><span class="chip">SCP-06</span> <span class="chip">EAD-03–04</span></td></tr>
+          <tr class="grp"><td colspan="4">starting provisions</td></tr>
+          <tr><td class="file">opening_provisions</td><td>On-balance allowance, off-balance provision and overlays with owner and reason, frozen at end-2026</td><td class="key">facility_id</td><td class="refs"><span class="chip">§5.2</span> <span class="chip">ACC-04</span> <span class="chip">DAT-03</span></td></tr>
+          <tr class="grp"><td colspan="4">rating matrices, scenarios and parameters</td></tr>
+          <tr><td class="file">ttc_pd_matrix</td><td><mark class="pd">One-year probability of moving from each performing grade to each grade or to default</mark>, one matrix per reference segment, with the master-scale grade definitions</td><td class="key">segment + from + to</td><td class="refs"><span class="chip">MIG-01</span> <span class="chip">PD-04</span> <span class="chip">PD-05</span></td></tr>
+          <tr><td class="file">scenarios</td><td>Variable, unit, value type (level, growth, index), year, country, scenario, source, release, completeness and status</td><td class="key">scenario + variable + year</td><td class="refs"><span class="chip">SCN-01–04</span></td></tr>
+          <tr><td class="file">parameter_set</td><td>Z-score weights with driver means and standard deviations, <mark class="pd">matrix correlation ρ per segment</mark>, LGD sensitivity w per segment, <mark class="pd">SICR threshold k per segment</mark>, prepayment rate CPR_TTC and its Z sensitivity v per segment, CCFs, terminal rule</td><td class="key">parameter_set_id</td><td class="refs"><span class="chip">MIG-05</span> <span class="chip">SYN-PAR-04</span> <span class="chip">MOD-06</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1080 340" style="min-width: 800px" role="img" aria-label="The input set passes through R2 load (hash check, typed tables, value status) and R3 validate and route (schema, scope gate and matrix checks, controls), then each record takes exactly one of six routes.">
+          <defs>
+            <marker id="f3-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-mut"/></marker>
+            <marker id="f3-run" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-run"/></marker>
+            <marker id="f3-s3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-s3"/></marker>
+            <marker id="f3-block" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-block"/></marker>
+          </defs>
+
+          <path class="doc" d="M20,145 h118 l12,12 v48 h-130 z"/><path class="doc" d="M138,145 v12 h12" style="fill:none"/>
+          <text class="t-title" x="34" y="170">Input set</text>
+          <text class="t-sub" x="34" y="188">7 datasets, hashed</text>
+          <line class="edge" x1="150" y1="175" x2="178" y2="175" marker-end="url(#f3-mut)"/>
+
+          <rect class="group-run" x="180" y="60" width="250" height="230" rx="8"/>
+          <text class="t-band" x="196" y="82">R2 · LOAD INPUTS</text>
+          <rect class="box box-run" x="196" y="98" width="218" height="40" rx="5"/>
+          <text class="t-out" x="208" y="123">check hash against R1</text>
+          <rect class="box box-run" x="196" y="160" width="218" height="40" rx="5"/>
+          <text class="t-out" x="208" y="185">parse into typed tables</text>
+          <rect class="box box-run" x="196" y="222" width="218" height="40" rx="5"/>
+          <text class="t-out" x="208" y="247">attach a status to every value</text>
+          <line class="edge-run" x1="305" y1="138" x2="305" y2="158" marker-end="url(#f3-run)"/>
+          <line class="edge-run" x1="305" y1="200" x2="305" y2="220" marker-end="url(#f3-run)"/>
+          <text class="t-label" x="305" y="310" text-anchor="middle">raw files kept unchanged</text>
+
+          <line class="edge-run" x1="430" y1="175" x2="458" y2="175" marker-end="url(#f3-run)"/>
+
+          <rect class="group-run" x="460" y="60" width="250" height="230" rx="8"/>
+          <text class="t-band" x="476" y="82">R3 · VALIDATE AND ROUTE</text>
+          <rect class="box box-run" x="476" y="98" width="218" height="40" rx="5"/>
+          <text class="t-out" x="488" y="123">schema · referential integrity</text>
+          <rect class="box box-run" x="476" y="160" width="218" height="40" rx="5"/>
+          <text class="t-out" x="488" y="185">scope · matrices · grade = stage</text>
+          <rect class="box box-run" x="476" y="222" width="218" height="40" rx="5"/>
+          <text class="t-out" x="488" y="247">§12.2 input controls</text>
+          <line class="edge-run" x1="585" y1="138" x2="585" y2="158" marker-end="url(#f3-run)"/>
+          <line class="edge-run" x1="585" y1="200" x2="585" y2="220" marker-end="url(#f3-run)"/>
+          <text class="t-label" x="585" y="310" text-anchor="middle">start point reconciled to §5</text>
+
+          <line class="edge-run" x1="710" y1="175" x2="788" y2="42" marker-end="url(#f3-run)"/>
+          <line class="edge-s3" x1="710" y1="175" x2="788" y2="94" marker-end="url(#f3-s3)"/>
+          <line class="edge" x1="710" y1="175" x2="788" y2="146" marker-end="url(#f3-mut)"/>
+          <line class="edge" x1="710" y1="175" x2="788" y2="198" marker-end="url(#f3-mut)"/>
+          <line class="edge" x1="710" y1="175" x2="788" y2="250" marker-end="url(#f3-mut)"/>
+          <line class="edge-block" x1="710" y1="175" x2="788" y2="302" marker-end="url(#f3-block)"/>
+
+          <rect class="box box-run" x="790" y="20" width="280" height="44" rx="6"/>
+          <text class="t-title" x="804" y="39">Performing (graded)</text>
+          <text class="t-sub" x="804" y="55">→ cash flows, parameters, projection</text>
+          <rect class="box box-s3" x="790" y="72" width="280" height="44" rx="6"/>
+          <text class="t-title" x="804" y="91">Original S3 (end-2026)</text>
+          <text class="t-sub" x="804" y="107">→ GCA × LGD, allowance floor</text>
+          <rect class="box box-plain" x="790" y="124" width="280" height="44" rx="6"/>
+          <text class="t-title" x="804" y="143">Off-balance commitment</text>
+          <text class="t-sub" x="804" y="159">→ undrawn U of its linked facility</text>
+          <rect class="box box-plain" x="790" y="176" width="280" height="44" rx="6"/>
+          <text class="t-title" x="804" y="195">Central-bank exposure</text>
+          <text class="t-sub" x="804" y="211">→ prescribed zero loss · not in v1 data</text>
+          <rect class="box box-plain" x="790" y="228" width="280" height="44" rx="6"/>
+          <text class="t-title" x="804" y="247">POCI</text>
+          <text class="t-sub" x="804" y="263">→ own treatment · not in v1 data</text>
+          <rect class="box box-block" x="790" y="280" width="280" height="44" rx="6"/>
+          <text class="t-title" x="804" y="299">Rejected record</text>
+          <text class="t-sub" x="804" y="315">→ log + reason code · never in totals</text>
+        </svg>
+      </div>
+      <figcaption>The routes are exclusive, so nothing is counted twice. The main books only use the first three; central-bank and POCI records do not occur in v1 data. A commitment is its own record with "not applicable" as its asset category. Its undrawn amount becomes U on its linked facility, and its provision is reported off-balance.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ CASH FLOWS ============ -->
+  <section id="cashflows">
+    <h2><span class="kicker k-cf">Inside R5</span>Where cash flows are generated</h2>
+    <div class="prose">
+      <p>R5 is the only step that creates cash flows, and they are contractual. It needs three facts per facility: drawn balance, interest rate and maturity, plus the repayment profile that splits each payment into interest and principal. Prepayment, default and drawdown depend on the scenario, so R6 applies them. The schedule is the same in both scenarios, so it is built once.</p>
+    </div>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1080 480" style="min-width: 820px" role="img" aria-label="Facility inputs drawn balance, rate and maturity feed a yearly contractual schedule of opening balance, interest, principal and closing balance. The schedule gives the contractual balance at each default date and the discount factor, which R6 and R8 use. Below, balance paths for bullet, annuity and linear repayment.">
+          <defs>
+            <marker id="f4-cf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-cf"/></marker>
+          </defs>
+
+          <text x="20" y="22"><tspan class="t-lane-cf">R5 · ONE SCHEDULE PER FACILITY</tspan><tspan class="t-lanesub" dx="8">built once, used by both scenarios</tspan></text>
+
+          <rect class="box box-plain" x="20" y="40" width="220" height="168" rx="6"/>
+          <text class="t-title" x="34" y="64">Facility inputs</text>
+          <text class="t-cell" x="34" y="92">D = drawn balance</text>
+          <text class="t-cell" x="34" y="116">r = interest rate</text>
+          <text class="t-cell" x="34" y="140">M = residual maturity</text>
+          <text class="t-cell" x="34" y="164">repayment profile</text>
+          <text class="t-sub" x="34" y="192">D includes accrued interest once</text>
+          <line class="edge-cf" x1="240" y1="124" x2="278" y2="124" marker-end="url(#f4-cf)"/>
+
+          <rect class="box box-cf-out" x="280" y="40" width="420" height="168" rx="6"/>
+          <line class="grid" x1="280" y1="72" x2="700" y2="72"/>
+          <line class="grid" x1="280" y1="106" x2="700" y2="106"/>
+          <line class="grid" x1="280" y1="140" x2="700" y2="140"/>
+          <line class="grid" x1="280" y1="174" x2="700" y2="174"/>
+          <line class="grid" x1="320" y1="40" x2="320" y2="208"/>
+          <line class="grid" x1="415" y1="40" x2="415" y2="208"/>
+          <line class="grid" x1="510" y1="40" x2="510" y2="208"/>
+          <line class="grid" x1="605" y1="40" x2="605" y2="208"/>
+          <text class="t-cell-hd" x="300" y="61" text-anchor="middle">t</text>
+          <text class="t-cell-hd" x="367" y="61" text-anchor="middle">opening B</text>
+          <text class="t-cell-hd" x="462" y="61" text-anchor="middle">interest</text>
+          <text class="t-cell-hd" x="557" y="61" text-anchor="middle">principal</text>
+          <text class="t-cell-hd" x="652" y="61" text-anchor="middle">closing B</text>
+          <text class="t-cell" x="300" y="94" text-anchor="middle">1</text>
+          <text class="t-cell" x="367" y="94" text-anchor="middle">D</text>
+          <text class="t-cell" x="462" y="94" text-anchor="middle">D·r</text>
+          <text class="t-cell" x="557" y="94" text-anchor="middle">P(1)</text>
+          <text class="t-cell" x="652" y="94" text-anchor="middle">B(1)</text>
+          <text class="t-cell" x="300" y="128" text-anchor="middle">2</text>
+          <text class="t-cell" x="367" y="128" text-anchor="middle">B(1)</text>
+          <text class="t-cell" x="462" y="128" text-anchor="middle">B(1)·r</text>
+          <text class="t-cell" x="557" y="128" text-anchor="middle">P(2)</text>
+          <text class="t-cell" x="652" y="128" text-anchor="middle">B(2)</text>
+          <text class="t-cell" x="300" y="162" text-anchor="middle">…</text>
+          <text class="t-cell" x="367" y="162" text-anchor="middle">…</text>
+          <text class="t-cell" x="462" y="162" text-anchor="middle">…</text>
+          <text class="t-cell" x="557" y="162" text-anchor="middle">…</text>
+          <text class="t-cell" x="652" y="162" text-anchor="middle">…</text>
+          <text class="t-cell" x="300" y="196" text-anchor="middle">M</text>
+          <text class="t-cell" x="367" y="196" text-anchor="middle">B(M−1)</text>
+          <text class="t-cell" x="462" y="196" text-anchor="middle">B(M−1)·r</text>
+          <text class="t-cell" x="557" y="196" text-anchor="middle">B(M−1)</text>
+          <text class="t-cell" x="652" y="196" text-anchor="middle">0</text>
+          <text class="t-label-cf" x="490" y="228" text-anchor="middle"><tspan class="t-mono">cf_schedule</tspan> · one row per facility and year</text>
+
+          <line class="edge-cf" x1="700" y1="87" x2="758" y2="87" marker-end="url(#f4-cf)"/>
+          <line class="edge-cf" x1="700" y1="167" x2="758" y2="167" marker-end="url(#f4-cf)"/>
+          <rect class="box box-cf-out" x="760" y="60" width="300" height="54" rx="6"/>
+          <text class="t-title" x="774" y="82">B[k] = balance at date k</text>
+          <text class="t-sub" x="774" y="101">contractual, before that date's payment</text>
+          <rect class="box box-cf-out" x="760" y="140" width="300" height="54" rx="6"/>
+          <text class="t-title" x="774" y="162">DF[k] = (1 + r)^−t(k)</text>
+          <text class="t-sub" x="774" y="181">from default date back to valuation date</text>
+          <text class="t-label-cf" x="910" y="228" text-anchor="middle">R6: EAD[k] = B[k] × SP[k] + U[k] × CCF</text>
+
+          <line class="rowline" x1="20" y1="250" x2="1060" y2="250"/>
+
+          <text class="t-title" x="100" y="278">Contractual balance B(t) by repayment profile</text>
+          <text class="t-label" x="100" y="294">illustration: 5-year facility at 5%, as % of D</text>
+          <line class="grid" x1="100" y1="320" x2="470" y2="320"/>
+          <line class="grid" x1="100" y1="385" x2="470" y2="385"/>
+          <line class="axis" x1="100" y1="450" x2="470" y2="450"/>
+          <text class="t-label" x="92" y="324" text-anchor="end">100%</text>
+          <text class="t-label" x="92" y="389" text-anchor="end">50%</text>
+          <text class="t-label" x="92" y="454" text-anchor="end">0</text>
+          <text class="t-label" x="100" y="468" text-anchor="middle">0</text>
+          <text class="t-label" x="172" y="468" text-anchor="middle">1</text>
+          <text class="t-label" x="244" y="468" text-anchor="middle">2</text>
+          <text class="t-label" x="316" y="468" text-anchor="middle">3</text>
+          <text class="t-label" x="388" y="468" text-anchor="middle">4</text>
+          <text class="t-label" x="460" y="468" text-anchor="middle">5 years</text>
+          <polyline class="ln-linear" points="100,320 172,346 244,372 316,398 388,424 460,450"/>
+          <polyline class="ln-annuity" points="100,320 172,343.5 244,368.2 316,394.2 388,421.4 460,450"/>
+          <path class="ln-bullet" d="M100,320 H460 V450"/>
+          <text class="t-prof-cf" x="280" y="312" text-anchor="middle">bullet</text>
+          <text class="t-prof-run" x="338" y="388">annuity</text>
+          <text class="t-prof-mut" x="214" y="390">linear</text>
+
+          <text class="t-prof-cf" x="560" y="300">bullet</text>
+          <text class="t-out" x="560" y="318">principal repaid at M · balance flat · core run</text>
+          <text class="t-prof-run" x="560" y="350">annuity</text>
+          <text class="t-out" x="560" y="368">constant payment A = D · r ÷ (1 − (1 + r)^−M)</text>
+          <text class="t-prof-mut" x="560" y="400">linear</text>
+          <text class="t-out" x="560" y="418">principal D ÷ M each year</text>
+          <text class="t-title" x="560" y="450">stub year</text>
+          <text class="t-out" x="560" y="468">fraction d of a year where M is not whole (PD-06)</text>
+        </svg>
+      </div>
+      <figcaption>Interest and principal are the contractual cash flows. Later steps need two things from them: the contractual balance at each possible default date, B[k], and the discount factor from the same rate. R6 turns B[k] into EAD[k] by applying prepayment and adding the converted undrawn amount. Discounting happens once, from the default date back to the valuation date (AT-40).</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ EAD ============ -->
+  <section id="ead">
+    <h2><span class="kicker k-run">Inside R6</span>Prepayment and EAD</h2>
+    <div class="prose">
+      <p>EAD is computed in R6 because prepayment depends on the scenario. R6 takes the contractual balance from R5, removes the expected prepayments and adds the converted undrawn amount. Prepayment is applied here once and nowhere else.</p>
+    </div>
+    <div class="formulas c3">
+      <div class="fcard">
+        <span class="tag">R6 · prepayment rate</span>
+        <h3>Moves with Z, like PD and LGD</h3>
+        <div class="eq">CPR[t] = Φ( Φ⁻¹(CPR_TTC) + v × Z[t] )<br>SP[k] = (1 − CPR[1]) × … × (1 − CPR[k−1])</div>
+        <p>SP[k] is the share of the drawn balance not yet prepaid at default date k, and SP[1] = 1. With v &gt; 0, prepayment falls when the economy worsens; v = 0 keeps the TTC rate. CPR_TTC and v are set per segment (D14).</p>
+      </div>
+      <div class="fcard">
+        <span class="tag">R6 · EAD per default date</span>
+        <h3>Contractual balance after prepayment</h3>
+        <div class="eq">EAD_drawn[k] = B[k] × SP[k]<br>EAD_undrawn[k] = U[k] × CCF<br>EAD[k] = EAD_drawn[k] + EAD_undrawn[k]</div>
+        <p>B[k] comes from R5, and all three amounts are stored (EAD-02). The undrawn part is not prepaid. The drawn part feeds the on-balance allowance and the undrawn part the off-balance provision (AT-34). The default survival S[k] in the PD curve leaves prepayment out, so it is never counted twice.</p>
+      </div>
+      <div class="fcard">
+        <span class="tag">R7 · balance sheet stays static</span>
+        <h3>Prepayment shortens the loss profile, not the stock</h3>
+        <div class="eq">GCA stock(y) = GCA stock(2026)</div>
+        <p>Prepaid and matured balances are replaced like for like in the balance-sheet stock (EXP-01). Prepayment only changes the EAD profile used to measure loss (EAD-05). At each year-end, R6 restarts the profile from the static stock balance.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MATRIX ============ -->
+  <section id="matrix">
+    <h2><span class="kicker k-run">Inside R4, R6 and R7</span>TTC PD matrix and how stages follow from it</h2>
+    <div class="prose">
+      <p>Each segment has a through-the-cycle rating transition matrix on one master scale: N performing grades plus default D. Every performing facility has a current grade and an origination grade. A single matrix drives PD, rating migration and stage migration. As a result the three are consistent by construction, which is what MIG-04 and PD-05 ask for.</p>
+    </div>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1000 335" style="min-width: 780px" role="img" aria-label="A rating matrix for one facility with origination grade G2 is split into blocks by the SICR line between G4 and G5 and by the default column. Rows G1 to G4 are S1 grades, rows G5 to G8 are S2 grades. Blocks give S1 to S1, S1 to S2, S2 to S1, S2 to S2, and the default column gives S1 and S2 to S3, which equals PD. Summing exposure in each block gives the reported three by three stage migration matrix.">
+          <defs>
+            <marker id="f6-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-mut"/></marker>
+          </defs>
+
+          <!-- column stage brackets -->
+          <path class="edge" d="M122,34 V28 H278 V34"/>
+          <path class="edge" d="M282,34 V28 H438 V34"/>
+          <path class="edge" d="M442,34 V28 H478 V34"/>
+          <text class="t-label-run" x="200" y="22" text-anchor="middle">to S1 grades</text>
+          <text class="t-label-once" x="360" y="22" text-anchor="middle">to S2 grades</text>
+          <text class="t-s3" x="460" y="22" text-anchor="middle">to S3</text>
+
+          <!-- column labels -->
+          <text class="t-cell-hd" x="140" y="46" text-anchor="middle">G1</text>
+          <text class="t-cell-hd" x="180" y="46" text-anchor="middle">G2</text>
+          <text class="t-cell-hd" x="220" y="46" text-anchor="middle">G3</text>
+          <text class="t-cell-hd" x="260" y="46" text-anchor="middle">G4</text>
+          <text class="t-cell-hd" x="300" y="46" text-anchor="middle">G5</text>
+          <text class="t-cell-hd" x="340" y="46" text-anchor="middle">G6</text>
+          <text class="t-cell-hd" x="380" y="46" text-anchor="middle">G7</text>
+          <text class="t-cell-hd" x="420" y="46" text-anchor="middle">G8</text>
+          <text class="t-cell-hd" x="460" y="46" text-anchor="middle">D</text>
+
+          <!-- blocks -->
+          <rect class="blk-s1" x="120" y="50" width="160" height="128"/>
+          <rect class="blk-s2" x="280" y="50" width="160" height="128"/>
+          <rect class="blk-s3" x="440" y="50" width="40" height="128"/>
+          <rect class="blk-s1" x="120" y="178" width="160" height="128"/>
+          <rect class="blk-s2" x="280" y="178" width="160" height="128"/>
+          <rect class="blk-s3" x="440" y="178" width="40" height="128"/>
+
+          <!-- cell grid -->
+          <line class="grid" x1="160" y1="50" x2="160" y2="306"/>
+          <line class="grid" x1="200" y1="50" x2="200" y2="306"/>
+          <line class="grid" x1="240" y1="50" x2="240" y2="306"/>
+          <line class="grid" x1="320" y1="50" x2="320" y2="306"/>
+          <line class="grid" x1="360" y1="50" x2="360" y2="306"/>
+          <line class="grid" x1="400" y1="50" x2="400" y2="306"/>
+          <line class="grid" x1="120" y1="82" x2="480" y2="82"/>
+          <line class="grid" x1="120" y1="114" x2="480" y2="114"/>
+          <line class="grid" x1="120" y1="146" x2="480" y2="146"/>
+          <line class="grid" x1="120" y1="210" x2="480" y2="210"/>
+          <line class="grid" x1="120" y1="242" x2="480" y2="242"/>
+          <line class="grid" x1="120" y1="274" x2="480" y2="274"/>
+          <rect class="frame" x="120" y="50" width="360" height="256"/>
+          <line class="part" x1="120" y1="178" x2="480" y2="178"/>
+          <line class="part" x1="280" y1="50" x2="280" y2="306"/>
+          <line class="part" x1="440" y1="50" x2="440" y2="306"/>
+
+          <!-- block labels -->
+          <rect class="label-bg" x="166" y="104" width="68" height="20" rx="4"/>
+          <text class="t-cell" x="200" y="118" text-anchor="middle">S1 → S1</text>
+          <rect class="label-bg" x="326" y="104" width="68" height="20" rx="4"/>
+          <text class="t-cell" x="360" y="118" text-anchor="middle">S1 → S2</text>
+          <rect class="label-bg" x="445" y="104" width="30" height="20" rx="4"/>
+          <text class="t-cell" x="460" y="118" text-anchor="middle">PD</text>
+          <rect class="label-bg" x="166" y="232" width="68" height="20" rx="4"/>
+          <text class="t-cell" x="200" y="246" text-anchor="middle">S2 → S1</text>
+          <rect class="label-bg" x="326" y="232" width="68" height="20" rx="4"/>
+          <text class="t-cell" x="360" y="246" text-anchor="middle">S2 → S2</text>
+          <rect class="label-bg" x="445" y="232" width="30" height="20" rx="4"/>
+          <text class="t-cell" x="460" y="246" text-anchor="middle">PD</text>
+
+          <!-- row labels -->
+          <text class="t-cell-hd" x="106" y="70" text-anchor="end">G1</text>
+          <text class="t-cell-hd" x="106" y="102" text-anchor="end">G2</text>
+          <text class="t-cell-hd" x="106" y="134" text-anchor="end">G3</text>
+          <text class="t-cell-hd" x="106" y="166" text-anchor="end">G4</text>
+          <text class="t-cell-hd" x="106" y="198" text-anchor="end">G5</text>
+          <text class="t-cell-hd" x="106" y="230" text-anchor="end">G6</text>
+          <text class="t-cell-hd" x="106" y="262" text-anchor="end">G7</text>
+          <text class="t-cell-hd" x="106" y="294" text-anchor="end">G8</text>
+          <text class="t-label-once" x="60" y="102">g0 →</text>
+          <text class="t-label-once" x="20" y="182">SICR line</text>
+          <line class="sicr" x1="20" y1="178" x2="118" y2="178"/>
+
+          <!-- row stage brackets -->
+          <path class="edge" d="M486,52 H492 V176 H486"/>
+          <text class="t-label-run" x="498" y="118">S1 grades</text>
+          <path class="edge" d="M486,180 H492 V304 H486"/>
+          <text class="t-label-once" x="498" y="246">S2 grades</text>
+
+          <!-- aggregation arrow -->
+          <line class="edge" x1="566" y1="178" x2="628" y2="178" marker-end="url(#f6-mut)"/>
+          <text class="t-label" x="597" y="196" text-anchor="middle">Σ exposure</text>
+          <text class="t-label" x="597" y="210" text-anchor="middle">per block</text>
+
+          <!-- stage matrix -->
+          <text class="t-cell-hd" x="810" y="44" text-anchor="middle">STAGE MIGRATION, AS REPORTED</text>
+          <rect class="blk-s1" x="700" y="92" width="93" height="70"/>
+          <rect class="blk-s2" x="793" y="92" width="94" height="70"/>
+          <rect class="blk-s3" x="887" y="92" width="93" height="70"/>
+          <rect class="blk-s1" x="700" y="162" width="93" height="70"/>
+          <rect class="blk-s2" x="793" y="162" width="94" height="70"/>
+          <rect class="blk-s3" x="887" y="162" width="93" height="70"/>
+          <rect class="blk-none" x="700" y="232" width="187" height="70"/>
+          <rect class="blk-s3" x="887" y="232" width="93" height="70"/>
+          <rect class="frame" x="640" y="60" width="340" height="242"/>
+          <line class="grid" x1="640" y1="92" x2="980" y2="92"/>
+          <line class="grid" x1="640" y1="162" x2="980" y2="162"/>
+          <line class="grid" x1="640" y1="232" x2="980" y2="232"/>
+          <line class="grid" x1="700" y1="60" x2="700" y2="302"/>
+          <line class="grid" x1="793" y1="60" x2="793" y2="302"/>
+          <line class="grid" x1="887" y1="60" x2="887" y2="302"/>
+          <text class="t-cell-hd" x="746" y="81" text-anchor="middle">to S1</text>
+          <text class="t-cell-hd" x="840" y="81" text-anchor="middle">to S2</text>
+          <text class="t-cell-hd" x="933" y="81" text-anchor="middle">to S3</text>
+          <text class="t-title" x="670" y="131" text-anchor="middle">S1</text>
+          <text class="t-title" x="670" y="201" text-anchor="middle">S2</text>
+          <text class="t-title" x="670" y="271" text-anchor="middle">S3</text>
+          <text class="t-out" x="746" y="131" text-anchor="middle">stays S1</text>
+          <text class="t-out" x="840" y="131" text-anchor="middle">SICR</text>
+          <text class="t-out" x="933" y="127" text-anchor="middle">default</text>
+          <text class="t-out" x="933" y="143" text-anchor="middle">= PD</text>
+          <text class="t-out" x="746" y="201" text-anchor="middle">back to S1</text>
+          <text class="t-out" x="840" y="201" text-anchor="middle">stays S2</text>
+          <text class="t-out" x="933" y="197" text-anchor="middle">default</text>
+          <text class="t-out" x="933" y="213" text-anchor="middle">= PD</text>
+          <text class="t-out" x="746" y="267" text-anchor="middle">0</text>
+          <text class="t-label" x="746" y="283" text-anchor="middle">no cure</text>
+          <text class="t-out" x="840" y="267" text-anchor="middle">0</text>
+          <text class="t-label" x="840" y="283" text-anchor="middle">no cure</text>
+          <text class="t-out" x="933" y="267" text-anchor="middle">1</text>
+          <text class="t-label" x="933" y="283" text-anchor="middle">stays S3</text>
+          <text class="t-label" x="810" y="324" text-anchor="middle">rows sum to 1 (MIG-01) · same shape as AT-02</text>
+        </svg>
+      </div>
+      <figcaption>One facility, with origination grade G2 (g0) and an example master scale of 8 grades. The SICR line sits where the lifetime PD reaches k times the lifetime PD at origination (D2). Grades above the line are S1 for this facility and grades below it are S2. That splits the matrix into six blocks, and each block is one stage transition. The default column is the PD, so S1→S3 and S2→S3 equal the stage PD (PD-05). The line moves with the origination grade, so each facility has its own blocks. The reported stage matrix is the exposure-weighted sum of the blocks. S1↔S2 shares therefore come out of the matrix and are not inputs.</figcaption>
+    </figure>
+    <div class="formulas">
+      <div class="fcard">
+        <span class="tag">R4 · economy → Z</span>
+        <h3>One Z per segment, country, year</h3>
+        <div class="eq">Z = Σ β_i × (x_i − μ_i) ÷ σ_i</div>
+        <p>The x values are the scenario drivers for that segment, such as GDP growth, unemployment and property price change. A positive Z means a better economy than average. The same Z shifts the PD matrix, the LGD and the prepayment rate. After 2029, Z follows the terminal rule (D5).</p>
+      </div>
+      <div class="fcard">
+        <span class="tag">R6 · TTC matrix → PiT matrix M(y)</span>
+        <h3>Shift each row with Z</h3>
+        <div class="eq">C(i,j) = P(end in grade j or worse | start in i)<br>C_PiT = Φ( (Φ⁻¹(C_TTC) − √ρ × Z) ÷ √(1 − ρ) )<br>M(i,j) = C_PiT(i,j) − C_PiT(i,j+1)</div>
+        <p>A worse economy (Z &lt; 0) moves probability toward worse grades and default. Every shifted row still sums to 1. The D column of M(y) is each grade's PD for year y. Each segment has its own ρ (D13).</p>
+      </div>
+      <div class="fcard">
+        <span class="tag">R6 · PD curve of a grade</span>
+        <h3>Products of future matrices</h3>
+        <div class="eq">F[k] = ( e_g × M(y+1) × … × M(y+k) )[D]<br>m[k] = F[k] − F[k−1],  S[k] = 1 − F[k]</div>
+        <p>This is the lifetime PD of a slice at grade g, under the scenario's own future matrices (perfect foresight, ECL-06). It allows for rating migration on the way to default. The PD-03 identities are checked on every curve.</p>
+      </div>
+      <div class="fcard">
+        <span class="tag">R7 · stage of a slice</span>
+        <h3>Stage comes from the grade</h3>
+        <div class="eq">S3  if grade = D<br>S2  if PDlife(g) ≥ k × PDlife(g0)<br>S1  otherwise</div>
+        <p>Both lifetime PDs come from the TTC matrix over the same remaining horizon (PD-06), so the line stays fixed per facility. k is a test convention per segment (MIG-05). A slice returns to S1 when its grade improves back over the line. D never cures.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LGD ============ -->
+  <section id="lgd">
+    <h2><span class="kicker k-run">Inside R6 and R8</span>LGD from TTC and the Z-score</h2>
+    <div class="prose">
+      <p>Each exposure carries a through-the-cycle LGD. The same Z that shifts the PD matrix moves it with the economy. No collateral, guarantee or recovery data is needed.</p>
+    </div>
+    <div class="formulas">
+      <div class="fcard">
+        <span class="tag">R6 · TTC → LGD of the year</span>
+        <h3>Shift the TTC LGD with Z</h3>
+        <div class="eq">LGD[k] = Φ( Φ⁻¹(LGD_TTC) − w × Z[k] )</div>
+        <p>Z = 0 gives back LGD_TTC. A worse economy (Z &lt; 0) raises LGD, and the result always stays between 0 and 1 without a cap. An LGD_TTC of exactly 0 or 1 passes through unchanged. Each segment has its own w ≥ 0.</p>
+      </div>
+      <div class="fcard">
+        <span class="tag">R8 · where it is used</span>
+        <h3>The same LGD everywhere</h3>
+        <ul>
+          <li>S1 and S2 grades: m[k] · EAD[k] · LGD[k] · DF[k]</li>
+          <li>New S3: flow × LGD of the default year</li>
+          <li>Original S3: max(GCA × LGD of the year, prior allowance)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ONE YEAR ============ -->
+  <section id="year">
+    <h2><span class="kicker k-run">Inside R7–R9</span>One projection year</h2>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1010 540" style="min-width: 780px" role="img" aria-label="Opening grade slices are multiplied by the PiT matrix M(y). The matrix blocks give stage transitions and its default column feeds new S3 cohorts by origin stage. Original and earlier S3 slices bypass the matrix. Each closing slice gets its stage-specific provision rule; their sum is the allowance, and the charge is the change from last year. Closing slices become next year's opening.">
+          <defs>
+            <marker id="f5-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-mut"/></marker>
+            <marker id="f5-run" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-run"/></marker>
+            <marker id="f5-s3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-s3"/></marker>
+          </defs>
+
+          <text class="t-cell-hd" x="20" y="30">OPENING · 31 Dec y−1</text>
+          <text class="t-cell-hd" x="282" y="30">PiT MATRIX M(y) · TTC shifted by Z(y)</text>
+          <text class="t-cell-hd" x="590" y="30">CLOSING · 31 Dec y</text>
+          <text class="t-cell-hd" x="790" y="30">YEAR-END PROVISION (R8)</text>
+
+          <!-- opening grade slices -->
+          <rect class="box box-run" x="20" y="73" width="170" height="30" rx="5"/>
+          <text class="t-title" x="32" y="93">G1 <tspan class="t-sub">· S1</tspan></text>
+          <rect class="box box-run" x="20" y="109" width="170" height="30" rx="5"/>
+          <text class="t-title" x="32" y="129">G2 <tspan class="t-sub">· S1</tspan></text>
+          <rect class="box box-run" x="20" y="145" width="170" height="30" rx="5"/>
+          <text class="t-title" x="32" y="165">G3 <tspan class="t-sub">· S1</tspan></text>
+          <rect class="box-s2" x="20" y="181" width="170" height="30" rx="5"/>
+          <text class="t-title" x="32" y="201">… <tspan class="t-sub">· S2</tspan></text>
+          <rect class="box-s2" x="20" y="217" width="170" height="30" rx="5"/>
+          <text class="t-title" x="32" y="237">GN <tspan class="t-sub">· S2</tspan></text>
+          <line class="sicr" x1="14" y1="178" x2="196" y2="178"/>
+          <text class="t-label-once" x="20" y="272">dashed: SICR line, set by</text>
+          <text class="t-label-once" x="20" y="286">this facility's origination grade</text>
+          <rect class="box box-s3" x="20" y="342" width="170" height="30" rx="5"/>
+          <text class="t-s3" x="32" y="362">S3 · end-2026 cohort</text>
+          <rect class="box box-s3" x="20" y="378" width="170" height="30" rx="5"/>
+          <text class="t-s3" x="32" y="398">S3 · earlier new cohorts</text>
+
+          <!-- matrix -->
+          <rect class="blk-s1" x="300" y="70" width="114" height="108"/>
+          <rect class="blk-s2" x="414" y="70" width="76" height="108"/>
+          <rect class="blk-s3" x="490" y="70" width="38" height="108"/>
+          <rect class="blk-s1" x="300" y="178" width="114" height="72"/>
+          <rect class="blk-s2" x="414" y="178" width="76" height="72"/>
+          <rect class="blk-s3" x="490" y="178" width="38" height="72"/>
+          <rect class="frame" x="300" y="70" width="228" height="180"/>
+          <line class="part" x1="300" y1="178" x2="528" y2="178"/>
+          <line class="part" x1="414" y1="70" x2="414" y2="250"/>
+          <line class="part" x1="490" y1="70" x2="490" y2="250"/>
+          <text class="t-cell-hd" x="319" y="62" text-anchor="middle">G1</text>
+          <text class="t-cell-hd" x="357" y="62" text-anchor="middle">G2</text>
+          <text class="t-cell-hd" x="395" y="62" text-anchor="middle">G3</text>
+          <text class="t-cell-hd" x="433" y="62" text-anchor="middle">…</text>
+          <text class="t-cell-hd" x="471" y="62" text-anchor="middle">GN</text>
+          <text class="t-cell-hd" x="509" y="62" text-anchor="middle">D</text>
+          <text class="t-cell-hd" x="288" y="92" text-anchor="middle">G1</text>
+          <text class="t-cell-hd" x="288" y="128" text-anchor="middle">G2</text>
+          <text class="t-cell-hd" x="288" y="164" text-anchor="middle">G3</text>
+          <text class="t-cell-hd" x="288" y="200" text-anchor="middle">…</text>
+          <text class="t-cell-hd" x="288" y="236" text-anchor="middle">GN</text>
+          <text class="t-cell" x="357" y="128" text-anchor="middle">S1 → S1</text>
+          <text class="t-cell" x="452" y="128" text-anchor="middle">S1 → S2</text>
+          <text class="t-cell" x="509" y="128" text-anchor="middle">PD</text>
+          <text class="t-cell" x="357" y="218" text-anchor="middle">S2 → S1</text>
+          <text class="t-cell" x="452" y="218" text-anchor="middle">S2 → S2</text>
+          <text class="t-cell" x="509" y="218" text-anchor="middle">PD</text>
+          <text class="t-label" x="300" y="270">rows sum to 1</text>
+          <text class="t-label" x="300" y="285">D column = PD of the grade</text>
+
+          <line class="edge" x1="190" y1="160" x2="274" y2="160" marker-end="url(#f5-mut)"/>
+          <text class="t-label" x="232" y="152" text-anchor="middle">v(y−1)</text>
+          <line class="edge" x1="528" y1="160" x2="588" y2="160" marker-end="url(#f5-mut)"/>
+          <text class="t-label" x="558" y="152" text-anchor="middle">× M(y)</text>
+          <path class="edge-s3" d="M518,250 V277 H588" marker-end="url(#f5-s3)"/>
+          <path class="edge-s3" d="M500,250 V313 H588" marker-end="url(#f5-s3)"/>
+
+          <!-- closing grade slices -->
+          <rect class="box box-run" x="590" y="73" width="140" height="30" rx="5"/>
+          <text class="t-title" x="602" y="93">G1 <tspan class="t-sub">· S1</tspan></text>
+          <rect class="box box-run" x="590" y="109" width="140" height="30" rx="5"/>
+          <text class="t-title" x="602" y="129">G2 <tspan class="t-sub">· S1</tspan></text>
+          <rect class="box box-run" x="590" y="145" width="140" height="30" rx="5"/>
+          <text class="t-title" x="602" y="165">G3 <tspan class="t-sub">· S1</tspan></text>
+          <rect class="box-s2" x="590" y="181" width="140" height="30" rx="5"/>
+          <text class="t-title" x="602" y="201">… <tspan class="t-sub">· S2</tspan></text>
+          <rect class="box-s2" x="590" y="217" width="140" height="30" rx="5"/>
+          <text class="t-title" x="602" y="237">GN <tspan class="t-sub">· S2</tspan></text>
+          <line class="sicr" x1="584" y1="178" x2="736" y2="178"/>
+          <rect class="box box-s3" x="590" y="262" width="140" height="30" rx="5"/>
+          <text class="t-s3" x="602" y="282">S3 new · y ← S1</text>
+          <rect class="box box-s3" x="590" y="298" width="140" height="30" rx="5"/>
+          <text class="t-s3" x="602" y="318">S3 new · y ← S2</text>
+          <rect class="box box-s3" x="590" y="342" width="140" height="30" rx="5"/>
+          <text class="t-s3" x="602" y="362">S3 · end-2026</text>
+          <rect class="box box-s3" x="590" y="378" width="140" height="30" rx="5"/>
+          <text class="t-s3" x="602" y="398">S3 · earlier cohorts</text>
+
+          <!-- S3 bypass -->
+          <line class="edge-s3" x1="190" y1="357" x2="588" y2="357" marker-end="url(#f5-s3)"/>
+          <text class="t-label" x="390" y="350" text-anchor="middle">stays S3 · no cure, sale or write-off removal</text>
+          <line class="edge-s3" x1="190" y1="393" x2="588" y2="393" marker-end="url(#f5-s3)"/>
+          <text class="t-label" x="390" y="386" text-anchor="middle">keeps entry year and origin stage</text>
+
+          <!-- provisions -->
+          <path class="edge" d="M736,75 H744 V173 H736"/>
+          <line class="edge" x1="744" y1="124" x2="786" y2="124" marker-end="url(#f5-mut)"/>
+          <text class="t-out" x="792" y="128">S1 grades · 12-month ECL</text>
+          <text class="t-label" x="792" y="143">bucket y+1 only</text>
+          <path class="edge" d="M736,183 H744 V245 H736"/>
+          <line class="edge" x1="744" y1="214" x2="786" y2="214" marker-end="url(#f5-mut)"/>
+          <text class="t-out" x="792" y="218">S2 grades · lifetime ECL</text>
+          <text class="t-label" x="792" y="233">y+1 → maturity</text>
+          <path class="edge" d="M736,264 H744 V326 H736"/>
+          <line class="edge" x1="744" y1="295" x2="786" y2="295" marker-end="url(#f5-mut)"/>
+          <text class="t-out" x="792" y="299">new S3 · flow × LGD(y), once</text>
+          <path class="edge" d="M736,344 H744 V406 H736"/>
+          <line class="edge" x1="744" y1="375" x2="786" y2="375" marker-end="url(#f5-mut)"/>
+          <text class="t-out" x="792" y="379">max(GCA·LGD, prior) · per exposure</text>
+
+          <rect class="badge-ok" x="590" y="420" width="140" height="24" rx="12"/>
+          <text class="t-ok" x="660" y="436" text-anchor="middle">Σ GCA = end-2026</text>
+
+          <line class="edge" x1="890" y1="394" x2="890" y2="418" marker-end="url(#f5-mut)"/>
+          <rect class="box box-run" x="790" y="420" width="210" height="46" rx="6"/>
+          <text class="t-title" x="804" y="440">Allowance A(y)</text>
+          <text class="t-sub" x="804" y="457">drawn → on · undrawn → off</text>
+          <line class="edge" x1="890" y1="466" x2="890" y2="480" marker-end="url(#f5-mut)"/>
+          <rect class="box box-run" x="790" y="482" width="210" height="40" rx="6"/>
+          <text class="t-title" x="804" y="507">R9: charge = A(y) − A(y−1)</text>
+
+          <path class="edge-run" d="M620,444 V512 H105 V410" marker-end="url(#f5-run)"/>
+          <text class="t-label-run" x="385" y="505" text-anchor="middle">closing slices are next year's opening</text>
+        </svg>
+      </div>
+      <figcaption>One facility (D1). Its grade slices are multiplied by the year's PiT matrix. Every grade's stage comes from the SICR line, so the matrix blocks are the stage transitions, and the D column feeds the new S3 cohorts by origin stage. Default volumes come from one matrix only (MIG-04). S3 slices go around the matrix. The original and new S3 cohorts stay separate, so no-release is checked for each exposure (AT-18) and not on the total. AT-02 and AT-29 test the stage-level arithmetic of this step.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ BUCKETS ============ -->
+  <section id="buckets">
+    <h2><span class="kicker k-run">Inside R6 and R8</span>Which future buckets each provision reads</h2>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1000 250" style="min-width: 760px" role="img" aria-label="Default buckets 2027 to 2029 follow the scenario path. From 2030 to 2035 adverse reverts linearly to baseline 2029, with adverse weight falling from five sixths to zero; from 2036 baseline 2029 is held flat. The S1 provision at each year-end reads only the next bucket; S2 reads from the next bucket to maturity. End-2029 S1 reads the interpolated 2030 bucket.">
+          <text class="t-cell-hd" x="201" y="22" text-anchor="middle">2027</text>
+          <text class="t-cell-hd" x="283" y="22" text-anchor="middle">2028</text>
+          <text class="t-cell-hd" x="365" y="22" text-anchor="middle">2029</text>
+          <text class="t-cell-hd" x="447" y="22" text-anchor="middle">2030</text>
+          <text class="t-cell-hd" x="529" y="22" text-anchor="middle">2031</text>
+          <text class="t-cell-hd" x="611" y="22" text-anchor="middle">2032</text>
+          <text class="t-cell-hd" x="693" y="22" text-anchor="middle">2033</text>
+          <text class="t-cell-hd" x="775" y="22" text-anchor="middle">2034</text>
+          <text class="t-cell-hd" x="857" y="22" text-anchor="middle">2035</text>
+          <text class="t-cell-hd" x="939" y="22" text-anchor="middle">2036+</text>
+          <text class="t-label" x="150" y="22" text-anchor="end">default bucket</text>
+
+          <rect class="band-run" x="162" y="32" width="242" height="24" rx="4"/>
+          <text class="t-on" x="283" y="48" text-anchor="middle">scenario path · Z → PiT matrix, LGD</text>
+          <rect class="band-rev" x="408" y="32" width="488" height="24" rx="4"/>
+          <text class="t-label-run" x="652" y="48" text-anchor="middle">adverse Z reverts to baseline 2029 over six years</text>
+          <rect class="band-flat" x="900" y="32" width="78" height="24" rx="4"/>
+          <text class="t-label" x="939" y="48" text-anchor="middle">flat</text>
+
+          <text class="t-label" x="150" y="80" text-anchor="end">adverse weight</text>
+          <text class="t-cell" x="201" y="80" text-anchor="middle">1</text>
+          <text class="t-cell" x="283" y="80" text-anchor="middle">1</text>
+          <text class="t-cell" x="365" y="80" text-anchor="middle">1</text>
+          <text class="t-cell" x="447" y="80" text-anchor="middle" style="font-weight:600">5/6</text>
+          <text class="t-cell" x="529" y="80" text-anchor="middle">4/6</text>
+          <text class="t-cell" x="611" y="80" text-anchor="middle">3/6</text>
+          <text class="t-cell" x="693" y="80" text-anchor="middle">2/6</text>
+          <text class="t-cell" x="775" y="80" text-anchor="middle">1/6</text>
+          <text class="t-cell" x="857" y="80" text-anchor="middle">0</text>
+          <text class="t-cell" x="939" y="80" text-anchor="middle">0</text>
+          <text class="t-label" x="150" y="102" text-anchor="end">baseline</text>
+          <text class="t-label" x="283" y="102" text-anchor="middle">scenario path</text>
+          <text class="t-label" x="693" y="102" text-anchor="middle">2029 values held flat</text>
+          <line class="rowline" x1="20" y1="116" x2="980" y2="116"/>
+
+          <text class="t-title" x="150" y="148" text-anchor="end">end-2027</text>
+          <rect class="mk-s1" x="248" y="130" width="70" height="13" rx="3"/>
+          <text class="t-on" x="256" y="140">S1</text>
+          <rect class="mk-s2" x="248" y="147" width="728" height="13" rx="3"/>
+          <text class="t-label-run" x="256" y="157">S2 lifetime → maturity</text>
+
+          <text class="t-title" x="150" y="188" text-anchor="end">end-2028</text>
+          <rect class="mk-s1" x="330" y="170" width="70" height="13" rx="3"/>
+          <text class="t-on" x="338" y="180">S1</text>
+          <rect class="mk-s2" x="330" y="187" width="646" height="13" rx="3"/>
+          <text class="t-label-run" x="338" y="197">S2 lifetime → maturity</text>
+
+          <text class="t-title" x="150" y="228" text-anchor="end">end-2029</text>
+          <rect class="mk-s1" x="412" y="210" width="70" height="13" rx="3"/>
+          <text class="t-on" x="420" y="220">S1</text>
+          <text class="t-label-run" x="492" y="220">← loss rate 5/6 adverse + 1/6 baseline (AT-06)</text>
+          <rect class="mk-s2" x="412" y="227" width="564" height="13" rx="3"/>
+          <text class="t-label-run" x="420" y="237">S2 lifetime → maturity</text>
+        </svg>
+      </div>
+      <figcaption>Parameters are indexed by the year a default could happen, not by the report date (SYN-PAR-04). Each year-end provision reads buckets forward from the following year, up to the facility's maturity from R5. That is why an end-2029 S1 provision needs a 2030 bucket and blocks if one is missing (AT-41). After 2029 the weights move Z, so the PiT matrices and LGD revert together. The weights and the S2 treatment are a proposed reading of ECL-04/05, listed as D5.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ TRACE ============ -->
+  <section id="trace">
+    <h2><span class="kicker k-neutral">Worked example</span>AT-42 through the pipeline</h2>
+    <div class="prose"><p>The P03 opening-S1 reference, valued at 31 December 2026, with the default bucket ending 31 December 2027. Every value below is the spec's oracle. The case gives the PD and LGD of the 2027 bucket, so it checks EAD, DF and the ECL arithmetic.</p></div>
+    <ol class="trace">
+      <li class="cfl"><span class="tr-step">R5 · balance</span><span class="tr-in">drawn, bullet, so flat to the default date</span><span class="tr-out">B = €800,000</span></li>
+      <li class="cfl"><span class="tr-step">R5 · DF</span><span class="tr-in">one year at 5%</span><span class="tr-out">1 ÷ 1.05</span></li>
+      <li><span class="tr-step">R6 · EAD</span><span class="tr-in">800,000 × 1 (no prepayment in the case) + 50% × 400,000</span><span class="tr-out">€1,000,000</span></li>
+      <li><span class="tr-step">R6 · PD</span><span class="tr-in">D column of M(2027) at the facility's grade, given by the case</span><span class="tr-out">4.296875%</span></li>
+      <li><span class="tr-step">R6 · LGD</span><span class="tr-in">Φ(Φ⁻¹(LGD_TTC) − w × Z) for 2027, given by the case</span><span class="tr-out">45%</span></li>
+      <li><span class="tr-step">R8 · ECL</span><span class="tr-in">q × EAD × LGD × DF, unrounded</span><span class="tr-out">€18,415.1785714286</span></li>
+      <li class="final"><span class="tr-step">R10 · report</span><span class="tr-in">rounded at output only</span><span class="tr-out">€18,415.18</span></li>
+    </ol>
+  </section>
+
+  <!-- ============ LAYOUT ============ -->
+  <section id="layout">
+    <h2><span class="kicker k-neutral">Structure</span>Code layout and data contracts</h2>
+    <div class="two">
+      <pre class="tree">stress-engine/
+├── foundation/            <span class="tg-once">PART 1</span> <span class="c">own package, imports no engine code</span>
+│   ├── transcribe/        <span class="tg-once">O1</span>
+│   ├── matrices/          <span class="tg-once">O2</span> <span class="c">synthetic TTC PD matrices</span>
+│   └── synth/             <span class="tg-once">O3–O4</span> <span class="c">generator, opening allowances</span>
+├── inputs/&lt;hash&gt;/         <span class="tg-lock">input set</span> <span class="c">7 datasets</span>
+├── runs/&lt;run_id&gt;/         <span class="c">config, data, results + manifest.json</span>
+├── src/stress/            <span class="tg-run">PART 2</span> <span class="c">the engine</span>
+│   ├── cli.py             <span class="c">stress run · stress report</span>
+│   ├── contracts/         <span class="c">input schema, keys, value status</span>
+│   ├── ingest/            <span class="c">load inputs, hash checks</span>
+│   ├── validate/          <span class="c">scope, matrix and grade checks, routing</span>
+│   ├── scenario/          <span class="c">indices, Z-score</span>
+│   ├── cashflows/         <span class="c">contractual schedule</span>
+│   ├── params/            <span class="c">matrix (TTC → PiT), pd, lgd,</span>
+│   │                      <span class="c">prepay, ead, terminal, store</span>
+│   ├── projection/        <span class="c">grade migration, stage rule</span>
+│   ├── ecl/               <span class="c">year-end provisions</span>
+│   ├── accounting/        <span class="c">stock to flow</span>
+│   ├── report/  capital/  <span class="c">aggregation, reports, REA floor functions</span>
+│   └── lineage/           <span class="c">open and seal the run, manifest</span>
+├── tests/
+│   ├── unit/              <span class="c">one file per module, property tests</span>
+│   ├── acceptance/        <span class="c">reads docs/spec/ oracles, one test per AT</span>
+│   └── controls/          <span class="c">§12.2 rejections, no imports across parts</span>
+├── docs/                  <span class="c">code flow, repo rules, runbook</span>
+│   └── spec/              <span class="tg-lock">locked</span> <span class="c">requirements, targets, AT oracles</span>
+└── archive/               <span class="tg-lock">people only</span> <span class="c">Claude Code is blocked</span></pre>
+      <div class="contracts">
+        <div class="contract">
+          <h3>Every input value carries a status</h3>
+          <p>Set at ingestion (R2). A missing value blocks the calculation that needs it. Nothing quietly becomes 0.</p>
+          <div class="fields">supplied · zero · not_applicable · estimated · missing</div>
+          <div class="refs"><span class="chip">DAT-02</span><span class="chip">LGD-08</span><span class="chip">CAP-08</span></div>
+        </div>
+        <div class="contract cfc">
+          <h3>Schedule row, written only by R5</h3>
+          <p>One row per facility and year to maturity. Contractual only: no prepayment, default or drawdown. Unrounded EUR.</p>
+          <div class="fields">facility_id · period_end · opening_balance · interest · principal · closing_balance · df</div>
+          <div class="refs"><span class="chip">EAD-02</span><span class="chip">EAD-05</span><span class="chip">ECL-08</span></div>
+        </div>
+        <div class="contract">
+          <h3>Facility slice: the projection state</h3>
+          <p>One row per facility and slice. Stage is derived from the grade. Amounts can be fractional (MIG-06).</p>
+          <div class="fields">facility_id · slice {grade 1…N, S3_orig, S3_new} · stage · origination_grade · entry_year · origin_stage · gca · undrawn · allowance_on · provision_off</div>
+          <div class="refs"><span class="chip">MIG-03</span><span class="chip">ECL-07</span><span class="chip">RPT-06</span></div>
+        </div>
+        <div class="contract">
+          <h3>ParameterRecord, keyed by MOD-06</h3>
+          <p>Every PD, LGD, prepayment and EAD value. A duplicate or missing key blocks the run.</p>
+          <div class="fields">key: run_id · facility_id · scenario · valuation_date · cohort · default_bucket · basis<br>fields: raw · adjustment · constraint · final · source_version</div>
+          <div class="refs"><span class="chip">MOD-05</span><span class="chip">MOD-06</span><span class="chip">ECL-09</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DECISIONS ============ -->
+  <section id="decisions">
+    <h2><span class="kicker k-neutral">To agree</span>Decisions to agree before the build</h2>
+    <div class="prose"><p>These points are open, and each one changes code. Each has a proposal. Reply with the D number and "agree" or your change.</p></div>
+    <ol class="decisions">
+      <li>
+        <span class="d-id">D1</span>
+        <div class="d-body">
+          <h3>How finely to project</h3>
+          <p class="rec">One row per facility and slice: one slice for each performing grade, plus original S3 and each new S3 cohort. Stage is derived from the grade (D2).</p>
+          <p class="why">AT-18 needs no-release checked for each exposure, and RPT-06 sums ECL from facility results. 10,000 facilities × (N grades + up to 4 S3 cohorts) × 3 years × 2 scenarios is still small.</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R7</span><span class="chip st">R8</span></div>
+      </li>
+      <li>
+        <span class="d-id">D2</span>
+        <div class="d-body">
+          <h3>SICR rule</h3>
+          <p class="rec">A performing slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade. Both come from the TTC matrix over the same remaining horizon. k is set per segment and labelled a test convention; you supply it. A slice returns to S1 when its grade improves back over the line.</p>
+          <p class="why">PD-06 asks for a lifetime comparison with origination, and MIG-05 for a labelled synthetic threshold. Basing the line on TTC keeps it fixed per facility, so only rating moves change stage. A PiT-based line would also move S2 volumes with the economy.</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R7</span><span class="chip">parameter_set</span></div>
+      </li>
+      <li>
+        <span class="d-id">D3</span>
+        <div class="d-body">
+          <h3>Opening grades</h3>
+          <p class="rec">The generator gives each facility an origination grade and a current grade. They are chosen so that the stage rule gives back the facility's §5.2 opening stage, and so that each segment's S1 and S2 average PD matches §8.7. Qualitative S2 triggers (30+ DPD, watchlist, forbearance) are not used.</p>
+          <p class="why">Then grade and stage never conflict (DAT-04), and R3 can block any facility whose stage the rule cannot explain.</p>
+        </div>
+        <div class="d-tags"><span class="chip so">O3</span><span class="chip st">R3</span></div>
+      </li>
+      <li>
+        <span class="d-id">D4</span>
+        <div class="d-body">
+          <h3>Z-score LGD: formula and coefficients</h3>
+          <p class="rec">LGD[k] = Φ(Φ⁻¹(LGD_TTC) − w × Z[k]), with Z = Σ β_i × (x_i − μ_i) ÷ σ_i by segment and country. The β, μ, σ and w values are synthetic, sit in the parameter set, and you supply them.</p>
+          <p class="why">This form gives back the TTC value when Z = 0, stays between 0 and 1 without a cap, and rises as the economy worsens (LGD-08, LGD-11).</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R4</span><span class="chip st">R6</span></div>
+      </li>
+      <li>
+        <span class="d-id">D5</span>
+        <div class="d-body">
+          <h3>Parameters after 2029</h3>
+          <p class="rec">Adverse Z reverts linearly to baseline 2029 over 2030–2035 (weights 5/6 down to 0), and baseline stays flat. The PiT matrices and LGD follow from the reverted Z. S1 at end-2029 interpolates the loss rate (AT-06). S2 lifetime uses the reverted matrices and LGD.</p>
+          <p class="why">AT-06 pins only the first year. ECL-05 says interpolating the loss rate and interpolating its drivers can give different answers, so the S2 choice needs your sign-off.</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R4</span><span class="chip st">R6</span><span class="chip st">R8</span></div>
+      </li>
+      <li>
+        <span class="d-id">D6</span>
+        <div class="d-body">
+          <h3>S3 allowance</h3>
+          <p class="rec">Original S3: max(GCA × LGD of the year, prior allowance), checked per exposure. New S3: flow × LGD of the default year, booked once and floored after that. LGD comes from the same TTC and Z rule.</p>
+          <p class="why">There are no recovery schedules, so S3 uses the same LGD as S1 and S2. AT-03 and AT-04 cover S3.</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R8</span></div>
+      </li>
+      <li>
+        <span class="d-id">D7</span>
+        <div class="d-body">
+          <h3>Maturity and replacement</h3>
+          <p class="rec">A facility that matures before end-2029 is replaced like for like. The replacement has the same segment, the same current and origination grade (and so the same stage), the same country, and the starting residual maturity. It restarts its cash-flow schedule. GCA does not run off.</p>
+          <p class="why">P02, P03, P05 and P06 contain 1-year maturities, so this case occurs in the generated books (EXP-01, EAD-05).</p>
+        </div>
+        <div class="d-tags"><span class="chip sc">R5</span><span class="chip st">R7</span></div>
+      </li>
+      <li>
+        <span class="d-id">D8</span>
+        <div class="d-body">
+          <h3>Opening allowances</h3>
+          <p class="rec">Calculated inside the one-off generator with its own formula. It uses PD curves from the TTC matrix (Z = 0), TTC LGD, the TTC prepayment rate, and a bullet schedule at the facility's rate and maturity. S3 is GCA × TTC LGD. Delivered as the opening_provisions dataset. The run takes them as given and never recomputes them.</p>
+          <p class="why">§5.2 asks for allowances that are calculated consistently and then frozen. This keeps Part 1 independent of the engine. Any mismatch with the engine's own formula shows up as a large first-year charge in the R9 report.</p>
+        </div>
+        <div class="d-tags"><span class="chip so">O4</span></div>
+      </li>
+      <li>
+        <span class="d-id">D9</span>
+        <div class="d-body">
+          <h3>Where v1 stops</h3>
+          <p class="rec">Synthetic mode only. Regulatory mode is a guard that blocks the run. ECB benchmarks, sovereign routing and the MOD-03 coverage test are not built. POCI and central-bank exposures are not in v1 data. Full credit REA, template mappings and §11.2 country selection are out, and REA floors exist as kernels only.</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R1</span><span class="chip st">R10</span></div>
+      </li>
+      <li>
+        <span class="d-id">D10</span>
+        <div class="d-body">
+          <h3>Stack and file formats</h3>
+          <p class="rec">Python 3.12, uv, pytest, ruff, numpy and pandas (with scipy for Φ). Input tables, matrices and the cash-flow schedule in Parquet. Scenarios and parameter set in YAML so diffs stay readable. float64, unrounded until output.</p>
+          <p class="why">The tightest tolerance is 1e-10 on rates, and float64 meets it. Decimal is not needed.</p>
+        </div>
+        <div class="d-tags"><span class="chip">all</span></div>
+      </li>
+      <li>
+        <span class="d-id">D11</span>
+        <div class="d-body">
+          <h3>Does Z also drive PD?</h3>
+          <p class="rec">Yes, through the matrix (D13). One Z per segment, country and year shifts both the TTC matrix and the TTC LGD, so PD and LGD move together.</p>
+          <p class="why">A TTC matrix needs a PiT conversion. Reusing the LGD's Z keeps one economic driver for the whole engine.</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R4</span><span class="chip st">R6</span></div>
+      </li>
+      <li>
+        <span class="d-id">D12</span>
+        <div class="d-body">
+          <h3>Repayment profile and contractual balance</h3>
+          <p class="rec">Each facility has a profile: bullet, annuity or linear. The core run uses bullet for every facility, and annuity and linear run as a separate variant. B[k] is the contractual drawn balance at the default date, before that date's payment. Floating-rate loans keep their current rate in v1. R5 does not compute EAD; R6 builds it from B[k] (D14).</p>
+          <p class="why">Building cash flows from balance, rate and maturity needs a rule for principal. Bullet keeps the contractual balance flat, as in the acceptance cases.</p>
+        </div>
+        <div class="d-tags"><span class="chip sc">R5</span><span class="chip">facilities</span></div>
+      </li>
+      <li>
+        <span class="d-id">D13</span>
+        <div class="d-body">
+          <h3>TTC matrix: shape and Z shift</h3>
+          <p class="rec">One TTC matrix per reference segment (7) on a shared master scale of N performing grades plus D, built once in O2. Each row shifts with C_PiT = Φ((Φ⁻¹(C_TTC) − √ρ × Z) ÷ √(1 − ρ)), with ρ per segment in the parameter set. You choose N and ρ.</p>
+          <p class="why">This is the standard one-factor form: every shifted row is still a valid distribution, and default moves together with rating migration. Z = 0 gives the median year, a little below the TTC average. If Z = 0 should give back the TTC matrix exactly, as the LGD rule does, drop the √(1 − ρ) divisor.</p>
+        </div>
+        <div class="d-tags"><span class="chip so">O2</span><span class="chip st">R6</span></div>
+      </li>
+      <li>
+        <span class="d-id">D14</span>
+        <div class="d-body">
+          <h3>Prepayment</h3>
+          <p class="rec">An annual prepayment rate per segment, CPR[t] = Φ(Φ⁻¹(CPR_TTC) + v × Z[t]), with CPR_TTC and v ≥ 0 in the parameter set; you supply them. It reduces only the drawn balance: EAD_drawn[k] = B[k] × SP[k]. Prepayment during a year lowers EAD from the next year's bucket on, so SP[1] = 1, which is the conservative choice. It is applied once, in EAD, and never also in the default survival. Acceptance cases use zero prepayment.</p>
+          <p class="why">Applying prepayment in both EAD and survival would count it twice, the same trap ECL-01 names for survival.</p>
+        </div>
+        <div class="d-tags"><span class="chip st">R6</span><span class="chip">parameter_set</span></div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ============ OUTSIDE ============ -->
+  <section id="outside">
+    <h2><span class="kicker k-neutral">Not in the code flow</span>Handled elsewhere or later</h2>
+    <div class="outside">
+      <div>
+        <h3>Met by people and process</h3>
+        <ul>
+          <li>GOV-01–04 source register and change control</li>
+          <li>OPS-02/03/05/06/08/09 approvals, retention, access, overrides, issue log</li>
+          <li>MOD-01 estimation, PD-08 backtesting, DAT-05/06 history</li>
+          <li>VAL-04 independent challenge and the §13.1 sign-offs</li>
+        </ul>
+      </div>
+      <div>
+        <h3>After v1</h3>
+        <ul>
+          <li>CAP-01/02, CAP-05–09: credit REA, regulatory EL, capital bridge</li>
+          <li>Regulatory mode: MOD-03/04 benchmarks and sovereign routing</li>
+          <li>§11.2 country and sector selection, §11.4 template mappings</li>
+          <li>Concentration, sensitivity, QA and explanatory-note reports</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Source: the requirements in docs/spec/, 17 October 2026. Apart from the illustrative balance chart and the example 8-grade layout, every number on this page is a synthetic target or acceptance-case oracle quoted from the spec. Nothing here is an engine output.</p>
+</div>

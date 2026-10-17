@@ -1,0 +1,5 @@
+* text=auto
+
+# archive/ is off-limits to Claude Code. -diff makes git diff, log -p and show
+# print "Binary files differ" instead of the contents.
+archive/** -diff
