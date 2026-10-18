@@ -73,7 +73,7 @@ Check the protection with [runbook.md](runbook.md) after any change to `.claude/
   4. Review.
 - **`change-reviewer`** (`.claude/agents/change-reviewer.md`): a read-only reviewer that must approve every change before it is merged. It returns APPROVE or CHANGES REQUESTED.
 - **Test gate** `.claude/hooks/test_gate.py`, a Stop hook: when code under `src/`, `foundation/` or `tests/` has changed, it runs pytest, lint-imports and ruff, and blocks the stop until they pass.
-- **Git pre-commit hook** `.githooks/pre-commit`: refuses protected paths and run folders, then runs the same three checks. Enable it once per clone with `git config core.hooksPath .githooks`.
+- **Git pre-commit hook** `tests/githooks/pre-commit`: refuses protected paths and run folders, then runs the same three checks. Enable it once per clone with `git config core.hooksPath tests/githooks`.
 
 ## 6. Open items
 

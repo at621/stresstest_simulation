@@ -1,5 +1,9 @@
 * text=auto
 
+# Input sets are checked byte for byte against their manifest hashes (R2), so git never
+# converts their line endings, on any platform.
+inputs/** -text
+
 # archive/ is off-limits to Claude Code. -diff makes git diff, log -p and show
 # print "Binary files differ" instead of the contents.
 archive/** -diff

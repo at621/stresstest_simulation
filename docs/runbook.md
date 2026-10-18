@@ -46,4 +46,4 @@ uv run stress run --inputs inputs/514ed0e86e3dc760 --scenarios baseline,adverse 
 ### Gates
 
 - **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about three minutes), and blocks the stop until they pass.
-- **Pre-commit:** enable once per clone with `git config core.hooksPath .githooks`. It runs the same checks and refuses protected paths and run folders.
+- **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks and refuses protected paths and run folders.

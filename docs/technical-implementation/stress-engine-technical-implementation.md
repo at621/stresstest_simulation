@@ -1006,7 +1006,7 @@ The repository was built with Claude Code under explicit rules.
 | Deny rules | `.claude/settings.json` | No reads or edits of the two protected folders; no hand edits of `docs/spec/`, `inputs/<hash>/` or `runs/<run_id>/` |
 | Guard hook | `.claude/hooks/guard_paths.py` (PreToolUse, every tool call, subagents included) | Blocks any call whose path, glob or command names a protected folder as a path segment (any case or slash direction), and blocks `git grep`. Exit code 2 blocks the call and fails closed on bad input. It runs with `py -3 -I`, so it works under any virtualenv. |
 | Test gate | `.claude/hooks/test_gate.py` (Stop hook, 1,200 s timeout) | When files under `src/`, `foundation/`, `tests/` or `pyproject.toml` changed, runs pytest, lint-imports and ruff, and blocks the stop until they pass |
-| Pre-commit | `.githooks/pre-commit` (enable with `git config core.hooksPath .githooks`) | Refuses protected paths and run folders, then runs ruff, lint-imports and pytest |
+| Pre-commit | `tests/githooks/pre-commit` (enable with `git config core.hooksPath tests/githooks`) | Refuses protected paths and run folders, then runs ruff, lint-imports and pytest |
 | Change skill | `.claude/skills/improve/SKILL.md` (`/improve <change>`) | One improvement on its own branch: read, baseline run, tests first, build, gate, new run and comparison, review, records |
 | Reviewer | `.claude/agents/change-reviewer.md` | Read-only reviewer that returns APPROVE or CHANGES REQUESTED against purpose, tests, design fidelity, repository rules, controls, effect on results, inputs and records |
 | Search and tool excludes | `.gitignore`, `.gitattributes`, `.ignore`, ruff and pytest settings | Keep the protected folders out of git, diffs, ripgrep and tool scans |
@@ -1039,7 +1039,7 @@ During the v1 build, each build step was made with a `/build-step` command and a
 
 ```
 uv sync
-git config core.hooksPath .githooks
+git config core.hooksPath tests/githooks
 ```
 
 **A full run.**

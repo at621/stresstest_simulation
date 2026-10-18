@@ -1,6 +1,6 @@
 #!/bin/sh
 # Pre-commit gate (docs/architecture.md section 5). Enable once per clone with:
-#   git config core.hooksPath .githooks
+#   git config core.hooksPath tests/githooks
 #
 # 1. Protected and local-only paths are never committed.
 # 2. Lint, import rules and the full test suite pass.

@@ -93,7 +93,7 @@ The folders marked locked are written only by the one-off code and the run. See 
 
 ```
 uv sync
-git config core.hooksPath .githooks   # once per clone: the pre-commit gate
+git config core.hooksPath tests/githooks   # once per clone: the pre-commit gate
 uv run pytest                         # all tests; -m at for the acceptance cases
 uv run lint-imports --cache-dir tests/.import_linter_cache
 uv run ruff check
