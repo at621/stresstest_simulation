@@ -61,6 +61,7 @@ class Reason(StrEnum):
     LINKED_RECORD_REJECTED = "LINKED_RECORD_REJECTED"
     MISSING_FLAG = "MISSING_FLAG"
     INVALID_CREDIT_STATUS_DATE = "INVALID_CREDIT_STATUS_DATE"
+    INVALID_DPD = "INVALID_DPD"
 
 
 # Defects that block the whole run, not only the record: EAD-04 ("missing CCF for positive

@@ -167,12 +167,14 @@ class Generator:
     def _ensure_trigger(self, row: dict) -> None:
         """A flag-only S2 facility that drew no trigger gets one, from the switched-on triggers."""
         settings = self.params["sicr_triggers"]
-        if row["dpd"] >= settings["dpd_days"] or row["watchlist"] or row["forborne"]:
+        enabled = set(settings["enabled"])
+        if (("dpd" in enabled and row["dpd"] >= settings["dpd_days"]) or ("watchlist" in enabled and row["watchlist"])
+                or ("forborne" in enabled and row["forborne"])):
             return
         mix = {t: w for t, w in cfg.FLAG_ONLY_TRIGGER_MIX.items() if t in settings["enabled"]}
         pick = str(self.flag_rng.choice(list(mix), p=np.array(list(mix.values())) / sum(mix.values())))
         if pick == "dpd":
-            row["dpd"] = int(self.flag_rng.integers(settings["dpd_days"], 90))
+            row["dpd"] = int(self.flag_rng.integers(settings["dpd_days"], cfg.DEFAULT_DPD))
         else:
             row[pick] = True
 
@@ -396,6 +398,7 @@ class Generator:
         rng = self.rng
         rows = []
         snap = self.snapshot
+        sicr_days = int(self.params["sicr_triggers"]["dpd_days"])  # the 30+ DPD backstop
         for i, f in enumerate(facilities, start=1):
             stage = f["ifrs_stage"]
             portfolio = f["portfolio"]
@@ -417,11 +420,12 @@ class Generator:
                     origination = default_date - timedelta(days=365)
                 stage_entry = default_date
             if stage == 1:
-                dpd = 0 if rng.random() < 0.95 else int(rng.integers(1, 30))
+                dpd = 0 if rng.random() < 0.95 else int(rng.integers(1, sicr_days))
             elif stage == 2:
-                dpd = int(rng.integers(30, 90)) if rng.random() < 0.3 else int(rng.integers(0, 30))
+                dpd = (int(rng.integers(sicr_days, cfg.DEFAULT_DPD)) if rng.random() < 0.3
+                       else int(rng.integers(0, sicr_days)))
             else:
-                dpd = int(rng.integers(90, 361))
+                dpd = int(rng.integers(cfg.DEFAULT_DPD, 361))
             collateral = design["collateral"]
             ltv = dscr = None
             if collateral == "cre":

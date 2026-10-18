@@ -12,9 +12,11 @@ grade, and the flag holds it in S2 until it defaults.
 """
 
 import numpy as np
+import pandas as pd
 
 EPS = 1e-9
 TRIGGERS = ("dpd", "watchlist", "forborne")
+HOLD_UNTIL_DEFAULT = "until_default"  # option (a): the flags are not projected (A30)
 
 
 class TtcLifetime:
@@ -62,8 +64,12 @@ def sicr_rank(lifetime: np.ndarray, origination_rank: int, k: float) -> tuple[in
 
 def qualitative_trigger(dpd, watchlist, forborne, settings: dict) -> np.ndarray:
     """True where any switched-on trigger of the parameter set's ``sicr_triggers`` holds (MIG-05):
-    ``dpd >= dpd_days``, on the watchlist, or forborne. R3 rejects a missing flag first, so a
-    missing value never reaches this rule as "no trigger"."""
+    ``dpd >= dpd_days``, on the watchlist, or forborne. A missing value raises: it is never read as
+    "no trigger" (R3 rejects such a facility before this rule runs)."""
+    if pd.isna(pd.Series(np.asarray(dpd, dtype=object))).any() or \
+            pd.isna(pd.Series(np.asarray(watchlist, dtype=object))).any() or \
+            pd.isna(pd.Series(np.asarray(forborne, dtype=object))).any():
+        raise ValueError("a qualitative SICR flag is missing; it is never read as no trigger")
     enabled = set(settings["enabled"])
     days = np.asarray(dpd, dtype=float)
     out = np.zeros(days.shape, dtype=bool)

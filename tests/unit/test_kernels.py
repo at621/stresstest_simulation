@@ -221,7 +221,8 @@ def test_stage_of_rank_with_a_qualitative_trigger():
     flagged = np.array([True, True, False, True])
     # A flag makes every performing grade S2; D stays S3; without a flag the grade decides.
     assert stage_of_rank(ranks, line, 11, flagged).tolist() == [2, 2, 2, 3]
-    assert stage_of_rank(ranks, line, 11, np.zeros(4, dtype=bool)).tolist() ==         stage_of_rank(ranks, line, 11).tolist()
+    unflagged = stage_of_rank(ranks, line, 11, np.zeros(4, dtype=bool))
+    assert unflagged.tolist() == stage_of_rank(ranks, line, 11).tolist()
 
 
 @pytest.mark.req("ECL-07")

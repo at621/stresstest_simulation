@@ -463,7 +463,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
         <div class="fbody">
           <div class="fhead"><h3>Generate the synthetic book <code>foundation/synth/</code></h3><span class="role builds">builds consistent inputs</span></div>
           <p>Gives each facility an origination grade and a current grade, chosen so that the SICR rule returns its target opening stage (SYN-PAR-08, design D3). It also writes <code>dpd</code>, <code>watchlist</code> and <code>forborne</code>, with their observation date. No S1 facility carries a trigger. Since 18 October 2026, 25% of each segment's S2 facilities are S2 by a trigger alone, with a grade above the SICR line (A30): 331 in input set d62d0386f2c5256e, of which 250 have no S2 grade at all.</p>
-          <p class="where">foundation/synth/generate.py:384–414</p>
+          <p class="where">foundation/synth/generate.py · <code>_facility_table</code>, <code>_flag_only</code>, <code>_ensure_trigger</code></p>
         </div>
       </li>
       <li>
@@ -471,7 +471,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
         <div class="fbody">
           <div class="fhead"><h3>Load inputs <code>ingest/</code></h3><span class="role">loads stage fields</span></div>
           <p>Reads <code>ifrs_stage</code>, <code>current_grade</code>, <code>origination_grade</code>, the obligor's <code>regulatory_default</code>, and the three qualitative flags with <code>credit_status_date</code>. Only schema and type checks happen here.</p>
-          <p class="where">src/stress/contracts/inputs.py:88–92</p>
+          <p class="where">src/stress/contracts/inputs.py · <code>FACILITIES</code></p>
         </div>
       </li>
       <li class="key">
@@ -489,7 +489,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
             <li>Route S3 to the original S3 cohort and S1 and S2 to the performing route. The SICR line is stored on the portfolio as <code>sicr_rank</code>, the trigger as <code>qualitative_trigger</code>.</li>
           </ol>
           <p class="outcome">Current run: 10,000 accepted, 0 rejected. 9,669 performing, 331 original S3. Every accepted grade explains its stage.</p>
-          <p class="where">src/stress/validate/__init__.py:217, 226–227, 249–259, 321–356 · src/stress/validate/sicr.py</p>
+          <p class="where">src/stress/validate/__init__.py · <code>validate_and_route</code>, <code>_check_triggers</code> · src/stress/validate/sicr.py · <code>sicr_rank</code>, <code>qualitative_trigger</code></p>
         </div>
       </li>
       <li>
@@ -693,9 +693,9 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
         <span class="n">1</span>
         <div>
           <h3>Qualitative triggers are in use since 18 October 2026</h3>
-          <p>MIG-07 and design D3 leave out 30+ DPD, watchlist and forbearance for the synthetic books. MIG-05 and PD-06 expect a bank's SICR to use them and to keep them separate. The data does carry them, and O3 built them to agree with the opening stage: 432 S2 facilities are 30–89 days past due, 509 are on the watchlist and 143 are forborne, and no S1 facility has any of the three. In the v1 data leaving them out changed nothing at end-2026.</p>
-          <p>Since the owner's decision of 18 October 2026 all three are in use (MIG-05, A30). A flagged facility is S2 in every performing grade until it defaults, because the flags are not projected and are held at their opening value (option (a)). On input set d62d0386f2c5256e, 960 performing facilities carry a trigger. Against the v1 run, S2 GCA is €32m / €59m / €82m higher in baseline 2027 / 2028 / 2029, and provisions €0.5–0.6m higher. MIG-07's last sentence and design D3 said the triggers were not used; the requirement text is the owner's to update (C11).</p>
-          <p>        </div>
+          <p>Until 18 October 2026, MIG-07 and design D3 left out 30+ DPD, watchlist and forbearance for the synthetic books. MIG-05 and PD-06 expect a bank's SICR to use them and to keep them separate. The data does carry them, and O3 built them to agree with the opening stage: 432 S2 facilities are 30–89 days past due, 509 are on the watchlist and 143 are forborne, and no S1 facility has any of the three. In the v1 data leaving them out changed nothing at end-2026.</p>
+          <p>Since the owner's decision of 18 October 2026 all three are in use (MIG-05, A30). A flagged facility is S2 in every performing grade until it defaults, because the flags are not projected and are held at their opening value (option (a)). On input set d62d0386f2c5256e, 960 performing facilities carry a trigger. Against the v1 run, S2 GCA is €32m / €59m / €82m higher in baseline 2027 / 2028 / 2029 (€9m / €15m / €25m in the adverse), and provisions are €0.5–0.6m higher in the baseline and €0.3m in the adverse. MIG-07's last sentence and design D3 said the triggers were not used; the requirement text is the owner's to update (C11).</p>
+        </div>
       </li>
       <li>
         <span class="n">2</span>
@@ -725,14 +725,14 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
   <section id="sources">
     <h2><span class="kicker">Sources</span>Where each statement comes from</h2>
     <ul class="sources">
-      <li><code>src/stress/validate/__init__.py</code><span>R3 stage checks (217, 226–227, 249–259), SICR line and stage check (321–338), routing (352–356)</span></li>
-      <li><code>src/stress/validate/sicr.py</code><span>Lifetime TTC PD per grade and <code>sicr_rank</code></span></li>
-      <li><code>src/stress/projection/kernels.py</code><span><code>stage_of_rank</code> (46–50)</span></li>
-      <li><code>src/stress/projection/__init__.py</code><span>R7 stage grid (91–94), stage flows (114–123), new S3 cohorts (132–143), S3 bypass (152–155)</span></li>
+      <li><code>src/stress/validate/__init__.py</code><span>R3 flag, stage and trigger checks, SICR line and routing (<code>validate_and_route</code>, <code>_check_triggers</code>)</span></li>
+      <li><code>src/stress/validate/sicr.py</code><span>Lifetime TTC PD per grade, <code>sicr_rank</code> and <code>qualitative_trigger</code></span></li>
+      <li><code>src/stress/projection/kernels.py</code><span><code>stage_of_rank</code>, with the trigger flag</span></li>
+      <li><code>src/stress/projection/__init__.py</code><span>R7 stage grid with the held triggers, stage flows, new S3 cohorts, S3 bypass</span></li>
       <li><code>src/stress/ecl/__init__.py</code><span>R8 12-month vs lifetime ECL by stage (225–260)</span></li>
       <li><code>src/stress/accounting/__init__.py</code><span>R9 no-release and no-cure check on S3 slices (57–75)</span></li>
       <li><code>foundation/synth/generate.py</code><span>O3 opening DPD, watchlist and forbearance flags; flag-only S2 facilities (<code>_flag_only</code>, <code>_ensure_trigger</code>)</span></li>
-      <li><code>inputs/514ed0e86e3dc760/parameter_set.yaml</code><span>Master scale, <code>sicr_k</code> per segment</span></li>
+      <li><code>inputs/d62d0386f2c5256e/parameter_set.yaml</code><span>Master scale, <code>sicr_k</code> per segment, <code>sicr_triggers</code> (the same values as in <code>514ed0e86e3dc760</code>, plus the triggers)</span></li>
       <li><code>docs/spec/…Requirements.md</code><span>MIG-03–MIG-08, PD-05, PD-06, DAT-04, EXP-02, EXP-05, REG-05, SYN-PAR-08</span></li>
       <li><code>docs/stress-engine-code-flow.html</code><span>Design decisions D2 (SICR rule) and D3 (opening grades)</span></li>
       <li><code>docs/assumptions.md</code><span>A6, A7, A10, C6</span></li>

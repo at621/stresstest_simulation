@@ -35,6 +35,16 @@ def test_a_switched_off_trigger_is_ignored(full_tables):
 
 
 @pytest.mark.req("MIG-05")
+def test_a_missing_flag_is_never_read_as_no_trigger(full_tables):
+    settings = _settings(full_tables)
+    with pytest.raises(ValueError):
+        qualitative_trigger(np.array([0.0, np.nan]), np.array([False, False]), np.array([False, False]), settings)
+    with pytest.raises(ValueError):
+        qualitative_trigger(np.array([0, 0]), np.array([False, None], dtype=object), np.array([False, False]),
+                            settings)
+
+
+@pytest.mark.req("MIG-05")
 def test_a_flag_holds_the_facility_in_s2_until_default(core_run, full_tables):
     ctx, _ = core_run
     fac = full_tables["facilities"]

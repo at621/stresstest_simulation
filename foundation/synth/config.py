@@ -14,6 +14,7 @@ SICR_MARGIN = 1e-6  # generated grades stay clear of the SICR line by this relat
 FLAG_ONLY_S2_SHARE = 0.25
 FLAG_ONLY_TRIGGER_MIX = {"dpd": 0.4, "watchlist": 0.4, "forborne": 0.2}
 FLAG_STREAM = 1
+DEFAULT_DPD = 90  # IFRS 9 default backstop: S3 facilities are 90+ days past due, S1 and S2 below it
 
 # Per portfolio: facilities per obligor (size, probability), product mix of performing
 # facilities, contractual repayment profiles per product, floating-rate share, rate spread

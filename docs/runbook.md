@@ -31,6 +31,8 @@ Ask Claude Code to add a line to `docs/spec/README.md`, a file under `inputs/<ha
 uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
 ```
 
+Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input contract carries `credit_status_date`, and the engine blocks at R2 on the older sets. `stress rerun` of a run made on them blocks for the same reason.
+
 1. The command prints the run ID, the status and two headline lines. Exit code 0 means the run is sealed SYNTHETIC. Exit code 2 means it blocked: the folder is still sealed, with status BLOCKED, and the step, reason code and message are in `manifest.json` under `blocked`.
 2. Open `runs/<run_id>/results/reports/stress_report.xlsx` for the results by portfolio, baseline against adverse. Read `runs/<run_id>/run.log` for what each step did and how long it took. `summary.md` (or `uv run stress report --run runs/<run_id>`) gives the headline in text.
 3. Check `rejections.parquet`: it is empty for the committed input set. Any row is a rejected record with its reason code.

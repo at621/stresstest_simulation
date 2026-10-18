@@ -584,9 +584,9 @@ html { scroll-behavior: smooth; }
           <p>Check the schema and referential integrity across tables. Enforce EUR only, and AC only for on-balance records; off-balance records take "not applicable". Check every TTC matrix: rows sum to 1, no negative cell, and D is absorbing. Check that each facility's grade, or a qualitative trigger (30+ DPD, watchlist, forbearance), gives back its reported stage. Send each record down one route (<a href="#ingestion">figure</a>). A rejected record goes to the log with a reason code and never reaches a total. Reconcile the starting point to the §5 targets.</p>
         </div>
         <dl class="step-meta">
-          <dt>Requirements</dt><dd><span class="chip">DAT-01</span><span class="chip">DAT-04</span><span class="chip">SCP-02</span><span class="chip">SCP-06</span><span class="chip">MIG-01</span><span class="chip">MIG-07</span><span class="chip">§12.2</span></dd>
+          <dt>Requirements</dt><dd><span class="chip">DAT-01</span><span class="chip">DAT-04</span><span class="chip">SCP-02</span><span class="chip">SCP-06</span><span class="chip">MIG-01</span><span class="chip">MIG-05</span><span class="chip">MIG-07</span><span class="chip">§12.2</span></dd>
           <dt>Proven by</dt><dd><span class="chip at">AT-01</span><span class="chip at">AT-21</span><span class="chip at">AT-22</span></dd>
-          <dt>Blocks on</dt><dd class="blocks">Duplicate facility · non-EUR or missing currency · non-AC on-balance · missing CCF on positive undrawn · matrix row ≠ 1 · stage the grade cannot explain · missing grade, TTC LGD, rate or maturity</dd>
+          <dt>Blocks on</dt><dd class="blocks">Duplicate facility · non-EUR or missing currency · non-AC on-balance · missing CCF on positive undrawn · matrix row ≠ 1 · stage neither the grade nor a qualitative trigger explains · missing or undated credit-status flag · missing grade, TTC LGD, rate or maturity</dd>
         </dl>
       </article>
       <article class="step run" id="r4">
@@ -1076,7 +1076,7 @@ html { scroll-behavior: smooth; }
       </div>
       <div class="fcard">
         <span class="tag">R7 · stage of a slice</span>
-        <h3>Stage comes from the grade</h3>
+        <h3>Stage comes from the grade or a trigger</h3>
         <div class="eq">S3  if grade = D<br>S2  if PDlife(g) ≥ k × PDlife(g0), or a trigger holds<br>S1  otherwise</div>
         <p>Both lifetime PDs come from the TTC matrix over the same remaining horizon (PD-06), so the line stays fixed per facility. k is a test convention per segment (MIG-05). A slice returns to S1 when its grade improves back over the line, unless the facility carries a qualitative trigger (30+ DPD, watchlist, forbearance): that holds it in S2 until it defaults (D2). D never cures.</p>
       </div>
@@ -1240,7 +1240,7 @@ html { scroll-behavior: smooth; }
           <text class="t-label-run" x="385" y="505" text-anchor="middle">closing slices are next year's opening</text>
         </svg>
       </div>
-      <figcaption>One facility (D1). Its grade slices are multiplied by the year's PiT matrix. Every grade's stage comes from the SICR line, so the matrix blocks are the stage transitions, and the D column feeds the new S3 cohorts by origin stage. Default volumes come from one matrix only (MIG-04). S3 slices go around the matrix. The original and new S3 cohorts stay separate, so no-release is checked for each exposure (AT-18) and not on the total. AT-02 and AT-29 test the stage-level arithmetic of this step.</figcaption>
+      <figcaption>One facility (D1). Its grade slices are multiplied by the year's PiT matrix. Every grade's stage comes from the SICR line, or, for a facility with a qualitative trigger, is S2 throughout, so the matrix blocks are the stage transitions, and the D column feeds the new S3 cohorts by origin stage. Default volumes come from one matrix only (MIG-04). S3 slices go around the matrix. The original and new S3 cohorts stay separate, so no-release is checked for each exposure (AT-18) and not on the total. AT-02 and AT-29 test the stage-level arithmetic of this step.</figcaption>
     </figure>
   </section>
 
@@ -1403,7 +1403,7 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D2</span>
         <div class="d-body">
           <h3>SICR rule</h3>
-          <p class="rec decided">A performing slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade. Both come from the TTC matrix over the same remaining horizon. k is set per segment and labelled a test convention; you supply it. A slice returns to S1 when its grade improves back over the line. A facility that is 30 or more days past due, on the watchlist or forborne is S2 in every performing grade, and the flag holds it there until it defaults (A30).</p>
+          <p class="rec">A performing slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade. Both come from the TTC matrix over the same remaining horizon. k is set per segment and labelled a test convention; you supply it. A slice returns to S1 when its grade improves back over the line. <strong>Decided by the owner on 18 October 2026:</strong> a facility that is 30 or more days past due, on the watchlist or forborne is S2 in every performing grade, and the flag holds it there until it defaults (A30).</p>
           <p class="why">PD-06 asks for a lifetime comparison with origination, and MIG-05 for a labelled synthetic threshold and qualitative triggers. Basing the line on TTC keeps it fixed per facility, so only rating moves and the triggers change stage. A PiT-based line would also move S2 volumes with the economy. <strong>The triggers were added by the owner's decision of 18 October 2026.</strong> The flags are not projected, so they are held at their opening value. The requirement text of MIG-07 still says they are not used (C11).</p>
         </div>
         <div class="d-tags"><span class="chip decided">triggers decided 18 Oct 2026</span><span class="chip st">R3</span><span class="chip st">R7</span><span class="chip">parameter_set</span></div>
@@ -1412,10 +1412,10 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D3</span>
         <div class="d-body">
           <h3>Opening grades</h3>
-          <p class="rec decided">The generator gives each facility an origination grade and a current grade. They are chosen so that the stage rule gives back the facility's §5.2 opening stage, and so that each segment's S1 and S2 average PD matches §8.7. A quarter of each segment's S2 facilities is S2 by a qualitative trigger alone: they keep their calibrated grade but take an origination grade that leaves it above the SICR line, and carry 30+ DPD, a watchlist or a forbearance flag (A30). No S1 facility carries a trigger.</p>
-          <p class="why">Then grade, trigger and stage never conflict (DAT-04), and R3 can block any facility whose stage neither the rule nor a trigger explains. The flag-only draws use their own random stream, so the rest of the book is unchanged. <strong>Changed by the owner's decision of 18 October 2026</strong>; until then the triggers were not used.</p>
+          <p class="rec">The generator gives each facility an origination grade and a current grade. They are chosen so that the stage rule gives back the facility's §5.2 opening stage, and so that each segment's S1 and S2 average PD matches §8.7. Since the owner decided on 18 October 2026 to use the qualitative triggers, a quarter of each segment's S2 facilities is S2 by a trigger alone (proposed share, A30): they keep their calibrated grade but take an origination grade that leaves it above the SICR line, and carry 30+ DPD, a watchlist or a forbearance flag. No S1 facility carries a trigger.</p>
+          <p class="why">Then grade, trigger and stage never conflict (DAT-04), and R3 can block any facility whose stage neither the rule nor a trigger explains. The flag-only draws use their own random stream, so the rest of the book is unchanged. The owner decided on 18 October 2026 to use the triggers; until then they were not used. The 25% share and the trigger mix are proposals (A30).</p>
         </div>
-        <div class="d-tags"><span class="chip decided">decided 18 Oct 2026</span><span class="chip so">O3</span><span class="chip st">R3</span></div>
+        <div class="d-tags"><span class="chip decided">triggers decided 18 Oct 2026</span><span class="chip so">O3</span><span class="chip st">R3</span></div>
       </li>
       <li>
         <span class="d-id">D4</span>

@@ -1,8 +1,8 @@
 """R3 validate and route: schema and referential integrity, EUR-only and AC-only scope,
-TTC matrix checks, grade explains stage, section 12.2 input controls. Sends each record
-down exactly one route; a rejected record goes to the log with a reason code.
+TTC matrix checks, grade or qualitative trigger explains stage, section 12.2 input controls.
+Sends each record down exactly one route; a rejected record goes to the log with a reason code.
 
-DAT-01, DAT-04, SCP-02, SCP-06, MIG-01, MIG-07, section 12.2.
+DAT-01, DAT-04, SCP-02, SCP-06, MIG-01, MIG-05, MIG-07, section 12.2.
 """
 
 import logging
@@ -33,7 +33,13 @@ from stress.contracts.tables import (
     ROUTE_S3_ORIGINAL,
     RoutedPortfolio,
 )
-from stress.validate.sicr import TRIGGERS, TtcLifetime, qualitative_trigger, sicr_rank
+from stress.validate.sicr import (
+    HOLD_UNTIL_DEFAULT,
+    TRIGGERS,
+    TtcLifetime,
+    qualitative_trigger,
+    sicr_rank,
+)
 
 STEP = "R3"
 LOG = logging.getLogger("stress.R3")
@@ -151,9 +157,17 @@ def _check_triggers(settings) -> None:
     threshold, and a source definition for each switched-on trigger (section 4.2)."""
     if not isinstance(settings, dict):
         raise BlockingError(STEP, Block.MISSING_PARAMETER, "sicr_triggers is not a mapping")
-    missing = [k for k in ("enabled", "dpd_days", "definitions", "source") if settings.get(k) is None]
+    missing = [k for k in ("enabled", "dpd_days", "hold", "definitions", "source") if settings.get(k) is None]
     if missing:
         raise BlockingError(STEP, Block.MISSING_PARAMETER, f"sicr_triggers lacks {missing}")
+    if not isinstance(settings["definitions"], dict):
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, "sicr_triggers: definitions is not a mapping")
+    if not str(settings["source"]).strip():
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, "sicr_triggers: source is empty")
+    if settings["hold"] != HOLD_UNTIL_DEFAULT:
+        raise BlockingError(STEP, Block.MISSING_PARAMETER,
+                            f"sicr_triggers: hold {settings['hold']!r} is not supported; v1 holds a flag until "
+                            f"default ({HOLD_UNTIL_DEFAULT!r}, A30)")
     unknown = sorted(set(settings["enabled"]) - set(TRIGGERS))
     if unknown:
         raise BlockingError(STEP, Block.MISSING_PARAMETER, f"sicr_triggers: unknown triggers {unknown}")
@@ -232,6 +246,8 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     # A missing flag is never read as True or False (missing is never a default).
     for col in ("poci", "accrued_in_gca", "dpd", "watchlist", "forborne"):
         add(~_usable(fst, col), Reason.MISSING_FLAG, f"{col} missing")
+    add(_usable(fst, "dpd") & (pd.to_numeric(f["dpd"], errors="coerce") < 0), Reason.INVALID_DPD,
+        "days past due is negative")
     observed = pd.to_datetime(f["credit_status_date"], errors="coerce")
     add(~_usable(fst, "credit_status_date") | observed.isna(), Reason.INVALID_CREDIT_STATUS_DATE,
         "credit status observation date missing (section 4.2)")
@@ -383,8 +399,7 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     ok["sicr_rank"] = ok["facility_id"].map(dict(zip(cand["facility_id"], cand["sicr_rank"])))
     ok.loc[ok["route"] == ROUTE_S3_ORIGINAL, "sicr_rank"] = default_rank
     ok["sicr_rank"] = ok["sicr_rank"].astype(int)
-    trigger = dict(zip(cand["facility_id"], cand["qualitative_trigger"]))
-    ok["qualitative_trigger"] = ok["facility_id"].map(trigger).fillna(False).astype(bool)
+    ok["qualitative_trigger"] = qualitative_trigger(ok["dpd"], ok["watchlist"], ok["forborne"], ps["sicr_triggers"])
     ok["current_rank"] = ok["current_grade"].map(rank_d).astype(int)
     ok["origination_rank"] = ok["origination_grade"].map(rank).astype(int)
     good_com = com.loc[~com["_row"].isin(log.ids("commitment"))]

@@ -110,6 +110,8 @@ uv run stress rerun --run runs/<run_id>       # rerun from the manifest; output 
 uv run stress compare --base runs/<a> --new runs/<b>
 ```
 
+Since 18 October 2026 the input contract carries `credit_status_date`, so the engine blocks at R2 on the older input sets (`514ed0e86e3dc760`, `32415eb9d5bbcd74`), and `stress rerun` of a run made on them blocks too.
+
 To run it from Jupyter and see each step's intermediate results, open [notebooks/01_full_run_walkthrough.ipynb](notebooks/01_full_run_walkthrough.ipynb) with the `.venv` kernel, or start `uv run jupyter lab` (see [notebooks/README.md](notebooks/README.md)).
 
 A run takes about 25 seconds and writes `runs/<run_id>/` (see [runs/README.md](runs/README.md)). Two files show what happened:
