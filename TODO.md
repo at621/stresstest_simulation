@@ -124,3 +124,102 @@ All the inputs exist already. The task joins tables and recomputes ECL; it adds 
 - [ ] Work out the points under "Things to find out" and bring them to the owner. No engine change is needed for this.
 - [ ] Settle the decisions above and record the answers in the design (D5) and, if the method changes, in the requirements.
 - [ ] If the method changes: create a branch off `main`, run it through `/improve`, and show the effect with `stress compare` output.
+
+## Baseline 2027 releases provisions: O4 and the engine measure PD differently
+
+**Problem.** Baseline 2027 shows a charge of −€5.0m: provisions fall from €278.6m to €273.6m, while 2028 and 2029 charge €32.0m and €33.6m. The release is not a credit effect. The frozen opening allowances (O4) and the engine measure PD in two different ways, and the gap between them lands in the first projected year.
+
+### What the numbers show (run `20261017T2304Z-core-b559d9dd`, baseline, EUR m)
+
+| Step | Amount |
+|---|---:|
+| Frozen opening allowances (O4) | 278.6 |
+| Engine's own end-2026 valuation (`starting_point_reconciliation.csv`) | 238.2 |
+| One-off gap between the two methods | −40.4 |
+| 2027 charge on the engine's own basis (238.2 → 273.6) | +35.4 |
+| Reported 2027 charge | −5.0 |
+
+- The whole gap is in S1 and S2: S1 is 34.3 frozen against 22.7 on the engine's basis, S2 119.8 against 91.0. S3 is 124.5 in both.
+- S2 provisions fall from 119.8 to 80.6 in 2027, while S2 GCA grows from 1,368.6 to 1,466.2.
+- Adverse 2027 (343.5) starts from the same opening, so its first-year charge is understated too. The adverse-minus-baseline difference is largely unaffected.
+
+### Cause
+
+- O4 values the opening book with the TTC matrix itself (SYN-PAR-09, A8, C2), so Z = 0 there means an average year.
+- The engine shifts the matrix with `Φ((Φ⁻¹(C) − √ρ·Z) / √(1−ρ))` (`src/stress/params/matrix.py:29`). Because of the √(1−ρ) divisor, Z = 0 is the median year, below the TTC average (design D13, A1).
+- The design calls this "a little below TTC", but the gap is large. A grade with a 0.80% TTC PD and ρ = 0.15 gets ≈0.45% at Z = 0, and ≈0.42% at the baseline 2027 Z of +0.06. Low-PD grades roughly halve: P06 S1 is 0.76 frozen against 0.22 on the engine's basis.
+- The code does what the design says, and `docs/assumptions.md` already lists the result under "Results that need the owner's eye" (see also A16). What needs deciding is the design choice.
+
+### Options
+
+1. **Drop the √(1−ρ) divisor**, the alternative D13 names. Z = 0 then gives back the TTC matrix exactly, as the LGD rule does. O4 and the engine agree, and C2 goes away. PDs rise in both scenarios (the 0.80% grade above: adverse 2027 ≈1.9% → ≈2.8%), so the adverse gets noticeably harsher and the Z-score moments (A19) need another look.
+2. **Keep the engine and rebuild O4 with the engine's PiT matrix at Z = 0**, which gives a new input set. The opening falls to about €238m and baseline 2027 becomes about +€35m, with closing provisions unchanged. But the opening PDs then sit well below the §8.7 targets.
+3. **Report only.** Split the 2027 charge into the one-off gap and the year's charge in the stock-to-flow report. No result changes, and nothing is fixed.
+
+Recommendation: option 1.
+
+### Things to find out
+
+- Size of option 1 before deciding: its effect on the adverse cumulative charge and the S3 build-up, and whether A19 or ρ need retuning. A first, tighter A19 set gave 7.6% of GCA and was judged too severe.
+- A separate pattern to check after the fix: in baseline, S2 coverage keeps falling after 2027 (5.5% → 4.4% → 3.6%) while the S2 book grows. It may be the worst S2 grades defaulting out each year, but it has not been checked.
+
+### Open decision (owner)
+
+- [ ] Option 1, 2 or 3. Options 1 and 2 change results. Option 1 departs from design D13; option 2 reverses A8 (item 3) and C2.
+
+### Steps
+
+- [ ] Work out the points under "Things to find out" and bring them to the owner.
+- [ ] Settle the decision above. If it departs from the design, agree it first and update the design with it (D13, including the "a little below TTC" wording).
+- [ ] Create a branch off `main` for this work.
+- [ ] Run it through `/improve` and show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`. Option 2 also needs `uv run python -m foundation.synth` to build the new input set.
+- [ ] Update `docs/assumptions.md` (A1, A8, C2 and the first-year-charge note), the first-year-charge paragraph in `docs/technical-implementation/`, and `README.md` and `docs/runbook.md` wherever results or the input set hash appear.
+
+## Qualitative SICR triggers: 30+ DPD, watchlist and forbearance
+
+**Goal.** Add three qualitative triggers that move a performing facility from S1 to S2, alongside the relative PD test:
+
+- [ ] **30+ days past due backstop**
+- [ ] **Watchlist**
+- [ ] **Forbearance**
+
+The input data must carry all three for every facility, as checked inputs that can trigger S2 independently of the grade.
+
+### What the code does now
+
+- Stage comes from one rule only: a slice is S2 when the lifetime PD of its grade is at least k times the lifetime PD at origination (MIG-07, design D2). R3 checks it against the reported stage, and R7 applies it every year (`stage_of_rank`, `src/stress/projection/kernels.py:46`).
+- MIG-07 and design D3 leave the three triggers out on purpose: "not used in the synthetic books". MIG-05 and PD-06 expect a bank's SICR to use qualitative triggers and to keep them separate.
+- The input `facilities` table already has `dpd`, `watchlist` and `forborne` (`src/stress/contracts/inputs.py:88-90`). R2 loads them. R3 does not check them, and no step reads them.
+- O3 sets them to agree with the stage the rule already gives (`foundation/synth/generate.py:384-414`). In input set `514ed0e86e3dc760`, no S1 facility is 30+ DPD, on the watchlist or forborne. Of the 1,324 S2 facilities, 432 are 30–89 DPD, 509 are on the watchlist and 143 are forborne. Switching the triggers on with today's data would change no opening stage.
+
+### Input data
+
+- [ ] Make `dpd`, `watchlist` and `forborne` required inputs on every facility. R3 rejects a missing value; it never reads it as "no trigger" (the same rule as `poci` today).
+- [ ] Record the source definition and observation date of each flag (§12.2, credit status row).
+- [ ] Put the trigger settings in the parameter set: the DPD threshold (30 days) and which triggers are switched on, per segment if needed.
+- [ ] Change O3 so the flags are no longer just a copy of the stage. Some S2 facilities should be S2 because of a flag alone, with a grade still above the SICR line. The reported opening stage then equals "PD test or any flag". This restates SYN-PAR-08 and gives a new input set.
+
+### Things to find out
+
+- **Projection.** The flags exist at end-2026 only. In 2027–2029 the engine moves grades, not DPD, watchlist or forbearance. A flag belongs to a facility while stage belongs to a grade slice, so a flagged facility would make all its performing slices S2.
+- **Effect.** Today, S2 slices whose grade improves back over the line return to S1 (€47.5m in baseline 2027). If a flag holds a facility in S2, part of that return stops.
+- **Facilities that can never reach S2.** The 930 facilities with no S2 grade (€417.7m, mostly long-dated P01 mortgages) can reach S2 only through these triggers. Check how many of them the new O3 flags.
+- **Reporting.** Whether the stage migration report should split S2 by trigger: PD test, DPD, watchlist or forbearance.
+
+### Open decisions (owner)
+
+- [ ] **Agree the departure from the design.** This reverses the last sentence of MIG-07 and design D3. Agree it first, then update the design (D2, D3 and the R3 and R7 text) and the requirements (MIG-07, SYN-PAR-08). `docs/spec/` is written by code only, so the requirements change goes through O1.
+- [ ] **How flags behave over 2027–2029.**
+  - (a) Hold each flag at its opening value: a flagged facility stays S2 until it defaults.
+  - (b) A flag lapses after a probation period.
+  - (c) Project the flags from grade moves. This counts the same deterioration twice and is not recommended.
+
+  Recommendation: (a) for v1.
+
+### Steps
+
+- [ ] Settle the decisions above.
+- [ ] Create a branch off `main` for this work.
+- [ ] Input data: change O3, rebuild with `uv run python -m foundation.synth`, and note the new input set hash.
+- [ ] Engine, through `/improve`: tests first (new AT-48 cases for each trigger, R3 rejection of a missing flag, unit tests for the stage rule with flags), then the R3 check and the R7 stage. Show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`.
+- [ ] Update `docs/assumptions.md`, and `README.md` and `docs/runbook.md` wherever the input set hash or results appear.

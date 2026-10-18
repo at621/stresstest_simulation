@@ -8,6 +8,8 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 | **Requirements** | [docs/spec/EBA_2027_Credit_Portfolio_Stress_Test_Requirements.md](docs/spec/EBA_2027_Credit_Portfolio_Stress_Test_Requirements.md) |
 | **Repository rules and open items** | [docs/architecture.md](docs/architecture.md) |
 | **Assumptions and conflicts** | [docs/assumptions.md](docs/assumptions.md) |
+| **How staging works** | [docs/staging/stress-engine-staging.html](docs/staging/stress-engine-staging.html) |
+| **How PD curves are built** | [docs/pd-curves/pd-curve-flow.html](docs/pd-curves/pd-curve-flow.html) |
 | **Operating the engine** | [docs/runbook.md](docs/runbook.md) |
 
 **Status:** v1 is complete and runs end to end, in synthetic mode only; regulatory mode blocks the run. From here on, work goes into improvements, each on its own branch (see [Making changes](#making-changes)).

@@ -1,0 +1,350 @@
+<meta charset="utf-8">
+<title>PD Curve Construction</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one vertical spine of engine steps; side notes branch right for details and deliberate exceptions.
+   Palette and type follow docs/stress-engine-code-flow.html. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #e9edf2;
+  --fg: #17202b;
+  --muted: #566272;
+  --line: #d0d7e0;
+  --run: #2652c4;
+  --run-soft: #e8eefb;
+  --run-line: #9cb1e8;
+  --once: #9a5900;
+  --once-soft: #faf0df;
+  --once-line: #e0b26f;
+  --frozen: #4b5665;
+  --frozen-soft: #e6eaef;
+  --block: #b3302d;
+  --block-soft: #fbe8e7;
+  --ok: #276f50;
+  --ok-soft: #e3f3ea;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+    --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+    --frozen: #b2bcc8; --frozen-soft: #212932;
+    --block: #ff8a83; --block-soft: #3a1c1c;
+    --ok: #74d3a3; --ok-soft: #16302a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+  --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+  --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+  --frozen: #b2bcc8; --frozen-soft: #212932;
+  --block: #ff8a83; --block-soft: #3a1c1c;
+  --ok: #74d3a3; --ok-soft: #16302a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
+.page {
+  max-width: 1080px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: grid; gap: 32px;
+}
+code, .mono { font-family: var(--mono); font-size: 0.9em; }
+p code, li code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+/* Masthead */
+.masthead { display: grid; gap: 16px; }
+.masthead > * { margin: 0; }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.04; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { max-width: 68ch; font-size: 1.04rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 12px 0 0; list-style: none; font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); }
+.legend li { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1.5px solid; }
+.sw-run { background: var(--surface); border-color: var(--run-line); }
+.sw-in { background: var(--frozen-soft); border-color: var(--frozen); }
+.sw-detail { background: var(--surface-2); border-color: var(--muted); border-style: dashed; }
+.sw-diff { background: var(--once-soft); border-color: var(--once-line); border-style: dashed; }
+.sw-block { background: var(--block-soft); border-color: var(--block); }
+.sw-ok { background: var(--ok-soft); border-color: var(--ok); }
+
+/* Flow grid */
+.flow { display: grid; }
+.row {
+  display: grid; grid-template-columns: 76px minmax(0, 1fr) minmax(0, 0.78fr);
+  column-gap: 30px; align-items: start;
+}
+.tag { padding-top: 15px; display: grid; gap: 2px; }
+.tag b { font: 600 19px/1.2 var(--mono); color: var(--run); }
+.tag span { font-size: 12px; line-height: 1.3; color: var(--muted); }
+.tag.in b { color: var(--frozen); }
+
+.node {
+  grid-column: 2; min-width: 0;
+  background: var(--surface); border: 1.5px solid var(--run-line); border-radius: 10px;
+  padding: 16px 18px; display: grid; gap: 12px;
+}
+.node.input { background: var(--frozen-soft); border-color: var(--frozen); }
+.node > * { margin: 0; }
+.node h3 { font: 700 1.18rem/1.25 var(--display); text-wrap: balance; }
+.node p { max-width: 64ch; }
+.ref { font: 12px/1.45 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.in-chip { justify-self: start; font-size: 13px; color: var(--frozen); background: var(--frozen-soft); border: 1px solid var(--frozen); border-radius: 999px; padding: 2px 12px; }
+
+/* Formulas */
+.eq { font: 13.5px/1.75 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 9px 13px; overflow-x: auto; white-space: pre; }
+.eqs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 18px; align-items: baseline; background: var(--surface-2); border-radius: 6px; padding: 10px 13px; }
+.eqs dt { font: 13.5px/1.6 var(--mono); white-space: nowrap; }
+.eqs dd { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+/* Gates and notes */
+.gate { border: 1px solid var(--block); background: var(--block-soft); border-radius: 6px; padding: 9px 12px; font-size: 13.5px; display: grid; gap: 2px; }
+.gate b, .note b, .verified b.kick { font: 600 11px/1.4 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; }
+.gate b { color: var(--block); }
+.note { background: var(--run-soft); border-radius: 6px; padding: 10px 13px; font-size: 14px; display: grid; gap: 3px; }
+.note b { color: var(--run); }
+
+/* Side notes */
+.side {
+  --conn: var(--once-line);
+  grid-column: 3; position: relative; margin-top: 18px; min-width: 0;
+  border: 1.5px dashed var(--once-line); background: var(--once-soft); border-radius: 10px;
+  padding: 13px 16px; display: grid; gap: 7px; font-size: 14px;
+}
+.side.detail { --conn: var(--muted); border-color: var(--muted); background: var(--surface-2); }
+.side > * { margin: 0; }
+.side .kick { font: 600 11px/1.4 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--once); }
+.side.detail .kick { color: var(--muted); }
+.side h4 { font: 700 1.02rem/1.3 var(--display); }
+.side .eq { font-size: 12.5px; padding: 7px 10px; background: var(--surface); }
+.side::before {
+  content: ""; position: absolute; left: -31.5px; top: 26px; width: 30px;
+  border-top: 1.5px dashed var(--conn);
+}
+
+/* Arrows between steps */
+.link { grid-column: 2; height: 46px; position: relative; }
+.link::before { content: ""; position: absolute; left: 50%; top: 4px; bottom: 11px; border-left: 1.5px solid var(--run); }
+.link::after {
+  content: ""; position: absolute; left: calc(50% - 5px); bottom: 3px;
+  border-left: 5.75px solid transparent; border-right: 5.75px solid transparent; border-top: 9px solid var(--run);
+}
+.link span { position: absolute; left: calc(50% + 14px); top: 50%; transform: translateY(-55%); font: 12.5px/1 var(--mono); color: var(--run); white-space: nowrap; }
+
+/* Matrix-product staircase */
+.stair-wrap { overflow-x: auto; }
+.stair { display: grid; grid-template-columns: 52px repeat(4, 54px) auto; gap: 5px 6px; align-items: center; font: 12.5px/1.2 var(--mono); width: max-content; }
+.stair .hd { text-align: center; color: var(--muted); font-size: 11.5px; }
+.stair .hd small { display: block; font-size: 11px; color: var(--run); }
+.stair .k { color: var(--muted); }
+.stair .m { height: 28px; display: grid; place-items: center; background: var(--run-soft); border: 1px solid var(--run-line); border-radius: 5px; color: var(--run); font-weight: 600; }
+.stair .m.rev { background: repeating-linear-gradient(135deg, var(--run-soft) 0 5px, var(--surface) 5px 9px); border-style: dashed; }
+.stair .f { padding-left: 8px; font-weight: 600; }
+.cap { font-size: 13px; color: var(--muted); max-width: 64ch; }
+
+/* Example table */
+.ex-wrap { overflow-x: auto; }
+table.ex { border-collapse: collapse; font: 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; min-width: 300px; }
+table.ex th { font: 600 11.5px/1.3 var(--sans); color: var(--muted); text-align: right; padding: 4px 12px 6px; border-bottom: 1px solid var(--line); }
+table.ex td { text-align: right; padding: 4px 12px; border-bottom: 1px solid var(--line); }
+table.ex th:first-child, table.ex td:first-child { text-align: left; padding-left: 0; }
+
+/* Verified */
+.verified { grid-column: 2 / 4; border: 1.5px solid var(--ok); background: var(--ok-soft); border-radius: 10px; padding: 15px 18px; display: grid; gap: 6px; margin-top: 30px; }
+.verified > * { margin: 0; }
+.verified b.kick { color: var(--ok); }
+.verified .big { font: 700 1.1rem/1.3 var(--display); }
+
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+footer p { margin: 0; max-width: 80ch; }
+
+@media (max-width: 780px) {
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .tag { display: flex; gap: 10px; align-items: baseline; padding-top: 0; margin-bottom: 8px; }
+  .node, .link, .verified { grid-column: 1; }
+  .side { grid-column: 1; margin-top: 12px; margin-left: 22px; }
+  .side::before {
+    left: -23.5px; top: -13.5px; width: 22px; height: 40px;
+    border-top: 0; border-left: 1.5px dashed var(--conn); border-bottom: 1.5px dashed var(--conn);
+    border-bottom-left-radius: 7px;
+  }
+  .eqs { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .eqs dd { margin-bottom: 6px; }
+}
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <p class="eyebrow">Stress engine · R4 → R6 → R8 · review of PD curve construction</p>
+    <h1>How the engine builds PD curves</h1>
+    <p class="lede">A Z-score for each year shifts the TTC matrix into that year's PiT matrix. Multiplying the yearly matrices gives cumulative default curves, and differencing them gives the yearly PDs that ECL uses.</p>
+    <ul class="legend" aria-label="Legend">
+      <li><span class="sw sw-in"></span>Input</li>
+      <li><span class="sw sw-run"></span>Engine step</li>
+      <li><span class="sw sw-detail"></span>Detail of a step</li>
+      <li><span class="sw sw-diff"></span>Works differently on purpose</li>
+      <li><span class="sw sw-block"></span>Blocks the run if it fails</li>
+      <li><span class="sw sw-ok"></span>Checked against a sealed run</li>
+    </ul>
+  </header>
+
+  <main class="flow" aria-label="PD curve flowchart">
+
+    <!-- Inputs -->
+    <div class="row">
+      <div class="tag in"><b>IN</b><span>Input set</span></div>
+      <div class="node input">
+        <h3>Scenario values and Z coefficients</h3>
+        <p>One value per driver, country and year 2027–2029 (for example GDP growth), plus each driver's β, mean μ and standard deviation σ from the parameter set.</p>
+        <p class="ref">inputs/514ed0e86e3dc760</p>
+      </div>
+    </div>
+    <div class="row"><div class="link"><span>xᵢ, βᵢ, μᵢ, σᵢ</span></div></div>
+
+    <!-- R4 Z-score -->
+    <div class="row">
+      <div class="tag"><b>R4</b><span>Scenario</span></div>
+      <div class="node">
+        <h3>Z-score for each year</h3>
+        <div class="eq">Z = Σᵢ βᵢ · (xᵢ − μᵢ) / σᵢ</div>
+        <p>One Z per segment, country, scenario and year. A negative Z is a bad year and raises PDs. A missing value or coefficient blocks; nothing is set to zero.</p>
+        <p class="ref">src/stress/scenario/kernels.py:21</p>
+      </div>
+      <aside class="side detail">
+        <p class="kick">Detail · years after 2029</p>
+        <h4>Z is extended to maturity</h4>
+        <p>Baseline holds its 2029 Z. Adverse moves to baseline's 2029 Z over 6 years: weight 5/6 in 2030, down to 0 from 2035 (ECL-10).</p>
+        <p>P01 · DE adverse: −0.745 in 2029, −0.591 in 2030, −0.437 in 2031.</p>
+        <p class="ref">src/stress/scenario/__init__.py:91</p>
+      </aside>
+    </div>
+    <div class="row"><div class="link"><span>Z(y)</span></div></div>
+
+    <!-- R6 PiT matrix -->
+    <div class="row">
+      <div class="tag"><b>R6</b><span>Parameters</span></div>
+      <div class="node">
+        <h3>PiT matrix M(y) for each year</h3>
+        <p class="in-chip">Also takes: TTC matrix per segment (G1–G10 and D), the segment's ρ</p>
+        <dl class="eqs">
+          <dt>C_PiT = Φ((Φ⁻¹(C_TTC) − √ρ·Z) / √(1−ρ))</dt><dd>shift each row</dd>
+          <dt>M(i, j) = C_PiT(i, j) − C_PiT(i, j+1)</dt><dd>back to cells</dd>
+        </dl>
+        <p><code>C(i, j)</code> is the probability of ending in grade j or worse from grade i. Shifting it moves the whole row toward worse grades, not only the D column. D stays absorbing.</p>
+        <div class="gate"><b>Blocks the run if</b>a row does not sum to 1 within 1e-10, a cell is negative, or PD does not rise with the grade.</div>
+        <p class="ref">src/stress/params/matrix.py:22 · src/stress/params/__init__.py:67</p>
+      </div>
+    </div>
+    <div class="row"><div class="link"><span>M(v+1), M(v+2), …</span></div></div>
+
+    <!-- R6 product -->
+    <div class="row">
+      <div class="tag"><b>R6</b><span>Parameters</span></div>
+      <div class="node">
+        <h3>Multiply the matrices: cumulative PD</h3>
+        <dl class="eqs">
+          <dt>P[k] = M(v+1) × … × M(v+k)</dt><dd>grade spread after k years</dd>
+          <dt>F[g, k] = P[k][g, D]</dt><dd>cumulative PD from start grade g</dd>
+        </dl>
+        <div class="stair-wrap">
+          <div class="stair" role="img" aria-label="Bucket 1 uses M(2027); bucket 2 uses M(2027) times M(2028); bucket 3 adds M(2029); bucket 4 adds M(2030), whose Z is reverted.">
+            <span></span>
+            <span class="hd">2027<small>Z −1.29</small></span>
+            <span class="hd">2028<small>Z −1.31</small></span>
+            <span class="hd">2029<small>Z −0.74</small></span>
+            <span class="hd">2030<small>Z −0.59</small></span>
+            <span></span>
+
+            <span class="k">k = 1</span><span class="m">M</span><span></span><span></span><span></span><span class="f">→ F[1]</span>
+            <span class="k">k = 2</span><span class="m">M</span><span class="m">M</span><span></span><span></span><span class="f">→ F[2]</span>
+            <span class="k">k = 3</span><span class="m">M</span><span class="m">M</span><span class="m">M</span><span></span><span class="f">→ F[3]</span>
+            <span class="k">k = 4</span><span class="m">M</span><span class="m">M</span><span class="m">M</span><span class="m rev">M</span><span class="f">→ F[4]</span>
+          </div>
+        </div>
+        <p class="cap">Valuation end-2026, adverse, P01 · DE. Each bucket multiplies the matrices of the years it covers. The hatched 2030 matrix uses the reverted Z.</p>
+        <p class="ref">src/stress/params/__init__.py:126-128 · src/stress/params/pd.py:77</p>
+      </div>
+      <aside class="side">
+        <p class="kick">Works differently on purpose</p>
+        <h4>Part-year final bucket</h4>
+        <p>When the last bucket is a fraction d of a year, there is no further product. The grade spread at the start of the bucket is applied to each grade's part-year PD (PD-06):</p>
+        <div class="eq">m_stub = Σⱼ P[n][g, j] · (1 − (1 − PDⱼ)^d)</div>
+        <p class="ref">src/stress/params/__init__.py:142-161</p>
+      </aside>
+    </div>
+    <div class="row"><div class="link"><span>F[k]</span></div></div>
+
+    <!-- R6 subtract -->
+    <div class="row">
+      <div class="tag"><b>R6</b><span>Parameters</span></div>
+      <div class="node">
+        <h3>Subtract: marginal, survival and conditional PD</h3>
+        <dl class="eqs">
+          <dt>m[k] = F[k] − F[k−1]</dt><dd>marginal PD, unconditional</dd>
+          <dt>S[k] = 1 − F[k]</dt><dd>survival</dd>
+          <dt>q[k] = m[k] / S[k−1]</dt><dd>conditional PD, given survival to k−1</dd>
+        </dl>
+        <div class="ex-wrap">
+          <table class="ex">
+            <caption class="cap" style="caption-side: bottom; text-align: left; padding-top: 8px;">P01 · DE · grade G5 · adverse · valuation end-2026. Baseline F[4] for comparison: 1.47%.</caption>
+            <thead><tr><th>k</th><th>Year</th><th>F cumulative</th><th>m marginal</th><th>q conditional</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>2027</td><td>1.69%</td><td>1.69%</td><td>1.69%</td></tr>
+              <tr><td>2</td><td>2028</td><td>3.80%</td><td>2.10%</td><td>2.14%</td></tr>
+              <tr><td>3</td><td>2029</td><td>5.22%</td><td>1.42%</td><td>1.48%</td></tr>
+              <tr><td>4</td><td>2030</td><td>6.56%</td><td>1.34%</td><td>1.42%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note"><b>Which one is the forward-looking PD?</b>The difference <code>m</code> is the marginal PD, and it is what ECL uses. The one-year PD given survival so far is <code>q</code>. Conditional PDs are never added up.</div>
+        <div class="gate"><b>Blocks the run if</b>any curve breaks a PD-03 identity: F + S = 1, Σ m = F, F never falls, every value in [0, 1].</div>
+        <p class="ref">src/stress/params/__init__.py:129-136 · src/stress/params/pd.py:50</p>
+      </div>
+    </div>
+    <div class="row"><div class="link"><span>m[k]</span></div></div>
+
+    <!-- R8 ECL -->
+    <div class="row">
+      <div class="tag"><b>R8</b><span>ECL</span></div>
+      <div class="node">
+        <h3>ECL uses the marginal PD</h3>
+        <dl class="eqs">
+          <dt>S1 = m[1] · EAD[1] · LGD[1] · DF[1]</dt><dd>first year only</dd>
+          <dt>S2 = Σₖ m[k] · EAD[k] · LGD[k] · DF[k]</dt><dd>to maturity</dd>
+        </dl>
+        <p>PD, LGD and EAD in each product share scenario, valuation date and default bucket. <code>q</code> goes only to the reports: <code>pd_curves.csv</code> and the one-year portfolio PD.</p>
+        <p class="ref">src/stress/ecl/__init__.py:92</p>
+      </div>
+      <aside class="side">
+        <p class="kick">Works differently on purpose</p>
+        <h4>End-2029 Stage 1</h4>
+        <p>Uses the 2030 loss rate blended between this scenario and baseline, not the curve directly (AT-06):</p>
+        <div class="eq">a · PD·LGD + (1 − a) · PD_base·LGD_base</div>
+        <p class="ref">src/stress/ecl/__init__.py:157</p>
+      </aside>
+    </div>
+
+    <div class="row">
+      <div class="verified">
+        <b class="kick">Checked against run 20261017T2304Z-core-b559d9dd</b>
+        <p class="big">Recomputing F, m and q from the run's stored PiT matrices reproduces 26,000 curve points. The largest difference is 7.8 × 10⁻¹⁶.</p>
+        <p>The check covers buckets up to 2036, the last year for which the run stores PiT matrices. Later buckets are built by the same code.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <p>Code references are to <code>main</code> at commit 4019061. Rules for this step: src/stress/params/CLAUDE.md (PD-10, PD-11, PD-03, PD-06).</p>
+  </footer>
+</div>

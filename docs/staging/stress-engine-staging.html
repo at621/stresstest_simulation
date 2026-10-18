@@ -1,0 +1,747 @@
+<meta charset="utf-8">
+<title>Stress Engine Staging</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one reading column, full-width figures; same palette and faces as docs/stress-engine-code-flow.html.
+   Ochre = one-off work and S2, blue = the run, plum = S3, steel blue = S1 marks, red = rejected or blocking. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #e9edf2;
+  --fg: #17202b;
+  --muted: #566272;
+  --line: #d0d7e0;
+  --run: #2652c4;
+  --run-soft: #e8eefb;
+  --run-line: #9cb1e8;
+  --once: #9a5900;
+  --once-soft: #faf0df;
+  --once-line: #e0b26f;
+  --cf: #07788a;
+  --cf-soft: #dff3f5;
+  --s1-soft: #e5eff8;
+  --s3: #7a4590;
+  --s3-soft: #f3e9f7;
+  --block: #b3302d;
+  --block-soft: #fbe8e7;
+  --ok: #276f50;
+  --ok-soft: #e3f3ea;
+  --m-s1: #3f84bf;
+  --m-s2: #b37112;
+  --m-s3: #8d55a6;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+    --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+    --cf: #5ccbdb; --cf-soft: #112f37;
+    --s1-soft: #13243a;
+    --s3: #cf9fe3; --s3-soft: #2b1f33;
+    --block: #ff8a83; --block-soft: #3a1c1c;
+    --ok: #74d3a3; --ok-soft: #16302a;
+    --m-s1: #4b93d1; --m-s2: #bd8430; --m-s3: #a77bc0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+  --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+  --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+  --cf: #5ccbdb; --cf-soft: #112f37;
+  --s1-soft: #13243a;
+  --s3: #cf9fe3; --s3-soft: #2b1f33;
+  --block: #ff8a83; --block-soft: #3a1c1c;
+  --ok: #74d3a3; --ok-soft: #16302a;
+  --m-s1: #4b93d1; --m-s2: #bd8430; --m-s3: #a77bc0;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
+.page {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 44px 80px;
+}
+a { color: var(--run); }
+a:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; border-radius: 3px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+p code, li code, h3 code, td code, dd code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* Masthead */
+.masthead { display: grid; gap: 18px; }
+.eyebrow { margin: 0; font: 500 12px/1.5 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere; }
+h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(2.1rem, 5vw, 3.2rem); line-height: 1.02; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; max-width: 72ch; font-size: 1.06rem; }
+
+.answers { margin: 4px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--fg); }
+.answers > div { padding: 14px 18px 4px 0; min-width: 0; }
+.answers > div + div { padding-left: 18px; border-left: 1px solid var(--line); }
+.answers dt { font: 600 12px/1.5 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.answers dd { margin: 6px 0 0; }
+.answers ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.answers li { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: baseline; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--muted); }
+.legend li { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1.5px solid; }
+.sw-s1 { background: var(--s1-soft); border-color: var(--m-s1); }
+.sw-s2 { background: var(--once-soft); border-color: var(--m-s2); }
+.sw-s3 { background: var(--s3-soft); border-color: var(--m-s3); }
+.sw-off { background: var(--surface-2); border-color: var(--muted); border-style: dashed; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; padding-top: 8px; border-top: 1px solid var(--line); }
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+/* Stage tags, status pills */
+.st { display: inline-block; min-width: 2.4em; text-align: center; font: 600 12px/1.6 var(--mono); padding: 0 6px; border-radius: 4px; border: 1px solid; color: var(--fg); white-space: nowrap; }
+.st-1 { background: var(--s1-soft); border-color: var(--m-s1); }
+.st-2 { background: var(--once-soft); border-color: var(--m-s2); }
+.st-3 { background: var(--s3-soft); border-color: var(--m-s3); }
+.pill { display: inline-block; font: 600 11.5px/1.7 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; padding: 0 8px; border-radius: 999px; white-space: nowrap; border: 1px solid; }
+.pill-used { color: var(--ok); background: var(--ok-soft); border-color: var(--ok); }
+.pill-check { color: var(--run); background: var(--run-soft); border-color: var(--run-line); }
+.pill-off { color: var(--muted); background: var(--surface-2); border-color: var(--muted); border-style: dashed; }
+.pill-excl { color: var(--block); background: var(--block-soft); border-color: var(--block); }
+.pill-plan { color: var(--once); background: var(--once-soft); border-color: var(--once-line); border-style: dashed; }
+.chip { display: inline-block; font: 500 11.5px/1.6 var(--mono); padding: 0 6px; border-radius: 4px; background: var(--surface-2); color: var(--muted); white-space: nowrap; margin: 1px 2px 1px 0; }
+
+/* Sections */
+section { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--line); display: grid; gap: 16px; }
+section > * { margin: 0; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; line-height: 1.15; text-wrap: balance; }
+h2 .kicker { display: block; font: 600 12px/1.6 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--run); }
+h3 { margin: 0; font-size: 1.02rem; font-weight: 600; line-height: 1.35; text-wrap: balance; }
+.prose { max-width: 72ch; }
+.prose p { margin: 0; }
+.prose p + p { margin-top: 10px; }
+
+/* Figures */
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+figcaption { color: var(--muted); font-size: 13.5px; max-width: 86ch; }
+.diagram { display: block; width: 100%; height: auto; font-family: var(--sans); }
+.diagram .n-s1 { fill: var(--s1-soft); stroke: var(--m-s1); stroke-width: 1.6; }
+.diagram .n-s2 { fill: var(--once-soft); stroke: var(--m-s2); stroke-width: 1.6; }
+.diagram .n-s3 { fill: var(--s3-soft); stroke: var(--m-s3); stroke-width: 1.6; }
+.diagram .n-off { fill: var(--surface-2); stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.diagram .edge { fill: none; stroke: var(--fg); stroke-width: 1.6; }
+.diagram .edge-s3 { fill: none; stroke: var(--m-s3); stroke-width: 1.6; }
+.diagram .edge-off { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.diagram .cross { stroke: var(--block); stroke-width: 2.2; stroke-linecap: round; }
+.diagram .ah { fill: var(--fg); }
+.diagram .ah-s3 { fill: var(--m-s3); }
+.diagram .ah-off { fill: var(--muted); }
+.diagram .t-node { font: 700 24px var(--display); fill: var(--fg); }
+.diagram .t-sub { font-size: 12.5px; fill: var(--muted); }
+.diagram .t-lab { font-size: 13.5px; font-weight: 600; fill: var(--fg); }
+.diagram .t-eq { font: 12px var(--mono); fill: var(--fg); }
+.diagram .t-off { font-size: 13px; fill: var(--muted); }
+.diagram .t-off-b { font-size: 13px; font-weight: 600; fill: var(--muted); }
+
+/* Tables */
+.tbl-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font: 14px/1.5 var(--sans); color: var(--fg); }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+thead th { font: 600 11.5px/1.4 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); vertical-align: bottom; }
+tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.triggers td:first-child { min-width: 220px; }
+.triggers td:nth-child(3) { white-space: nowrap; }
+.triggers tr.off td { color: var(--muted); }
+.triggers tr.off td:first-child { color: var(--fg); }
+.sub { display: block; color: var(--muted); font-size: 13px; }
+
+/* Workflow */
+.flow { list-style: none; margin: 0; padding: 0; display: grid; }
+.flow > li { display: grid; grid-template-columns: 68px minmax(0, 1fr); column-gap: 18px; position: relative; padding-bottom: 20px; }
+.flow > li::before { content: ""; position: absolute; left: 33px; top: 46px; bottom: 0; width: 2px; background: var(--line); }
+.flow > li:last-child::before { display: none; }
+.fid { width: 68px; height: 46px; border-radius: 8px; display: grid; place-items: center; font: 700 14px var(--mono); border: 1.5px solid var(--run-line); background: var(--run-soft); color: var(--run); position: relative; z-index: 1; }
+.fid.once { border-color: var(--once-line); background: var(--once-soft); color: var(--once); }
+.fid.quiet { border-style: dashed; border-color: var(--line); background: var(--surface); color: var(--muted); }
+.fbody { display: grid; gap: 8px; min-width: 0; padding-top: 4px; }
+.fbody p { margin: 0; max-width: 78ch; }
+.fhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.fhead code { font-size: 0.82em; color: var(--muted); }
+.role { font: 600 11.5px/1.7 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.role.sets { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+.role.checks { color: var(--run); border-color: var(--run-line); background: var(--run-soft); }
+.role.builds { color: var(--once); border-color: var(--once-line); background: var(--once-soft); }
+.loop { font: 500 12px/1.7 var(--mono); color: var(--run); }
+.flow > li.key .fbody { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.flow > li.key.r7 .fbody { border-color: var(--fg); border-width: 1.5px; }
+.checks { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; max-width: 82ch; }
+.checks li::marker { font: 600 12px var(--mono); color: var(--muted); }
+.checks .rc { font: 500 11.5px var(--mono); color: var(--block); background: var(--block-soft); padding: 0 5px; border-radius: 4px; white-space: nowrap; }
+.where { font: 12.5px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.outcome { font-size: 13.5px; color: var(--ok); }
+.eqs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; align-items: baseline; margin: 0; font: 13px/1.6 var(--mono); }
+.eqs dt { margin: 0; }
+.eqs dd { margin: 0; }
+
+/* Rule section */
+.rule-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.rulecard { background: var(--surface); border: 1.5px solid var(--fg); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; }
+.rulecard .eqs { font-size: 14px; }
+.defs { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14px; }
+.defs b { font-family: var(--mono); font-weight: 600; }
+.props { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; }
+
+/* Ladder chart */
+.ladder th, .ladder td { padding-block: 6px; }
+.ladder td.bar { width: 60%; min-width: 260px; padding-block: 0; position: relative; }
+.track { position: relative; height: 32px; }
+.track .b { position: absolute; left: 0; top: 9px; height: 14px; width: var(--w); border-radius: 0 4px 4px 0; }
+.b.s1 { background: var(--m-s1); }
+.b.s2 { background: var(--m-s2); }
+.track::after { content: ""; position: absolute; left: var(--thr); top: 0; bottom: 0; border-left: 1.5px dashed var(--fg); }
+.ticks { position: relative; height: 18px; font: 500 11px var(--mono); color: var(--muted); text-transform: none; letter-spacing: 0; }
+.ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.ticks span:first-child { transform: none; }
+.ticks span:last-child { transform: translateX(-100%); }
+.ticks .thr { color: var(--fg); font-weight: 600; top: -16px; }
+.ladder tr.g0 th { box-shadow: inset 3px 0 0 var(--fg); }
+.ladder tr.line td, .ladder tr.line th { border-top: 2px dashed var(--fg); }
+.ladder tr.dflt td, .ladder tr.dflt th { background: var(--surface-2); }
+.ladder .note { color: var(--muted); font-size: 13px; }
+
+/* Notch bars */
+.hbars { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.hbars li { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 7.5em; gap: 12px; align-items: center; font-size: 14px; }
+.hbars .lbl { color: var(--fg); }
+.hbars .tr { height: 16px; position: relative; }
+.hbars .tr i { position: absolute; left: 0; top: 0; bottom: 0; width: max(3px, var(--w)); border-radius: 0 4px 4px 0; background: var(--m-s2); }
+.hbars li.none .tr i { background: repeating-linear-gradient(135deg, var(--m-s1) 0 3px, transparent 3px 6px); border: 1.5px solid var(--m-s1); }
+.hbars .v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hbars .v small { color: var(--muted); font-size: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; }
+.panel h3 { font-size: 0.98rem; }
+
+/* Numbers */
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.flowtbl caption { caption-side: top; text-align: left; padding: 12px 12px 8px; font-weight: 600; }
+.flowtbl tr.total td, .flowtbl tr.total th { border-top: 1.5px solid var(--fg); font-weight: 600; }
+.flowtbl td.diag { color: var(--muted); }
+.flowtbl td.hot { font-weight: 600; }
+.stocks th[scope="colgroup"] { text-align: center; }
+.stocks td.gap, .stocks th.gap { border-left: 1.5px solid var(--line); }
+
+/* Open points */
+.points { margin: 0; padding: 0; list-style: none; display: grid; gap: 16px; }
+.points li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr); gap: 4px 12px; max-width: 86ch; }
+.points .n { font: 700 1.1rem var(--display); color: var(--muted); }
+.points h3 { margin-bottom: 4px; }
+.points p { margin: 0; }
+
+.sources { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13.5px; }
+.sources li { display: grid; grid-template-columns: minmax(0, 22em) minmax(0, 1fr); gap: 2px 16px; }
+.sources code { background: none; padding: 0; color: var(--fg); }
+.sources span { color: var(--muted); }
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+
+@media (max-width: 820px) {
+  .answers { grid-template-columns: minmax(0, 1fr); }
+  .answers > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+  .rule-grid, .two { grid-template-columns: minmax(0, 1fr); }
+  .sources li { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .flow > li { grid-template-columns: 52px minmax(0, 1fr); column-gap: 12px; }
+  .fid { width: 52px; font-size: 12.5px; }
+  .flow > li::before { left: 25px; }
+  .hbars li { grid-template-columns: 7.5em minmax(0, 1fr) 6.5em; gap: 8px; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <p class="eyebrow">Stress engine v1 · input set 514ed0e86e3dc760 · run 20261017T2304Z-core-b559d9dd</p>
+    <h1>How staging works in the stress engine</h1>
+    <p class="lede">Stage follows the rating grade. A performing grade slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade, and S3 when it reaches default grade D. R3 checks this rule against the reported opening stage. R7 applies it to every grade slice in each projection year, 2027 to 2029. Later steps only read the result. Days past due, watchlist and forbearance are loaded with the data but not used yet. Adding them as triggers is planned in <code>TODO.md</code>.</p>
+
+    <dl class="answers">
+      <div>
+        <dt>Triggers in use</dt>
+        <dd><ul>
+          <li><span class="st st-2">S2</span><span>Lifetime PD of the current grade ≥ k × lifetime PD at origination, with k from 2.0 to 3.0 by segment</span></li>
+          <li><span class="st st-3">S3</span><span>Grade migrates to D in the year's matrix</span></li>
+          <li><span class="st st-1">S1</span><span>Grade improves back above the SICR line</span></li>
+        </ul></dd>
+      </div>
+      <div>
+        <dt>Where stage is considered</dt>
+        <dd><ul>
+          <li><span class="chip">O3</span><span>Grades generated so the rule gives the opening stage</span></li>
+          <li><span class="chip">R3</span><span>Opening stage checked; SICR line fixed per facility</span></li>
+          <li><span class="chip">R7</span><span>Stage set for every slice, every year</span></li>
+          <li><span class="chip">R8–R10</span><span>Stage read for ECL, charges and reports</span></li>
+        </ul></dd>
+      </div>
+      <div>
+        <dt>Not used</dt>
+        <dd><ul>
+          <li><span class="pill pill-plan">planned</span><span>30+ DPD backstop</span></li>
+          <li><span class="pill pill-plan">planned</span><span>Watchlist, forbearance</span></li>
+          <li><span class="pill pill-excl">never</span><span>S3 cure, sale or write-off</span></li>
+        </ul></dd>
+      </div>
+    </dl>
+
+    <ul class="legend" aria-label="Legend">
+      <li><span class="sw sw-s1"></span>S1 · 12-month ECL</li>
+      <li><span class="sw sw-s2"></span>S2 · lifetime ECL</li>
+      <li><span class="sw sw-s3"></span>S3 · defaulted</li>
+      <li><span class="sw sw-off"></span>in the data, not used</li>
+    </ul>
+    <nav class="toc" aria-label="Contents">
+      <a href="#triggers">Transitions and triggers</a>
+      <a href="#workflow">Where staging happens</a>
+      <a href="#rule">The SICR rule</a>
+      <a href="#numbers">Current run</a>
+      <a href="#open">Observations and open points</a>
+      <a href="#sources">Sources</a>
+    </nav>
+  </header>
+
+  <!-- ============ TRIGGERS ============ -->
+  <section id="triggers">
+    <h2><span class="kicker">Transitions</span>Every stage move is a grade move</h2>
+    <div class="prose">
+      <p>The engine has no separate stage model. Each year the scenario's point-in-time matrix M(y) moves exposure between grades. A slice's stage then follows from where its grade sits against the facility's SICR line, or from reaching D. Three moves are possible, and S3 is absorbing.</p>
+    </div>
+    <figure>
+      <div class="fig-scroll">
+        <svg class="diagram" viewBox="0 0 1000 392" style="min-width: 760px" role="img" aria-label="Three stage boxes S1, S2 and S3. S1 to S2 when the grade reaches the SICR line, lifetime PD of the grade at least k times lifetime PD at origination. S2 to S1 when the grade moves back above the line, in the same year with no probation period. S1 and S2 to S3 when the grade migrates to D, creating a new S3 cohort that keeps its origin stage. S3 is absorbing: no cure, sale or write-off. A dashed box below shows 30+ DPD, watchlist and forbearance, loaded with each facility but never read, with a crossed-out arrow toward S2.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+            <marker id="ah-s3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-s3"/></marker>
+            <marker id="ah-off" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-off"/></marker>
+          </defs>
+
+          <!-- S1 to S3 over the top -->
+          <path class="edge-s3" d="M115,158 V100 Q115,84 131,84 H859 Q875,84 875,100 V154" marker-end="url(#ah-s3)"/>
+          <text class="t-lab" x="495" y="52" text-anchor="middle">Grade migrates to D → new S3 cohort, origin S1</text>
+          <text class="t-eq" x="495" y="70" text-anchor="middle">the D column of M(y) is the year's PD</text>
+
+          <!-- nodes -->
+          <rect class="n-s1" x="40" y="160" width="150" height="84" rx="10"/>
+          <text class="t-node" x="115" y="198" text-anchor="middle">S1</text>
+          <text class="t-sub" x="115" y="222" text-anchor="middle">12-month ECL</text>
+
+          <rect class="n-s2" x="420" y="160" width="150" height="84" rx="10"/>
+          <text class="t-node" x="495" y="198" text-anchor="middle">S2</text>
+          <text class="t-sub" x="495" y="222" text-anchor="middle">lifetime ECL</text>
+
+          <rect class="n-s3" x="800" y="160" width="150" height="84" rx="10"/>
+          <text class="t-node" x="875" y="198" text-anchor="middle">S3</text>
+          <text class="t-sub" x="875" y="222" text-anchor="middle">GCA × LGD</text>
+
+          <!-- S1 to S2 -->
+          <path class="edge" d="M192,184 H416" marker-end="url(#ah)"/>
+          <text class="t-lab" x="305" y="150" text-anchor="middle">Grade reaches the SICR line</text>
+          <text class="t-eq" x="305" y="170" text-anchor="middle">PDlife(g) ≥ k × PDlife(g0)</text>
+
+          <!-- S2 to S1 -->
+          <path class="edge" d="M418,222 H194" marker-end="url(#ah)"/>
+          <text class="t-lab" x="305" y="248" text-anchor="middle">Grade back above the line</text>
+          <text class="t-sub" x="305" y="266" text-anchor="middle">same year, no probation period</text>
+
+          <!-- S2 to S3 -->
+          <path class="edge-s3" d="M572,202 H796" marker-end="url(#ah-s3)"/>
+          <text class="t-lab" x="684" y="176" text-anchor="middle">Grade migrates to D</text>
+          <text class="t-sub" x="684" y="194" text-anchor="middle">new S3 cohort, origin S2</text>
+
+          <!-- S3 absorbing -->
+          <path class="edge-s3" d="M852,246 C852,300 898,300 898,250" marker-end="url(#ah-s3)"/>
+          <text class="t-lab" x="875" y="322" text-anchor="middle">Absorbing</text>
+          <text class="t-sub" x="875" y="340" text-anchor="middle">no cure, sale or write-off</text>
+
+          <!-- not used -->
+          <path class="edge-off" d="M495,306 V250" marker-end="url(#ah-off)"/>
+          <line class="cross" x1="487" y1="270" x2="503" y2="286"/>
+          <line class="cross" x1="503" y1="270" x2="487" y2="286"/>
+          <rect class="n-off" x="320" y="308" width="350" height="76" rx="8"/>
+          <text class="t-off-b" x="495" y="332" text-anchor="middle">Not used to set stage yet · planned</text>
+          <text class="t-off" x="495" y="352" text-anchor="middle">30+ DPD backstop · watchlist · forbearance</text>
+          <text class="t-off" x="495" y="370" text-anchor="middle">loaded with each facility in R2, never read</text>
+        </svg>
+      </div>
+      <figcaption>The three moves and what triggers each. g is the slice's grade, g0 the facility's origination grade and k the segment's SICR multiple. Exposure is moved in expected amounts, so one facility can be partly S1 and partly S2 after a year (MIG-06).</figcaption>
+    </figure>
+
+    <div class="tbl-wrap">
+      <table class="triggers">
+        <thead>
+          <tr><th>Trigger</th><th>Move</th><th>Status</th><th>Where in the code</th><th>Basis</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Relative lifetime-PD deterioration<span class="sub">PDlife(grade) ≥ k × PDlife(origination grade), same horizon</span></td>
+            <td><span class="st st-1">S1</span> → <span class="st st-2">S2</span></td>
+            <td><span class="pill pill-used">used</span></td>
+            <td>Line fixed in R3, applied in R7</td>
+            <td><span class="chip">MIG-07</span><span class="chip">D2</span></td>
+          </tr>
+          <tr>
+            <td>Migration into grade D<span class="sub">The D column of M(y) is each grade's PD for the year</span></td>
+            <td><span class="st st-1">S1</span> <span class="st st-2">S2</span> → <span class="st st-3">S3</span></td>
+            <td><span class="pill pill-used">used</span></td>
+            <td>R7</td>
+            <td><span class="chip">MIG-08</span><span class="chip">PD-05</span></td>
+          </tr>
+          <tr>
+            <td>Grade improves back over the SICR line<span class="sub">Immediate; no probation period</span></td>
+            <td><span class="st st-2">S2</span> → <span class="st st-1">S1</span></td>
+            <td><span class="pill pill-used">used</span></td>
+            <td>R7</td>
+            <td><span class="chip">MIG-07</span><span class="chip">AT-48</span></td>
+          </tr>
+          <tr>
+            <td>Regulatory default flag<span class="sub">Must agree with S3 at end-2026; not a projection trigger</span></td>
+            <td><span class="st st-3">S3</span></td>
+            <td><span class="pill pill-check">opening check</span></td>
+            <td>R3 rejects a facility whose flag and stage disagree</td>
+            <td><span class="chip">DAT-04</span></td>
+          </tr>
+          <tr class="off">
+            <td>30+ days past due backstop<span class="sub">Planned in <code>TODO.md</code></span></td>
+            <td><span class="st st-1">S1</span> → <span class="st st-2">S2</span></td>
+            <td><span class="pill pill-plan">planned</span></td>
+            <td><code>dpd</code> loaded in R2, never read</td>
+            <td><span class="chip">MIG-07</span><span class="chip">D3</span></td>
+          </tr>
+          <tr class="off">
+            <td>Watchlist<span class="sub">Planned in <code>TODO.md</code></span></td>
+            <td><span class="st st-1">S1</span> → <span class="st st-2">S2</span></td>
+            <td><span class="pill pill-plan">planned</span></td>
+            <td><code>watchlist</code> loaded in R2, never read</td>
+            <td><span class="chip">MIG-07</span><span class="chip">D3</span></td>
+          </tr>
+          <tr class="off">
+            <td>Forbearance<span class="sub">Planned in <code>TODO.md</code></span></td>
+            <td><span class="st st-1">S1</span> → <span class="st st-2">S2</span></td>
+            <td><span class="pill pill-plan">planned</span></td>
+            <td><code>forborne</code> loaded in R2, never read</td>
+            <td><span class="chip">MIG-07</span><span class="chip">D3</span></td>
+          </tr>
+          <tr class="off">
+            <td>Cure, sale or write-off of S3</td>
+            <td><span class="st st-3">S3</span> → out</td>
+            <td><span class="pill pill-excl">excluded</span></td>
+            <td>S3 slices bypass the matrix in R7; R9 blocks if one disappears</td>
+            <td><span class="chip">EXP-02</span><span class="chip">REG-05</span></td>
+          </tr>
+          <tr class="off">
+            <td>Purchased or originated credit-impaired (POCI)</td>
+            <td>own treatment</td>
+            <td><span class="pill pill-excl">out of scope</span></td>
+            <td>R3 rejects it with <code>POCI_NOT_IN_V1</code></td>
+            <td><span class="chip">v1 scope</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ WORKFLOW ============ -->
+  <section id="workflow">
+    <h2><span class="kicker">Workflow</span>Where staging happens in the run</h2>
+    <div class="prose">
+      <p>Stage is decided in two places. R3 checks the reported end-2026 stage and fixes each facility's SICR line. R7 sets the stage of every grade slice in each projection year. Every step after R7 reads that stage and never recomputes it. R1 and R11 have no stage logic.</p>
+    </div>
+
+    <ol class="flow">
+      <li>
+        <div class="fid once">O3</div>
+        <div class="fbody">
+          <div class="fhead"><h3>Generate the synthetic book <code>foundation/synth/</code></h3><span class="role builds">builds consistent inputs</span></div>
+          <p>Gives each facility an origination grade and a current grade, chosen so that the SICR rule returns its target opening stage (SYN-PAR-08, design D3). It also writes <code>dpd</code>, <code>watchlist</code> and <code>forborne</code> to agree with that stage: no S1 facility is 30+ days past due, on the watchlist or forborne.</p>
+          <p class="where">foundation/synth/generate.py:384–414</p>
+        </div>
+      </li>
+      <li>
+        <div class="fid">R2</div>
+        <div class="fbody">
+          <div class="fhead"><h3>Load inputs <code>ingest/</code></h3><span class="role">loads stage fields</span></div>
+          <p>Reads <code>ifrs_stage</code>, <code>current_grade</code>, <code>origination_grade</code>, the obligor's <code>regulatory_default</code>, and the three qualitative flags. Only schema and type checks happen here.</p>
+          <p class="where">src/stress/contracts/inputs.py:88–92</p>
+        </div>
+      </li>
+      <li class="key">
+        <div class="fid">R3</div>
+        <div class="fbody">
+          <div class="fhead"><h3>Validate and route <code>validate/</code></h3><span class="role checks">checks opening stage</span></div>
+          <p>The reported stage is kept, never overwritten. A facility that fails any check below is rejected with its commitment and opening provision, and the run continues.</p>
+          <ol class="checks">
+            <li>Stage is 1, 2 or 3. <span class="rc">INVALID_STAGE</span></li>
+            <li>S3 if and only if the current grade is D. <span class="rc">STAGE_GRADE_CONFLICT</span></li>
+            <li>The obligor's regulatory default flag agrees with S3 (DAT-04). <span class="rc">DEFAULT_STAGE_CONFLICT</span></li>
+            <li>POCI is outside v1. <span class="rc">POCI_NOT_IN_V1</span></li>
+            <li>For each performing facility, compute the SICR line: the first grade, going down the scale, whose lifetime TTC PD over the residual maturity at end-2026 is at least k times that of the origination grade. The rule's stage must equal the reported stage. <span class="rc">STAGE_GRADE_CONFLICT</span></li>
+            <li>Route S3 to the original S3 cohort and S1 and S2 to the performing route. The SICR line is stored on the portfolio as <code>sicr_rank</code>.</li>
+          </ol>
+          <p class="outcome">Current run: 10,000 accepted, 0 rejected. 9,669 performing, 331 original S3. Every accepted grade explains its stage.</p>
+          <p class="where">src/stress/validate/__init__.py:217, 226–227, 249–259, 321–356 · src/stress/validate/sicr.py</p>
+        </div>
+      </li>
+      <li>
+        <div class="fid">R4–R6</div>
+        <div class="fbody">
+          <div class="fhead"><h3>Scenarios, cash flows, parameters <code>scenario/ cashflows/ params/</code></h3><span class="role">feeds grade moves</span></div>
+          <p>R4 turns the scenario into a Z-score per segment, country and year. R6 shifts the TTC matrix with Z into the point-in-time matrix M(y). This is the only route by which the economy reaches stage: it moves grades, never the SICR line. R5 replaces a matured facility like for like, with the same grades and therefore the same stage and line (EXP-05, A6).</p>
+        </div>
+      </li>
+      <li class="key r7">
+        <div class="fid">R7</div>
+        <div class="fbody">
+          <div class="fhead"><h3>Project the year <code>projection/</code></h3><span class="role sets">sets stage</span><span class="loop">loops 2027 → 2029, per scenario</span></div>
+          <p>Closing grade slices = opening slices × M(y). Each performing slice then takes its stage from its grade and the facility's stored line:</p>
+          <dl class="eqs">
+            <dt><span class="st st-3">S3</span></dt><dd>grade = D</dd>
+            <dt><span class="st st-2">S2</span></dt><dd>grade rank ≥ sicr_rank</dd>
+            <dt><span class="st st-1">S1</span></dt><dd>otherwise</dd>
+          </dl>
+          <p>Exposure that reaches D becomes a new S3 cohort and keeps its entry year and origin stage (MIG-03). S3 slices go around the matrix. Stage flows are the sums of matrix cells on each side of the line, so S1↔S2 shares are outputs, not inputs, and default volumes come from one matrix only (MIG-04).</p>
+          <p class="where">src/stress/projection/kernels.py:46–50 · src/stress/projection/__init__.py:91–94, 114–123, 132–155</p>
+        </div>
+      </li>
+      <li>
+        <div class="fid">R8</div>
+        <div class="fbody">
+          <div class="fhead"><h3>Year-end provisions <code>ecl/</code></h3><span class="role">reads stage</span></div>
+          <p>S1 slices get 12-month ECL (bucket y+1). S2 slices get lifetime ECL to maturity. Original S3 gets the larger of GCA × LGD and its prior allowance; a new S3 cohort gets its flow × the LGD of its default year. Stage is taken from R7 and not recomputed.</p>
+          <p class="where">src/stress/ecl/__init__.py:225–260</p>
+        </div>
+      </li>
+      <li>
+        <div class="fid">R9–R10</div>
+        <div class="fbody">
+          <div class="fhead"><h3>Stock to flow, aggregate and report <code>accounting/ report/</code></h3><span class="role">reads stage</span></div>
+          <p>R9 checks every S3 slice from year to year and blocks the run if one disappears (a cure) or releases provision. R10 builds the stage migration report and reconciles the flows to the closing stage stocks for each scenario, year and portfolio.</p>
+          <p class="where">src/stress/accounting/__init__.py:57–75 · src/stress/report/__init__.py:97–131</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ============ RULE ============ -->
+  <section id="rule">
+    <h2><span class="kicker">R3 and R7</span>The SICR rule and its threshold</h2>
+    <div class="prose">
+      <p>The threshold for relative deterioration is k times the lifetime PD at the facility's origination grade. k is set per segment in <code>parameter_set.yaml</code> as <code>sicr_k</code>: 2.0 for consumer credit, 2.5 for mortgages, SME, commercial real estate and corporates, and 3.0 for general government and credit institutions. There is no absolute PD level. In grade terms the threshold is two notches below the origination grade for most facilities.</p>
+    </div>
+
+    <div class="rule-grid">
+      <div class="rulecard">
+        <h3>Stage of a grade slice</h3>
+        <dl class="eqs">
+          <dt><span class="st st-3">S3</span></dt><dd>if grade = D</dd>
+          <dt><span class="st st-2">S2</span></dt><dd>if PDlife(g, T) ≥ k × PDlife(g0, T)</dd>
+          <dt><span class="st st-1">S1</span></dt><dd>otherwise</dd>
+        </dl>
+        <ul class="defs">
+          <li><b>g0</b> the facility's origination grade.</li>
+          <li><b>T</b> the residual maturity at 31 Dec 2026, used for both PDs and never updated (A6).</li>
+          <li><b>PDlife</b> from powers of the segment's TTC matrix; a part year uses constant hazard (A7).</li>
+          <li><b>k</b> per segment, a test convention rather than an EBA threshold (MIG-05).</li>
+        </ul>
+      </div>
+      <div class="prose">
+        <p><b>What follows from it</b></p>
+        <ul class="props">
+          <li>The line is fixed per facility. Only rating moves change stage.</li>
+          <li>The line uses TTC PDs. A worse scenario raises S2 by pushing grades down, not by moving the line.</li>
+          <li>The rule is symmetric. A slice whose grade moves back above the line is S1 in that same year.</li>
+          <li>Stage belongs to a grade slice, not to a facility. After one projection year most facilities are spread over several grades and can be partly S1 and partly S2.</li>
+          <li>D never cures.</li>
+        </ul>
+      </div>
+    </div>
+
+    <figure>
+      <div class="tbl-wrap">
+        <table class="ladder">
+          <thead>
+            <tr>
+              <th>Grade</th>
+              <th class="num">Lifetime PD</th>
+              <th>
+                <div class="ticks" style="margin-top: 16px;">
+                  <span style="left: 0%;">0.1%</span>
+                  <span style="left: 33.33%;">1%</span>
+                  <span class="thr" style="left: 55.75%;">4.70%</span>
+                  <span style="left: 66.67%;">10%</span>
+                  <span style="left: 100%;">100%</span>
+                </div>
+              </th>
+              <th>Stage</th>
+            </tr>
+          </thead>
+          <tbody style="--thr: 55.75%;">
+            <tr><th scope="row">G1</th><td class="num">0.16%</td><td class="bar"><div class="track"><span class="b s1" style="--w: 6.44%;"></span></div></td><td><span class="st st-1">S1</span></td></tr>
+            <tr><th scope="row">G2</th><td class="num">0.36%</td><td class="bar"><div class="track"><span class="b s1" style="--w: 18.34%;"></span></div></td><td><span class="st st-1">S1</span></td></tr>
+            <tr><th scope="row">G3</th><td class="num">0.81%</td><td class="bar"><div class="track"><span class="b s1" style="--w: 30.35%;"></span></div></td><td><span class="st st-1">S1</span></td></tr>
+            <tr class="g0"><th scope="row">G4 <span class="note">g0</span></th><td class="num">1.88%</td><td class="bar"><div class="track"><span class="b s1" style="--w: 42.48%;"></span></div></td><td><span class="st st-1">S1</span></td></tr>
+            <tr><th scope="row">G5</th><td class="num">4.09%</td><td class="bar"><div class="track"><span class="b s1" style="--w: 53.73%;"></span></div></td><td><span class="st st-1">S1</span> <span class="note">below the line</span></td></tr>
+            <tr class="line"><th scope="row">G6</th><td class="num">8.52%</td><td class="bar"><div class="track"><span class="b s2" style="--w: 64.34%;"></span></div></td><td><span class="st st-2">S2</span> <span class="note">SICR line</span></td></tr>
+            <tr><th scope="row">G7</th><td class="num">15.06%</td><td class="bar"><div class="track"><span class="b s2" style="--w: 72.60%;"></span></div></td><td><span class="st st-2">S2</span></td></tr>
+            <tr><th scope="row">G8</th><td class="num">23.42%</td><td class="bar"><div class="track"><span class="b s2" style="--w: 78.98%;"></span></div></td><td><span class="st st-2">S2</span></td></tr>
+            <tr><th scope="row">G9</th><td class="num">38.84%</td><td class="bar"><div class="track"><span class="b s2" style="--w: 86.31%;"></span></div></td><td><span class="st st-2">S2</span></td></tr>
+            <tr><th scope="row">G10</th><td class="num">60.65%</td><td class="bar"><div class="track"><span class="b s2" style="--w: 92.76%;"></span></div></td><td><span class="st st-2">S2</span></td></tr>
+            <tr class="dflt"><th scope="row">D</th><td class="num">—</td><td class="note">default</td><td><span class="st st-3">S3</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figcaption>Worked example from the current input set: a residential mortgage (P01, k = 2.5) originated at G4, with an illustrative 5-year horizon. Lifetime PD at G4 is 1.88%, so the threshold is 2.5 × 1.88% = 4.70% (dashed line, log scale). G5 at 4.09% stays S1; G6 at 8.52% is the first S2 grade. This facility's SICR line sits two notches below its origination grade.</figcaption>
+    </figure>
+
+    <div class="two">
+      <div class="panel">
+        <h3>How many notches of downgrade move a facility to S2</h3>
+        <ul class="hbars">
+          <li><span class="lbl">1 notch</span><span class="tr"><i style="--w: 0.38%;"></i></span><span class="v">27 <small>0.3%</small></span></li>
+          <li><span class="lbl">2 notches</span><span class="tr"><i style="--w: 100%;"></i></span><span class="v">7,118 <small>73.6%</small></span></li>
+          <li><span class="lbl">3 notches</span><span class="tr"><i style="--w: 20.17%;"></i></span><span class="v">1,436 <small>14.9%</small></span></li>
+          <li><span class="lbl">4 notches</span><span class="tr"><i style="--w: 2.22%;"></i></span><span class="v">158 <small>1.6%</small></span></li>
+          <li class="none"><span class="lbl">No S2 grade</span><span class="tr"><i style="--w: 13.07%;"></i></span><span class="v">930 <small>9.6%</small></span></li>
+        </ul>
+        <p class="note" style="margin:0; font-size:13px; color: var(--muted);">Distance from origination grade to SICR line, for the 9,669 performing facilities, each with its own segment, k and residual maturity. Recomputed with the engine's own <code>sicr_rank</code>.</p>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>Segment</th><th class="num">k</th><th class="num">Performing</th><th class="num">S2 at open</th><th class="num">Median T</th><th class="num">No S2 grade</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>P01 Residential mortgages</td><td class="num">2.5</td><td class="num">3,920</td><td class="num">400</td><td class="num">20.8 y</td><td class="num">582</td></tr>
+            <tr><td>P02 Consumer credit</td><td class="num">2.0</td><td class="num">2,880</td><td class="num">450</td><td class="num">3.9 y</td><td class="num">216</td></tr>
+            <tr><td>P03 SME lending</td><td class="num">2.5</td><td class="num">1,425</td><td class="num">270</td><td class="num">4.7 y</td><td class="num">105</td></tr>
+            <tr><td>P04 Commercial real estate</td><td class="num">2.5</td><td class="num">470</td><td class="num">100</td><td class="num">6.5 y</td><td class="num">18</td></tr>
+            <tr><td>P05 Corporate lending</td><td class="num">2.5</td><td class="num">776</td><td class="num">96</td><td class="num">5.8 y</td><td class="num">9</td></tr>
+            <tr><td>P06 General government</td><td class="num">3.0</td><td class="num">119</td><td class="num">5</td><td class="num">8.7 y</td><td class="num">0</td></tr>
+            <tr><td>P06 Credit institutions</td><td class="num">3.0</td><td class="num">79</td><td class="num">3</td><td class="num">7.1 y</td><td class="num">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ NUMBERS ============ -->
+  <section id="numbers">
+    <h2><span class="kicker">Current run</span>What the rule produces</h2>
+    <div class="prose">
+      <p>Stage flows in the first projection year, and the stage stocks at each year-end, from run <code>20261017T2304Z-core-b559d9dd</code>. Total GCA stays at €11,000m throughout (static balance), so every move is a shift between stages. Figures in € million, rounded; cells may not add exactly.</p>
+    </div>
+    <div class="two">
+      <div class="tbl-wrap">
+        <table class="flowtbl">
+          <caption>Baseline 2027</caption>
+          <thead><tr><th>From \ to</th><th class="num">S1</th><th class="num">S2</th><th class="num">S3</th></tr></thead>
+          <tbody>
+            <tr><th scope="row"><span class="st st-1">S1</span></th><td class="num diag">9,002.7</td><td class="num hot">205.2</td><td class="num hot">59.7</td></tr>
+            <tr><th scope="row"><span class="st st-2">S2</span></th><td class="num hot">47.5</td><td class="num diag">1,261.0</td><td class="num hot">60.1</td></tr>
+            <tr><th scope="row"><span class="st st-3">S3</span></th><td class="num">—</td><td class="num">—</td><td class="num diag">363.8</td></tr>
+            <tr class="total"><th scope="row">Closing</th><td class="num">9,050.1</td><td class="num">1,466.2</td><td class="num">483.6</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tbl-wrap">
+        <table class="flowtbl">
+          <caption>Adverse 2027</caption>
+          <thead><tr><th>From \ to</th><th class="num">S1</th><th class="num">S2</th><th class="num">S3</th></tr></thead>
+          <tbody>
+            <tr><th scope="row"><span class="st st-1">S1</span></th><td class="num diag">8,512.3</td><td class="num hot">540.1</td><td class="num hot">215.1</td></tr>
+            <tr><th scope="row"><span class="st st-2">S2</span></th><td class="num hot">13.8</td><td class="num diag">1,194.9</td><td class="num hot">159.9</td></tr>
+            <tr><th scope="row"><span class="st st-3">S3</span></th><td class="num">—</td><td class="num">—</td><td class="num diag">363.8</td></tr>
+            <tr class="total"><th scope="row">Closing</th><td class="num">8,526.1</td><td class="num">1,735.0</td><td class="num">738.9</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="prose">
+      <p>In the adverse year S1→S2 is 2.6 times the baseline amount, S1→S3 is 3.6 times, and S2→S1 falls from €47.5m to €13.8m. All of this comes from the shifted matrix moving grades across fixed lines.</p>
+    </div>
+    <div class="tbl-wrap">
+      <table class="stocks">
+        <thead>
+          <tr><th rowspan="2">Year-end</th><th colspan="3" scope="colgroup" class="gap">Baseline</th><th colspan="3" scope="colgroup" class="gap">Adverse</th></tr>
+          <tr><th class="num gap">S1</th><th class="num">S2</th><th class="num">S3</th><th class="num gap">S1</th><th class="num">S2</th><th class="num">S3</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">2026 opening</th><td class="num gap">9,267.6</td><td class="num">1,368.6</td><td class="num">363.8</td><td class="num gap">9,267.6</td><td class="num">1,368.6</td><td class="num">363.8</td></tr>
+          <tr><th scope="row">2027</th><td class="num gap">9,050.1</td><td class="num">1,466.2</td><td class="num">483.6</td><td class="num gap">8,526.1</td><td class="num">1,735.0</td><td class="num">738.9</td></tr>
+          <tr><th scope="row">2028</th><td class="num gap">8,860.0</td><td class="num">1,539.3</td><td class="num">600.7</td><td class="num gap">7,855.4</td><td class="num">2,022.4</td><td class="num">1,122.2</td></tr>
+          <tr><th scope="row">2029</th><td class="num gap">8,687.7</td><td class="num">1,595.9</td><td class="num">716.5</td><td class="num gap">7,499.2</td><td class="num">2,140.4</td><td class="num">1,360.4</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ OPEN POINTS ============ -->
+  <section id="open">
+    <h2><span class="kicker">Observations</span>Observations and open points</h2>
+    <ol class="points">
+      <li>
+        <span class="n">1</span>
+        <div>
+          <h3>Qualitative triggers are off by design, and adding them is planned</h3>
+          <p>MIG-07 and design D3 leave out 30+ DPD, watchlist and forbearance for the synthetic books. MIG-05 and PD-06 expect a bank's SICR to use them and to keep them separate. The data does carry them, and O3 built them to agree with the opening stage: 432 S2 facilities are 30–89 days past due, 509 are on the watchlist and 143 are forborne, and no S1 facility has any of the three. So leaving them out changes nothing at end-2026. They are not projected, so they play no part in 2027–2029.</p>
+          <p>The task "Qualitative SICR triggers" in <code>TODO.md</code> adds all three. The input data has to carry them as checked inputs that can trigger S2 on their own, not as a copy of the stage. The task also covers the design change it needs (MIG-07, D3) and how the flags behave over 2027–2029.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">2</span>
+        <div>
+          <h3>930 facilities can never reach S2</h3>
+          <p>For 930 performing facilities (€417.7m GCA, 3.9% of performing GCA, all S1 and all originated at G6 or worse), even G10's lifetime PD is below k times the lifetime PD at origination. The relative test cannot fire, so they can only move from S1 straight to S3. 582 of them are P01 mortgages with a median 24 years to maturity, where lifetime PDs of all grades come close together. Nothing else catches them, since no absolute PD level or DPD backstop is in use. The planned qualitative triggers would give them a route to S2.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">3</span>
+        <div>
+          <h3>SICR horizon awaits the owner</h3>
+          <p>Both lifetime PDs use the residual maturity at end-2026 and keep it for the whole projection (assumption A6). This keeps the line fixed as MIG-07 asks, but conflict C6 notes the tension with PD-06's remaining-life wording. The owner should confirm.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">4</span>
+        <div>
+          <h3>k values are proposed, and AT-48 has no oracle numbers</h3>
+          <p>k comes from parameter set <code>SYN-PS-0.1-proposed</code>, status PROPOSED. AT-48 proves the rule without expected numbers; its stage per grade stays OPEN until approved (A10).</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section id="sources">
+    <h2><span class="kicker">Sources</span>Where each statement comes from</h2>
+    <ul class="sources">
+      <li><code>src/stress/validate/__init__.py</code><span>R3 stage checks (217, 226–227, 249–259), SICR line and stage check (321–338), routing (352–356)</span></li>
+      <li><code>src/stress/validate/sicr.py</code><span>Lifetime TTC PD per grade and <code>sicr_rank</code></span></li>
+      <li><code>src/stress/projection/kernels.py</code><span><code>stage_of_rank</code> (46–50)</span></li>
+      <li><code>src/stress/projection/__init__.py</code><span>R7 stage grid (91–94), stage flows (114–123), new S3 cohorts (132–143), S3 bypass (152–155)</span></li>
+      <li><code>src/stress/ecl/__init__.py</code><span>R8 12-month vs lifetime ECL by stage (225–260)</span></li>
+      <li><code>src/stress/accounting/__init__.py</code><span>R9 no-release and no-cure check on S3 slices (57–75)</span></li>
+      <li><code>foundation/synth/generate.py</code><span>O3 opening DPD, watchlist and forbearance flags (384–414)</span></li>
+      <li><code>inputs/514ed0e86e3dc760/parameter_set.yaml</code><span>Master scale, <code>sicr_k</code> per segment</span></li>
+      <li><code>docs/spec/…Requirements.md</code><span>MIG-03–MIG-08, PD-05, PD-06, DAT-04, EXP-02, EXP-05, REG-05, SYN-PAR-08</span></li>
+      <li><code>docs/stress-engine-code-flow.html</code><span>Design decisions D2 (SICR rule) and D3 (opening grades)</span></li>
+      <li><code>docs/assumptions.md</code><span>A6, A7, A10, C6</span></li>
+      <li><code>TODO.md</code><span>Planned task: qualitative SICR triggers (30+ DPD, watchlist, forbearance)</span></li>
+      <li><code>runs/20261017T2304Z-core-b559d9dd/</code><span><code>run.log</code>, <code>stage_flows.parquet</code>, <code>slices.parquet</code>; notch counts recomputed from its <code>data/</code> with the engine's own functions</span></li>
+    </ul>
+  </section>
+
+  <footer>Read from the code at commit a171bca, 18 October 2026. Kept in <code>docs/staging/</code>.</footer>
+</div>

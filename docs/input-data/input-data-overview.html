@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Input Datasets Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Palette and type follow docs/stress-engine-code-flow.html and docs/pd-curves/pd-curve-flow.html.
+   Chart colours follow the notebooks: stages light to dark blue, baseline blue, adverse orange. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #e9edf2;
+  --fg: #17202b;
+  --muted: #566272;
+  --line: #d0d7e0;
+  --run: #2652c4;
+  --run-soft: #e8eefb;
+  --run-line: #9cb1e8;
+  --once: #9a5900;
+  --once-soft: #faf0df;
+  --once-line: #e0b26f;
+  --frozen: #4b5665;
+  --frozen-soft: #e6eaef;
+  --ok: #276f50;
+  --ok-soft: #e3f3ea;
+  --s1: #86b6ef;
+  --s2: #2a78d6;
+  --s3: #104281;
+  --base: #2a78d6;
+  --adv: #eb6834;
+  --heat: #104281;
+  --heat-ink: #ffffff;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+    --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+    --frozen: #b2bcc8; --frozen-soft: #212932;
+    --ok: #74d3a3; --ok-soft: #16302a;
+    --s1: #256abf; --s2: #5598e7; --s3: #b7d3f6;
+    --base: #3987e5; --adv: #d95926;
+    --heat: #9ec5f4; --heat-ink: #0e1319;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+  --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+  --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+  --frozen: #b2bcc8; --frozen-soft: #212932;
+  --ok: #74d3a3; --ok-soft: #16302a;
+  --s1: #256abf; --s2: #5598e7; --s3: #b7d3f6;
+  --base: #3987e5; --adv: #d95926;
+  --heat: #9ec5f4; --heat-ink: #0e1319;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
+.page {
+  max-width: 1080px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: grid; gap: 40px;
+}
+code, .mono { font-family: var(--mono); font-size: 0.9em; }
+p code, li code, td code, dd code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--run); }
+
+/* Masthead */
+.masthead { display: grid; gap: 16px; }
+.masthead > * { margin: 0; }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.04; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { max-width: 70ch; font-size: 1.04rem; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 12px 0 0; margin: 0; list-style: none; border-top: 1px solid var(--line); font: 13px/1.4 var(--mono); }
+.toc a { display: inline-block; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg); text-decoration: none; background: var(--surface); }
+.toc a:hover, .toc a:focus-visible { border-color: var(--run-line); color: var(--run); }
+
+/* Stat tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 2px; align-content: start; }
+.tile > * { margin: 0; }
+.tile .lab { font-size: 13px; color: var(--muted); }
+.tile .val { font: 600 1.7rem/1.15 var(--sans); letter-spacing: -0.01em; }
+.tile .sub { font-size: 13px; color: var(--muted); }
+
+/* Sections */
+section { display: grid; gap: 16px; scroll-margin-top: 16px; }
+section > * { margin: 0; }
+h2 { font: 700 1.6rem/1.15 var(--display); text-wrap: balance; }
+h2 .num { font: 600 0.8em var(--mono); color: var(--muted); margin-right: 10px; }
+h3 { font: 700 1.15rem/1.25 var(--display); margin: 0; }
+.intro { max-width: 72ch; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.card > * { margin: 0; }
+.cap { font-size: 13px; color: var(--muted); max-width: 72ch; }
+.note { background: var(--run-soft); border-radius: 6px; padding: 10px 13px; font-size: 14px; }
+.note b { font: 600 11px/1.4 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--run); margin-right: 6px; }
+.warn { background: var(--once-soft); border: 1px dashed var(--once-line); border-radius: 6px; padding: 10px 13px; font-size: 14px; }
+.warn b { font: 600 11px/1.4 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--once); margin-right: 6px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+
+/* Dataset header */
+.ds-head { display: grid; gap: 10px; }
+.ds-head > * { margin: 0; }
+.ds-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.ds-title h2 { font-family: var(--mono); font-weight: 600; font-size: 1.45rem; }
+.chip { font: 12px/1.5 var(--mono); color: var(--frozen); background: var(--frozen-soft); border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; white-space: nowrap; }
+.chip.yaml { color: var(--once); background: var(--once-soft); border-color: var(--once-line); }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 18px; font-size: 14px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+
+/* Tables */
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th { font: 600 12px/1.3 var(--sans); color: var(--muted); text-align: left; padding: 6px 10px 7px; border-bottom: 1px solid var(--line); vertical-align: bottom; }
+td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th:first-child, td:first-child { padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.total td { font-weight: 600; border-bottom: 0; border-top: 1.5px solid var(--muted); }
+tr.grp td { font: 600 11px/1.4 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding-top: 16px; }
+td.col { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+td.dim { color: var(--muted); }
+.cols td:nth-child(2) { min-width: 220px; }
+.cols td:nth-child(3) { min-width: 240px; }
+.unused { font: 600 10.5px/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--once); border: 1px solid var(--once-line); background: var(--once-soft); border-radius: 4px; padding: 2px 5px; margin-left: 4px; white-space: nowrap; }
+table.wide { min-width: 860px; }
+table.mid { min-width: 620px; }
+
+/* Relationship diagram */
+.er-wrap { overflow-x: auto; }
+.er { display: block; width: 100%; min-width: 760px; height: auto; }
+.er .box { fill: var(--frozen-soft); stroke: var(--frozen); stroke-width: 1.5; }
+.er .box.y { fill: var(--once-soft); stroke: var(--once-line); }
+.er .box.hub { fill: var(--surface); stroke: var(--run); stroke-width: 2; }
+.er .name { font: 600 15px var(--mono); fill: var(--fg); }
+.er .meta { font: 12.5px var(--sans); fill: var(--muted); }
+.er .link { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.er .lab { font: 12px var(--mono); fill: var(--muted); }
+.er .lab.k { fill: var(--fg); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; list-style: none; padding: 0; margin: 0; font-size: 13px; color: var(--muted); }
+.legend li { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.sw.pq { background: var(--frozen-soft); border: 1.5px solid var(--frozen); }
+.sw.ym { background: var(--once-soft); border: 1.5px solid var(--once-line); }
+.sw.hub { background: var(--surface); border: 2px solid var(--run); }
+.sw.s1 { background: var(--s1); } .sw.s2 { background: var(--s2); } .sw.s3 { background: var(--s3); }
+.key-line { width: 18px; height: 0; border-top: 2px solid; flex: none; position: relative; }
+.key-line::after { content: ""; position: absolute; left: 5px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.key-line.base { color: var(--base); border-color: var(--base); }
+.key-line.adv { color: var(--adv); border-color: var(--adv); }
+
+/* Horizontal stacked bars: GCA by portfolio and stage */
+.hbar { display: grid; gap: 4px; }
+.hb-row { display: grid; grid-template-columns: 236px minmax(0, 1fr); align-items: center; gap: 12px; padding: 3px 0; border-radius: 6px; cursor: default; }
+.hb-row:hover, .hb-row:focus-visible { background: var(--surface-2); outline: none; }
+.hb-lab { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-lab b { font-family: var(--mono); font-weight: 600; margin-right: 6px; }
+.hb-track { position: relative; height: 28px; display: flex; align-items: center; gap: 8px;
+  background: linear-gradient(to right, var(--line) 1px, transparent 1px) 0 0 / 22% 100% repeat-x; }
+.hb-bar { height: 22px; display: flex; gap: 2px; min-width: 2px; flex: none; }
+.hb-bar span { flex-basis: 0; min-width: 0; }
+.hb-bar span:last-child { border-radius: 0 4px 4px 0; }
+.hb-bar .s1 { background: var(--s1); } .hb-bar .s2 { background: var(--s2); } .hb-bar .s3 { background: var(--s3); }
+.hb-val { font: 13px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--fg); white-space: nowrap; }
+.hb-axis { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 12px; }
+.hb-ticks { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
+.hb-ticks span { position: absolute; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
+.hb-ticks span:first-child { transform: none; }
+
+/* Heatmap */
+table.heat td.h { text-align: center; font-variant-numeric: tabular-nums; min-width: 48px; border: 2px solid var(--surface); padding: 5px 4px;
+  background: color-mix(in oklab, var(--heat) calc(var(--v, 0) * 100%), var(--surface)); }
+table.heat td.h.inv { color: var(--heat-ink); }
+table.heat td.h.z { color: var(--line); }
+table.heat th.c { text-align: center; }
+
+/* Range bars inside tables */
+.rng { position: relative; height: 20px; min-width: 200px; }
+.rng .tr { position: absolute; left: 0; right: 0; top: 9px; border-top: 1px solid var(--line); }
+.rng .iq { position: absolute; top: 4px; height: 12px; background: var(--s1); border-radius: 3px; }
+.rng .md { position: absolute; top: 2px; height: 16px; width: 2px; background: var(--s3); }
+.rng .rf { position: absolute; top: 0; width: 8px; height: 8px; margin-left: -4px; background: var(--fg); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.rng-axis { position: relative; height: 16px; min-width: 200px; font: 400 11.5px/16px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rng-axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.rng-axis span:first-child { transform: none; }
+.rng-axis span:last-child { transform: translateX(-100%); }
+.sw.iq { background: var(--s1); }
+.sw.md { width: 2px; background: var(--s3); border-radius: 0; height: 14px; }
+.sw.rf { width: 10px; height: 9px; background: var(--fg); clip-path: polygon(0 0, 100% 0, 50% 100%); border-radius: 0; }
+
+/* Scenario small multiples */
+.sm { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.sm figure { margin: 0; display: grid; gap: 4px; min-width: 0; }
+.sm figcaption { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.sm figcaption span { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.sm svg { display: block; width: 100%; height: auto; overflow: visible; }
+.sm .grid { stroke: var(--line); stroke-width: 1; }
+.sm .zero { stroke: var(--muted); stroke-width: 1; }
+.sm .tick { font: 12px var(--sans); fill: var(--muted); }
+.sm .end { font: 600 12.5px var(--sans); fill: var(--fg); }
+.sm .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sm .dot { stroke: var(--surface); stroke-width: 2; }
+.sm .hair { stroke: var(--muted); stroke-width: 1; opacity: 0; }
+.sm .hit { fill: transparent; cursor: default; }
+.sm .hit:focus { outline: none; }
+
+/* Master scale strip */
+.scale { display: grid; grid-template-columns: repeat(11, minmax(56px, 1fr)); gap: 2px; min-width: 640px; }
+.scale div { background: var(--surface-2); padding: 6px 4px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.scale div:first-child { border-radius: 6px 0 0 6px; }
+.scale div:last-child { border-radius: 0 6px 6px 0; background: var(--frozen-soft); }
+.scale b { display: block; font: 600 12.5px var(--mono); }
+
+/* Tooltip */
+#tip { position: fixed; z-index: 10; pointer-events: none; max-width: 300px; background: var(--fg); color: var(--bg); font-size: 12.5px; line-height: 1.45; padding: 7px 10px; border-radius: 6px; white-space: pre-line; opacity: 0; transition: opacity 0.08s; font-variant-numeric: tabular-nums; }
+#tip.on { opacity: 1; }
+
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 6px; }
+footer p { margin: 0; max-width: 84ch; }
+
+@media (max-width: 640px) {
+  .hb-row, .hb-axis { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .hb-axis > div:first-child { display: none; }
+  .hb-lab { white-space: normal; }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .facts dd { margin-bottom: 6px; }
+  .card { padding: 14px 14px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Stress engine · input set 514ed0e86e3dc760 · read by R2</p>
+    <h1>The input datasets: what they hold</h1>
+    <p class="lede">A run starts from one input set: five Parquet tables and two YAML files, written once by the one-off steps O2–O4 and never edited afterwards. Together they describe a synthetic €11bn book of EUR loans at amortised cost on 31 December 2026, the rating matrices and parameters that move it, and the baseline and adverse economies of 2027–2029.</p>
+    <ul class="toc" aria-label="Contents">
+      <li><a href="#set">Input set</a></li>
+      <li><a href="#links">How they join</a></li>
+      <li><a href="#book">Book by portfolio</a></li>
+      <li><a href="#facilities">facilities</a></li>
+      <li><a href="#obligors">obligors</a></li>
+      <li><a href="#commitments">commitments</a></li>
+      <li><a href="#opening_provisions">opening_provisions</a></li>
+      <li><a href="#ttc_pd_matrix">ttc_pd_matrix</a></li>
+      <li><a href="#scenarios">scenarios</a></li>
+      <li><a href="#parameter_set">parameter_set</a></li>
+    </ul>
+  </header>
+
+  <div class="tiles" aria-label="Key figures">
+    <div class="tile"><p class="lab">Gross carrying amount</p><p class="val">€11.0bn</p><p class="sub">10,000 facilities, all EUR, all AC</p></div>
+    <div class="tile"><p class="lab">Obligors</p><p class="val">8,320</p><p class="sub">in 8,282 connected groups, 6 countries</p></div>
+    <div class="tile"><p class="lab">Undrawn commitments</p><p class="val">€2.0bn</p><p class="sub">on 931 revolvers, CCF 50%</p></div>
+    <div class="tile"><p class="lab">Stage 1 share of GCA</p><p class="val">84.3%</p><p class="sub">stage 2 12.4%, stage 3 3.3%</p></div>
+    <div class="tile"><p class="lab">Opening allowance</p><p class="val">€261.0m</p><p class="sub">2.37% of GCA, plus €17.6m off-balance</p></div>
+    <div class="tile"><p class="lab">Scenario values</p><p class="val">180</p><p class="sub">2 scenarios × 5 variables × 6 countries × 3 years</p></div>
+  </div>
+
+  <!-- 1 · The input set -->
+  <section id="set">
+    <h2><span class="num">1</span>The input set</h2>
+    <p class="intro">The folder is named after the first 16 characters of the set's SHA-256 content hash. <code>manifest.json</code> records every file's row count and hash plus control totals, so R2 can refuse a file that has changed. <code>approval.json</code> records the owner's sign-off.</p>
+    <div class="two">
+      <div class="card">
+        <h3>Provenance</h3>
+        <dl class="facts">
+          <dt>Folder</dt><dd><code>inputs/514ed0e86e3dc760/</code></dd>
+          <dt>Written by</dt><dd><code>foundation.synth</code> 0.1.0 (O2–O4), seed 20261231</dd>
+          <dt>Requirements</dt><dd>version 1.3</dd>
+          <dt>Parameter set</dt><dd><code>SYN-PS-0.1-proposed</code>, status PROPOSED</dd>
+          <dt>Data status</dt><dd>SYNTHETIC: no real bank data</dd>
+          <dt>Owner approval</dt><dd>PENDING_OWNER_APPROVAL</dd>
+          <dt>Snapshot date</dt><dd>2026-12-31</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Conventions in every table</h3>
+        <dl class="facts">
+          <dt>Amounts</dt><dd>EUR, unrounded</dd>
+          <dt>Rates</dt><dd>decimal fractions; the scenario file alone states percent, and R2 converts it</dd>
+          <dt>Dates</dt><dd>ISO 8601 strings</dd>
+          <dt>Blank values</dt><dd>a <code>&lt;column&gt;__status</code> companion says <code>supplied</code> or <code>not_applicable</code>, so a blank is never mistaken for a missing value</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <h3>The seven datasets</h3>
+      <div class="scroll">
+        <table class="wide">
+          <thead><tr><th>Dataset</th><th>Format</th><th class="n">Rows</th><th class="n">Columns</th><th>Key</th><th>One row is</th><th>Read by</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><a href="#facilities">facilities</a></td><td>Parquet</td><td class="n">10,000</td><td class="n">38</td><td class="col">facility_id</td><td>one loan, bond or credit line</td><td>R3 validates and routes; R5–R9 project it</td></tr>
+            <tr><td class="col"><a href="#obligors">obligors</a></td><td>Parquet</td><td class="n">8,320</td><td class="n">14</td><td class="col">obligor_id</td><td>one borrower</td><td>R3 joins it to each facility; its country picks the scenario path</td></tr>
+            <tr><td class="col"><a href="#commitments">commitments</a></td><td>Parquet</td><td class="n">931</td><td class="n">9</td><td class="col">commitment_id</td><td>the undrawn part of one revolver</td><td>R3 limit check; undrawn × CCF in EAD (R6)</td></tr>
+            <tr><td class="col"><a href="#opening_provisions">opening_provisions</a></td><td>Parquet</td><td class="n">10,000</td><td class="n">14</td><td class="col">facility_id</td><td>the frozen opening allowance of one facility</td><td>R9: the opening side of the year-one charge</td></tr>
+            <tr><td class="col"><a href="#ttc_pd_matrix">ttc_pd_matrix</a></td><td>Parquet</td><td class="n">847</td><td class="n">7</td><td class="col">segment, from, to</td><td>one cell of a one-year rating matrix</td><td>R3 SICR line; R6 TTC → PiT matrices</td></tr>
+            <tr><td class="col"><a href="#scenarios">scenarios</a></td><td>YAML</td><td class="n">180</td><td class="n">11</td><td class="col">scenario, variable, year</td><td>one value of one variable, country and year</td><td>R4: Z-scores</td></tr>
+            <tr><td class="col"><a href="#parameter_set">parameter_set</a></td><td>YAML</td><td class="n">–</td><td class="n">–</td><td class="col">parameter_set_id</td><td>a nested document, one per input set</td><td>R3–R8: Z weights, ρ, k, w, CPR, CCF, horizon, variants</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">Columns include the <code>__status</code> companions. The scenario row count is the number of values; the file also holds 24 starting values for 2026.</p>
+    </div>
+  </section>
+
+  <!-- 2 · How they join -->
+  <section id="links">
+    <h2><span class="num">2</span>How the datasets join</h2>
+    <p class="intro"><code>facilities</code> is the hub. Every other table either hangs off a facility or is picked by one of its attributes: the obligor's country picks the scenario path, and the facility's segment picks the rating matrix and the parameters.</p>
+    <div class="card">
+      <div class="er-wrap">
+        <svg class="er" viewBox="0 0 960 362" role="img" aria-label="Relationship map. obligors (8,320 rows) joins facilities (10,000 rows) one to many on obligor_id. facilities joins commitments (931 rows) one to zero-or-one and opening_provisions (10,000 rows) one to one on facility_id. The obligor's country selects the path in scenarios. The facility's segment selects its matrix in ttc_pd_matrix and its parameters in parameter_set. parameter_set names the scenario variables each segment's Z-score uses.">
+          <!-- links -->
+          <path class="link" d="M250,85 H365"/>
+          <text class="lab k" x="307" y="77" text-anchor="middle">1 : n</text>
+          <text class="lab" x="307" y="102" text-anchor="middle">obligor_id</text>
+
+          <path class="link" d="M595,56 H690 V46 H710"/>
+          <text class="lab k" x="603" y="49">1 : 0..1</text>
+          <text class="lab" x="603" y="71">facility_id</text>
+
+          <path class="link" d="M595,114 H690 V138 H710"/>
+          <text class="lab k" x="603" y="107">1 : 1</text>
+          <text class="lab" x="603" y="129">facility_id</text>
+
+          <path class="link" d="M135,130 V236"/>
+          <text class="lab" x="145" y="187">country</text>
+
+          <path class="link" d="M480,130 V236"/>
+          <text class="lab" x="490" y="187">segment</text>
+
+          <path class="link" d="M560,130 V205 H825 V236"/>
+          <text class="lab" x="606" y="198">segment</text>
+
+          <path class="link" d="M135,316 V336 H825 V316"/>
+          <text class="lab" x="480" y="355" text-anchor="middle">variable: each segment's Z drivers</text>
+
+          <!-- boxes -->
+          <rect class="box" x="20" y="40" width="230" height="90" rx="8"/>
+          <text class="name" x="36" y="68">obligors</text>
+          <text class="meta" x="36" y="91">8,320 rows · Parquet</text>
+          <text class="meta" x="36" y="111">one per borrower</text>
+
+          <rect class="box hub" x="365" y="40" width="230" height="90" rx="8"/>
+          <text class="name" x="381" y="68">facilities</text>
+          <text class="meta" x="381" y="91">10,000 rows · Parquet</text>
+          <text class="meta" x="381" y="111">one per loan: the hub</text>
+
+          <rect class="box" x="710" y="8" width="230" height="76" rx="8"/>
+          <text class="name" x="726" y="34">commitments</text>
+          <text class="meta" x="726" y="56">931 rows · Parquet</text>
+          <text class="meta" x="726" y="74">undrawn part of a revolver</text>
+
+          <rect class="box" x="710" y="100" width="230" height="76" rx="8"/>
+          <text class="name" x="726" y="126">opening_provisions</text>
+          <text class="meta" x="726" y="148">10,000 rows · Parquet</text>
+          <text class="meta" x="726" y="166">frozen opening allowance</text>
+
+          <rect class="box y" x="20" y="236" width="230" height="80" rx="8"/>
+          <text class="name" x="36" y="263">scenarios</text>
+          <text class="meta" x="36" y="285">180 values · YAML</text>
+          <text class="meta" x="36" y="304">path per scenario and country</text>
+
+          <rect class="box" x="365" y="236" width="230" height="80" rx="8"/>
+          <text class="name" x="381" y="263">ttc_pd_matrix</text>
+          <text class="meta" x="381" y="285">847 rows · Parquet</text>
+          <text class="meta" x="381" y="304">7 segments × 11 × 11 cells</text>
+
+          <rect class="box y" x="710" y="236" width="230" height="80" rx="8"/>
+          <text class="name" x="726" y="263">parameter_set</text>
+          <text class="meta" x="726" y="285">nested · YAML</text>
+          <text class="meta" x="726" y="304">per-segment parameters</text>
+        </svg>
+      </div>
+      <ul class="legend">
+        <li><span class="sw hub"></span>Hub table</li>
+        <li><span class="sw pq"></span>Parquet table</li>
+        <li><span class="sw ym"></span>YAML document</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3 · Book by portfolio -->
+  <section id="book">
+    <h2><span class="num">3</span>The book by portfolio</h2>
+    <p class="intro">Six portfolios with the names of §5.1 of the requirements. Each facility also carries a reference segment, which selects its rating matrix and parameters. Segments match portfolios one to one, except P06, which splits into general governments (<code>P06_GG</code>) and credit institutions (<code>P06_CI</code>).</p>
+    <div class="card">
+      <h3>Gross carrying amount by portfolio and stage, € million</h3>
+      <ul class="legend" aria-label="Stages">
+        <li><span class="sw s1"></span>Stage 1</li>
+        <li><span class="sw s2"></span>Stage 2</li>
+        <li><span class="sw s3"></span>Stage 3</li>
+      </ul>
+      <div class="hbar" id="gcaChart" role="group" aria-label="Horizontal stacked bars of GCA by portfolio and stage. P05 corporate lending 4,000; P06 sovereigns and credit institutions 2,240; P04 commercial real estate 2,000; P03 SME lending 1,500; P01 residential mortgages 1,200; P02 consumer credit 60 € million. The table below gives every value."></div>
+      <p class="cap">Hover a row for the stage split. The table below and the coverage table in <a href="#opening_provisions">opening_provisions</a> give the same numbers.</p>
+    </div>
+    <div class="card">
+      <h3>Key figures per portfolio</h3>
+      <div class="scroll">
+        <table class="wide">
+          <thead><tr>
+            <th>Portfolio</th><th>Products</th><th class="n">Facilities</th><th class="n">Obligors</th><th class="n">GCA €m</th><th class="n">Share</th><th class="n">Undrawn €m</th><th class="n">IRB share</th><th class="n">Avg GCA</th><th class="n">EIR</th><th class="n">TTC LGD</th><th class="n">Floating</th><th class="n">Maturity, y</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><b class="mono">P01</b> Residential mortgages</td><td>mortgage</td><td class="n">4,000</td><td class="n">3,640</td><td class="n">1,200.0</td><td class="n">10.9%</td><td class="n">–</td><td class="n">60%</td><td class="n">€300k</td><td class="n">3.01%</td><td class="n">15.0%</td><td class="n">27.7%</td><td class="n">20.8</td></tr>
+            <tr><td><b class="mono">P02</b> Consumer credit</td><td>consumer loan</td><td class="n">3,000</td><td class="n">3,000</td><td class="n">60.0</td><td class="n">0.5%</td><td class="n">–</td><td class="n">40%</td><td class="n">€20k</td><td class="n">8.99%</td><td class="n">74.7%</td><td class="n">0.0%</td><td class="n">3.9</td></tr>
+            <tr><td><b class="mono">P03</b> SME lending</td><td>term loan, revolver</td><td class="n">1,500</td><td class="n">881</td><td class="n">1,500.0</td><td class="n">13.6%</td><td class="n">600.0</td><td class="n">50%</td><td class="n">€1.0m</td><td class="n">5.02%</td><td class="n">40.6%</td><td class="n">59.9%</td><td class="n">4.6</td></tr>
+            <tr><td><b class="mono">P04</b> Commercial real estate</td><td>term loan</td><td class="n">500</td><td class="n">309</td><td class="n">2,000.0</td><td class="n">18.2%</td><td class="n">–</td><td class="n">70%</td><td class="n">€4.0m</td><td class="n">4.51%</td><td class="n">34.4%</td><td class="n">47.5%</td><td class="n">6.5</td></tr>
+            <tr><td><b class="mono">P05</b> Corporate lending</td><td>term loan, revolver</td><td class="n">800</td><td class="n">447</td><td class="n">4,000.0</td><td class="n">36.4%</td><td class="n">1,400.0</td><td class="n">70%</td><td class="n">€5.0m</td><td class="n">4.01%</td><td class="n">34.4%</td><td class="n">60.9%</td><td class="n">5.8</td></tr>
+            <tr><td><b class="mono">P06</b> Sovereigns and credit institutions</td><td>debt security</td><td class="n">200</td><td class="n">43</td><td class="n">2,240.0</td><td class="n">20.4%</td><td class="n">–</td><td class="n">0%</td><td class="n">€11.2m</td><td class="n">2.39%</td><td class="n">31.9%</td><td class="n">6.6%</td><td class="n">7.9</td></tr>
+            <tr class="total"><td>Total</td><td></td><td class="n">10,000</td><td class="n">8,320</td><td class="n">11,000.0</td><td class="n">100%</td><td class="n">2,000.0</td><td class="n">51.8%</td><td class="n">€1.1m</td><td class="n">3.83%</td><td class="n">32.8%</td><td class="n">43.3%</td><td class="n">6.25</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">EIR, TTC LGD and the floating share are weighted by GCA. Maturity is the median residual maturity at the snapshot date. No obligor appears in two portfolios.</p>
+    </div>
+  </section>
+
+  <!-- 4 · facilities -->
+  <section id="facilities">
+    <div class="ds-head">
+      <div class="ds-title"><h2>facilities</h2><span class="chip">Parquet</span><span class="chip">10,000 rows × 38 columns</span><span class="chip">key facility_id</span></div>
+      <p class="intro">One row per loan, bond or credit line, each belonging to one obligor. It carries everything the projection needs about the exposure itself: where it is routed, how much is drawn, the rate and maturity that set its cash flows, and the grades that set its stage.</p>
+    </div>
+    <div class="card">
+      <h3>Columns</h3>
+      <div class="scroll">
+        <table class="cols mid">
+          <thead><tr><th>Column</th><th>What it holds</th><th>In this set</th></tr></thead>
+          <tbody>
+            <tr class="grp"><td colspan="3">Identity and routing</td></tr>
+            <tr><td class="col">facility_id</td><td>key</td><td>F00001 … F10000</td></tr>
+            <tr><td class="col">obligor_id</td><td>the borrower; joins to <code>obligors</code></td><td>8,320 distinct; 1,246 obligors have 2–8 facilities</td></tr>
+            <tr><td class="col">entity_id</td><td>reporting entity</td><td>NLBANK on every row</td></tr>
+            <tr><td class="col">portfolio</td><td>P01–P06</td><td>see <a href="#book">section 3</a></td></tr>
+            <tr><td class="col">segment</td><td>reference segment: picks the rating matrix and the parameters</td><td>7 values; P06 is 120 P06_GG and 80 P06_CI</td></tr>
+            <tr><td class="col">product</td><td>product type</td><td>mortgage 4,000 · consumer_loan 3,000 · term_loan 1,869 · revolver 931 · debt_security 200</td></tr>
+            <tr><td class="col">regulatory_approach</td><td>IRB or STA</td><td>IRB 5,209 · STA 4,791; IRB is 51.8% of GCA</td></tr>
+            <tr><td class="col">regulatory_class</td><td>regulatory exposure class</td><td>10 classes, table below</td></tr>
+            <tr class="grp"><td colspan="3">Accounting</td></tr>
+            <tr><td class="col">ifrs_stage</td><td>IFRS 9 stage at the snapshot</td><td>1: 8,345 · 2: 1,324 · 3: 331</td></tr>
+            <tr><td class="col">poci</td><td>purchased or originated credit-impaired</td><td>false on every row</td></tr>
+            <tr><td class="col">accounting_category</td><td>measurement category</td><td>AC (amortised cost) on every row</td></tr>
+            <tr><td class="col">currency</td><td>currency</td><td>EUR on every row</td></tr>
+            <tr><td class="col">snapshot_date</td><td>reference date</td><td>2026-12-31</td></tr>
+            <tr class="grp"><td colspan="3">Amounts, EUR</td></tr>
+            <tr><td class="col">principal</td><td>drawn principal</td><td>€2.1k – €71.3m, median €249k</td></tr>
+            <tr><td class="col">accrued_interest</td><td>interest accrued, not yet paid</td><td>€0.03 – €550k, median €771</td></tr>
+            <tr><td class="col">accrued_in_gca</td><td>whether accrued interest is already inside GCA</td><td>true on every row</td></tr>
+            <tr><td class="col">gca</td><td>gross carrying amount, accrued interest counted once</td><td>€11.0bn in total; €2.1k – €71.4m, median €250k</td></tr>
+            <tr><td class="col">contractual_limit</td><td>limit; principal + undrawn may not exceed it</td><td>€2.1k – €75.8m</td></tr>
+            <tr class="grp"><td colspan="3">Rate and schedule</td></tr>
+            <tr><td class="col">interest_rate</td><td>annual EIR: contractual interest and the discount rate</td><td>0.80% – 17.30%; GCA-weighted 3.83%</td></tr>
+            <tr><td class="col">rate_type</td><td>fixed or floating <span class="unused">not used</span></td><td>fixed 7,220 · floating 2,780. Every rate keeps its snapshot value through the projection</td></tr>
+            <tr><td class="col">residual_maturity</td><td>years from the snapshot</td><td>1.0 – 29.8, median 6.25</td></tr>
+            <tr><td class="col">repayment_profile</td><td>contractual profile <span class="unused">checked only</span></td><td>annuity 6,614 · bullet 2,447 · linear 939. R5 takes the profile from the run variant; the core run uses bullet for all</td></tr>
+            <tr><td class="col">origination_date</td><td>date the facility was granted</td><td>2016-12-31 – 2026-06-30</td></tr>
+            <tr class="grp"><td colspan="3">Credit risk</td></tr>
+            <tr><td class="col">current_grade</td><td>master-scale grade G1–G10, or D</td><td>D on 331 rows: exactly the stage-3 facilities</td></tr>
+            <tr><td class="col">origination_grade</td><td>grade when granted; with the current grade it sets the SICR test</td><td>G1–G10</td></tr>
+            <tr><td class="col">ttc_lgd</td><td>through-the-cycle LGD</td><td>5.2% – 92.9%; GCA-weighted 32.8%</td></tr>
+            <tr><td class="col">collateral_type</td><td>collateral, where there is any</td><td>residential_property 4,000 (P01); office 129 · residential_rental 126 · retail 123 · industrial 122 (P04); not applicable on 5,500</td></tr>
+            <tr><td class="col">ltv</td><td>loan to value</td><td>P01 and P04 only (4,500 rows): 0.36 – 1.08, median 0.73</td></tr>
+            <tr><td class="col">dscr</td><td>debt-service coverage ratio</td><td>P04 only (500 rows): 0.87 – 2.42, median 1.66</td></tr>
+            <tr class="grp"><td colspan="3">Status and history</td></tr>
+            <tr><td class="col">stage_entry_date</td><td>date the facility entered its current stage</td><td>on every row</td></tr>
+            <tr><td class="col">default_date</td><td>date of default</td><td>331 rows (stage 3): 2023-01-03 – 2026-12-27</td></tr>
+            <tr><td class="col">dpd</td><td>days past due <span class="unused">not used</span></td><td>0 – 360</td></tr>
+            <tr><td class="col">watchlist</td><td>on the watchlist <span class="unused">not used</span></td><td>840 true</td></tr>
+            <tr><td class="col">forborne</td><td>forbearance granted <span class="unused">not used</span></td><td>240 true</td></tr>
+            <tr><td class="col">…__status</td><td>companions of <code>default_date</code>, <code>collateral_type</code>, <code>ltv</code>, <code>dscr</code></td><td><code>supplied</code> or <code>not_applicable</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap"><span class="unused">not used</span> the engine loads the column but no calculation reads it. <span class="unused">checked only</span> R3 checks the value is valid; the run variant decides the profile.</p>
+    </div>
+
+    <div class="two">
+      <div class="card">
+        <h3>Regulatory class and approach</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th></th><th>Exposure class</th><th>Approach</th><th class="n">Facilities</th><th class="n">GCA €m</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">P01</td><td>retail secured by immovable property</td><td>IRB</td><td class="n">2,342</td><td class="n">720.0</td></tr>
+              <tr><td class="mono"></td><td>secured by mortgages on residential property</td><td>STA</td><td class="n">1,658</td><td class="n">480.0</td></tr>
+              <tr><td class="mono">P02</td><td>retail other</td><td>IRB</td><td class="n">1,177</td><td class="n">24.0</td></tr>
+              <tr><td class="mono"></td><td>retail</td><td>STA</td><td class="n">1,823</td><td class="n">36.0</td></tr>
+              <tr><td class="mono">P03</td><td>corporate SME</td><td>IRB</td><td class="n">769</td><td class="n">750.0</td></tr>
+              <tr><td class="mono"></td><td>corporate SME</td><td>STA</td><td class="n">731</td><td class="n">750.0</td></tr>
+              <tr><td class="mono">P04</td><td>specialised lending, IPRE</td><td>IRB</td><td class="n">346</td><td class="n">1,400.0</td></tr>
+              <tr><td class="mono"></td><td>secured by commercial property</td><td>STA</td><td class="n">154</td><td class="n">600.0</td></tr>
+              <tr><td class="mono">P05</td><td>corporate</td><td>IRB</td><td class="n">575</td><td class="n">2,800.0</td></tr>
+              <tr><td class="mono"></td><td>corporate</td><td>STA</td><td class="n">225</td><td class="n">1,200.0</td></tr>
+              <tr><td class="mono">P06</td><td>central or regional governments</td><td>STA</td><td class="n">120</td><td class="n">1,344.0</td></tr>
+              <tr><td class="mono"></td><td>institutions</td><td>STA</td><td class="n">80</td><td class="n">896.0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Qualitative indicators by stage</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Stage</th><th class="n">DPD 0</th><th class="n">1–29</th><th class="n">30–89</th><th class="n">90+</th><th class="n">Watchlist</th><th class="n">Forborne</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td class="n">7,925</td><td class="n">420</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+              <tr><td>2</td><td class="n">25</td><td class="n">867</td><td class="n">432</td><td class="n">0</td><td class="n">509</td><td class="n">143</td></tr>
+              <tr><td>3</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">331</td><td class="n">331</td><td class="n">97</td></tr>
+              <tr class="total"><td>Total</td><td class="n">7,950</td><td class="n">1,287</td><td class="n">432</td><td class="n">331</td><td class="n">840</td><td class="n">240</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="warn"><b>Not a trigger</b>The stage comes from the grades alone (MIG-07): stage 3 is grade D, and stage 2 is a lifetime TTC PD at least k times the one at origination. O3 drew DPD, watchlist and forbearance from each facility's stage, so they agree with the 30- and 90-day backstops by construction. 491 of the 1,324 stage-2 facilities show none of them.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Facilities by current grade</h3>
+      <div class="scroll">
+        <table class="heat" id="gradeHeat">
+          <thead><tr><th></th><th class="c">G1</th><th class="c">G2</th><th class="c">G3</th><th class="c">G4</th><th class="c">G5</th><th class="c">G6</th><th class="c">G7</th><th class="c">G8</th><th class="c">G9</th><th class="c">G10</th><th class="c">D</th><th class="n">Total</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">P01</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">1,361</td><td class="h">1,163</td><td class="h">1,034</td><td class="h">111</td><td class="h">251</td><td class="h">0</td><td class="h">0</td><td class="h">80</td><td class="n">4,000</td></tr>
+            <tr><td class="mono">P02</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">1,255</td><td class="h">623</td><td class="h">476</td><td class="h">327</td><td class="h">199</td><td class="h">120</td><td class="n">3,000</td></tr>
+            <tr><td class="mono">P03</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">455</td><td class="h">302</td><td class="h">237</td><td class="h">221</td><td class="h">210</td><td class="h">0</td><td class="h">75</td><td class="n">1,500</td></tr>
+            <tr><td class="mono">P04</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">171</td><td class="h">115</td><td class="h">112</td><td class="h">32</td><td class="h">40</td><td class="h">0</td><td class="h">30</td><td class="n">500</td></tr>
+            <tr><td class="mono">P05</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">515</td><td class="h">123</td><td class="h">83</td><td class="h">32</td><td class="h">23</td><td class="h">0</td><td class="h">24</td><td class="n">800</td></tr>
+            <tr><td class="mono">P06</td><td class="h">54</td><td class="h">36</td><td class="h">66</td><td class="h">36</td><td class="h">4</td><td class="h">1</td><td class="h">1</td><td class="h">0</td><td class="h">0</td><td class="h">0</td><td class="h">2</td><td class="n">200</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">Shading is each cell's share of its portfolio's facilities, so small portfolios read on the same scale as large ones. Each portfolio sits on the grades its §8.7 calibration targets need: P06 at the top of the scale, P02 at the bottom.</p>
+    </div>
+
+    <div class="card">
+      <h3>Interest rate by segment</h3>
+      <ul class="legend">
+        <li><span class="sw iq"></span>5th to 95th percentile</li>
+        <li><span class="sw md"></span>Median</li>
+        <li><span class="sw rf"></span>Reference EIR (§8.7)</li>
+      </ul>
+      <div class="scroll">
+        <table class="mid">
+          <thead><tr><th>Segment</th><th class="n">Facilities</th><th class="n">Reference</th><th class="n">GCA-weighted</th><th class="n">Min – max</th><th style="width:40%"><div class="rng-axis"><span style="left:0">0%</span><span style="left:25%">3.5%</span><span style="left:50%">7%</span><span style="left:75%">10.5%</span><span style="left:100%">14%</span></div></th></tr></thead>
+          <tbody id="rateRows">
+            <tr data-lo="2.16" data-md="3.01" data-hi="3.85" data-rf="3.00"><td><b class="mono">P01</b> mortgages</td><td class="n">4,000</td><td class="n">3.00%</td><td class="n">3.01%</td><td class="n">1.42 – 4.70%</td><td><div class="rng"></div></td></tr>
+            <tr data-lo="5.54" data-md="9.02" data-hi="12.27" data-rf="9.00"><td><b class="mono">P02</b> consumer</td><td class="n">3,000</td><td class="n">9.00%</td><td class="n">8.99%</td><td class="n">1.77 – 17.30%</td><td><div class="rng"></div></td></tr>
+            <tr data-lo="3.38" data-md="5.00" data-hi="6.68" data-rf="5.00"><td><b class="mono">P03</b> SME</td><td class="n">1,500</td><td class="n">5.00%</td><td class="n">5.02%</td><td class="n">1.71 – 8.73%</td><td><div class="rng"></div></td></tr>
+            <tr data-lo="3.26" data-md="4.51" data-hi="5.62" data-rf="4.50"><td><b class="mono">P04</b> CRE</td><td class="n">500</td><td class="n">4.50%</td><td class="n">4.51%</td><td class="n">2.45 – 6.57%</td><td><div class="rng"></div></td></tr>
+            <tr data-lo="2.81" data-md="4.01" data-hi="5.26" data-rf="4.00"><td><b class="mono">P05</b> corporate</td><td class="n">800</td><td class="n">4.00%</td><td class="n">4.01%</td><td class="n">1.74 – 6.20%</td><td><div class="rng"></div></td></tr>
+            <tr data-lo="1.24" data-md="2.00" data-hi="2.85" data-rf="2.00"><td><b class="mono">P06_GG</b> governments</td><td class="n">120</td><td class="n">2.00%</td><td class="n">2.00%</td><td class="n">0.80 – 3.36%</td><td><div class="rng"></div></td></tr>
+            <tr data-lo="2.23" data-md="2.91" data-hi="3.84" data-rf="3.00"><td><b class="mono">P06_CI</b> banks</td><td class="n">80</td><td class="n">3.00%</td><td class="n">2.98%</td><td class="n">2.09 – 4.17%</td><td><div class="rng"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">O3 draws each rate around its segment's reference EIR, independently of the stage.</p>
+    </div>
+  </section>
+
+  <!-- 5 · obligors -->
+  <section id="obligors">
+    <div class="ds-head">
+      <div class="ds-title"><h2>obligors</h2><span class="chip">Parquet</span><span class="chip">8,320 rows × 14 columns</span><span class="chip">key obligor_id</span></div>
+      <p class="intro">One row per borrower. It holds the attributes that belong to the counterparty rather than the loan: where it is domiciled, what it does, which group it belongs to, and whether it is in regulatory default.</p>
+    </div>
+    <div class="card">
+      <h3>Columns</h3>
+      <div class="scroll">
+        <table class="cols mid">
+          <thead><tr><th>Column</th><th>What it holds</th><th>In this set</th></tr></thead>
+          <tbody>
+            <tr><td class="col">obligor_id</td><td>key</td><td>O00001 …, 8,320 distinct</td></tr>
+            <tr><td class="col">group_id</td><td>connected-client group</td><td>8,282 groups; 20 of them hold 2–4 obligors</td></tr>
+            <tr><td class="col">entity_id</td><td>reporting entity</td><td>NLBANK on every row</td></tr>
+            <tr><td class="col">country</td><td>country of domicile; selects the scenario path</td><td>NL 2,503 · DE 1,630 · PL 1,254 · FR 1,211 · IT 870 · ES 852</td></tr>
+            <tr><td class="col">counterparty_sector</td><td>counterparty sector</td><td>households 6,640 · non-financial corporations 1,637 · general governments 24 · credit institutions 19</td></tr>
+            <tr><td class="col">nace_code</td><td>NACE section, for corporates</td><td>1,637 rows, 8 sections: A, C, D, F, G, H, L, M</td></tr>
+            <tr><td class="col">nace_version</td><td>classification version</td><td>NACE Rev. 2</td></tr>
+            <tr><td class="col">principal_activity</td><td>activity text</td><td>"NACE section X", mirrors <code>nace_code</code></td></tr>
+            <tr><td class="col">sme_flag</td><td>SME borrower</td><td>1,038 true: every P03 obligor and half of P04's</td></tr>
+            <tr><td class="col">regulatory_default</td><td>CRR default status, reconciled with stage 3 (DAT-04)</td><td>275 true: exactly the obligors of the 331 stage-3 facilities</td></tr>
+            <tr><td class="col">snapshot_date</td><td>reference date</td><td>2026-12-31</td></tr>
+            <tr><td class="col">…__status</td><td>companions of <code>nace_code</code>, <code>nace_version</code>, <code>principal_activity</code></td><td><code>not_applicable</code> for the 6,683 non-corporates</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h3>Country mix, share of GCA</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Country</th><th class="n">Share of GCA</th><th class="n">Obligors</th></tr></thead>
+            <tbody>
+              <tr><td>NL</td><td class="n">30%</td><td class="n">2,503</td></tr>
+              <tr><td>DE</td><td class="n">20%</td><td class="n">1,630</td></tr>
+              <tr><td>FR</td><td class="n">15%</td><td class="n">1,211</td></tr>
+              <tr><td>PL</td><td class="n">15%</td><td class="n">1,254</td></tr>
+              <tr><td>ES</td><td class="n">10%</td><td class="n">852</td></tr>
+              <tr><td>IT</td><td class="n">10%</td><td class="n">870</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="cap">§5.3 sets one mix, and every portfolio follows it exactly.</p>
+      </div>
+      <div class="card">
+        <h3>Concentration</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Portfolio</th><th class="n">Obligors</th><th class="n">Groups</th><th class="n">Top 10 groups, share of GCA</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">P01</td><td class="n">3,640</td><td class="n">3,640</td><td class="n">1.3%</td></tr>
+              <tr><td class="mono">P02</td><td class="n">3,000</td><td class="n">3,000</td><td class="n">1.8%</td></tr>
+              <tr><td class="mono">P03</td><td class="n">881</td><td class="n">881</td><td class="n">4.4%</td></tr>
+              <tr><td class="mono">P04</td><td class="n">309</td><td class="n">293</td><td class="n">25.0%</td></tr>
+              <tr><td class="mono">P05</td><td class="n">447</td><td class="n">425</td><td class="n">20.0%</td></tr>
+              <tr><td class="mono">P06</td><td class="n">43</td><td class="n">43</td><td class="n">61.3%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="cap">SYN-04 sets the top-10 shares for P04 and P05. P06 is 24 governments and 19 banks.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Sector mix of corporates, share of GCA</h3>
+      <div class="scroll">
+        <table class="mid">
+          <thead><tr><th>NACE section</th><th class="n">P03 SME</th><th class="n">P04 CRE</th><th class="n">P05 corporate</th></tr></thead>
+          <tbody>
+            <tr><td><b class="mono">A</b> Agriculture, forestry and fishing</td><td class="n">10%</td><td class="n">–</td><td class="n">5%</td></tr>
+            <tr><td><b class="mono">C</b> Manufacturing</td><td class="n">25%</td><td class="n">–</td><td class="n">30%</td></tr>
+            <tr><td><b class="mono">D</b> Electricity, gas, steam</td><td class="n">10%</td><td class="n">–</td><td class="n">20%</td></tr>
+            <tr><td><b class="mono">F</b> Construction</td><td class="n">15%</td><td class="n">–</td><td class="n">10%</td></tr>
+            <tr><td><b class="mono">G</b> Wholesale and retail trade</td><td class="n">20%</td><td class="n">–</td><td class="n">10%</td></tr>
+            <tr><td><b class="mono">H</b> Transport and storage</td><td class="n">10%</td><td class="n">–</td><td class="n">15%</td></tr>
+            <tr><td><b class="mono">L</b> Real estate activities</td><td class="n">–</td><td class="n">100%</td><td class="n">–</td></tr>
+            <tr><td><b class="mono">M</b> Professional, scientific and technical</td><td class="n">10%</td><td class="n">–</td><td class="n">10%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · commitments -->
+  <section id="commitments">
+    <div class="ds-head">
+      <div class="ds-title"><h2>commitments</h2><span class="chip">Parquet</span><span class="chip">931 rows × 9 columns</span><span class="chip">key commitment_id</span></div>
+      <p class="intro">The off-balance part of the book: one row for the undrawn amount of each revolving facility. Only P03 and P05 have revolvers, and each has exactly one commitment. A CCF converts the undrawn amount into exposure.</p>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h3>Columns</h3>
+        <div class="scroll">
+          <table class="cols">
+            <thead><tr><th>Column</th><th>In this set</th></tr></thead>
+            <tbody>
+              <tr><td class="col">commitment_id</td><td>key, C00001 …</td></tr>
+              <tr><td class="col">facility_id</td><td>the revolver it belongs to; one each</td></tr>
+              <tr><td class="col">nominal_undrawn</td><td>€99k – €39.3m, median €1.28m</td></tr>
+              <tr><td class="col">accounting_ccf</td><td>50% on every row</td></tr>
+              <tr><td class="col">ccf_source</td><td>"SYN-PAR-07 section 5.1 test CCF"</td></tr>
+              <tr><td class="col">currency</td><td>EUR</td></tr>
+              <tr><td class="col">asset_category</td><td><code>not_applicable</code>: off-balance (SCP-06)</td></tr>
+              <tr><td class="col">provision_classification</td><td><code>off_balance_loan_commitment</code></td></tr>
+              <tr><td class="col">snapshot_date</td><td>2026-12-31</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Undrawn amounts</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th></th><th class="n">Revolvers</th><th class="n">Undrawn €m</th><th class="n">Limit €m</th><th class="n">Drawn share</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">P03</td><td class="n">553</td><td class="n">600.0</td><td class="n">1,143.5</td><td class="n">47.5%</td></tr>
+              <tr><td class="mono">P05</td><td class="n">378</td><td class="n">1,400.0</td><td class="n">3,337.2</td><td class="n">58.0%</td></tr>
+              <tr class="total"><td>Total</td><td class="n">931</td><td class="n">2,000.0</td><td class="n">4,480.6</td><td class="n">55.4%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="cap">Drawn share is drawn principal over the contractual limit of the revolvers. By stage: 779 commitments (€1,713.4m) sit on stage-1 facilities and 152 (€286.6m) on stage 2; no stage-3 facility has an undrawn line.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 · opening_provisions -->
+  <section id="opening_provisions">
+    <div class="ds-head">
+      <div class="ds-title"><h2>opening_provisions</h2><span class="chip">Parquet</span><span class="chip">10,000 rows × 14 columns</span><span class="chip">key facility_id</span></div>
+      <p class="intro">The allowance each facility starts with on 31 December 2026. O4 computed it once with a TTC formula (SYN-PAR-09) and froze it; a run takes it as given and never recomputes it. R9 subtracts it from the end-2027 allowance to get the year-one charge.</p>
+    </div>
+    <div class="card">
+      <h3>Columns</h3>
+      <div class="scroll">
+        <table class="cols mid">
+          <thead><tr><th>Column</th><th>What it holds</th><th>In this set</th></tr></thead>
+          <tbody>
+            <tr><td class="col">facility_id</td><td>key; one row per facility</td><td>all 10,000</td></tr>
+            <tr><td class="col">allowance_on</td><td>on-balance loss allowance, EUR</td><td>€261.0m in total; €12.6 – €8.13m per facility</td></tr>
+            <tr><td class="col">provision_off</td><td>provision on the undrawn commitment, EUR</td><td>€17.6m on the 931 revolvers; zero elsewhere</td></tr>
+            <tr><td class="col">overlay_amount</td><td>management overlay</td><td>0 on every row</td></tr>
+            <tr><td class="col">overlay_risk, _owner, _reason</td><td>what the overlay covers, who owns it, why</td><td>empty (<code>not_applicable</code>)</td></tr>
+            <tr><td class="col">method</td><td>how the allowance was computed</td><td>"O4 TTC formula v1 (SYN-PAR-09)"</td></tr>
+            <tr><td class="col">frozen</td><td>fixed at the snapshot</td><td>true on every row</td></tr>
+            <tr><td class="col">currency, snapshot_date</td><td></td><td>EUR, 2026-12-31</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Opening allowance and coverage by stage</h3>
+      <div class="scroll">
+        <table class="wide">
+          <thead>
+            <tr><th rowspan="2">Portfolio</th><th class="n" colspan="3" style="text-align:center">GCA €m</th><th class="n" colspan="3" style="text-align:center">Allowance €m</th><th class="n" colspan="4" style="text-align:center">Coverage of GCA</th><th class="n" rowspan="2">Off-balance €m</th></tr>
+            <tr><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th><th class="n">All</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono">P01</td><td class="n">1,056.0</td><td class="n">120.0</td><td class="n">24.0</td><td class="n">1.23</td><td class="n">5.49</td><td class="n">3.30</td><td class="n">0.12%</td><td class="n">4.58%</td><td class="n">13.75%</td><td class="n">0.84%</td><td class="n">–</td></tr>
+            <tr><td class="mono">P02</td><td class="n">48.6</td><td class="n">9.0</td><td class="n">2.4</td><td class="n">1.00</td><td class="n">1.82</td><td class="n">1.80</td><td class="n">2.05%</td><td class="n">20.21%</td><td class="n">74.83%</td><td class="n">7.69%</td><td class="n">–</td></tr>
+            <tr><td class="mono">P03</td><td class="n">1,155.0</td><td class="n">270.0</td><td class="n">75.0</td><td class="n">8.87</td><td class="n">28.51</td><td class="n">31.70</td><td class="n">0.77%</td><td class="n">10.56%</td><td class="n">42.27%</td><td class="n">4.60%</td><td class="n">8.55</td></tr>
+            <tr><td class="mono">P04</td><td class="n">1,480.0</td><td class="n">400.0</td><td class="n">120.0</td><td class="n">7.29</td><td class="n">36.08</td><td class="n">39.75</td><td class="n">0.49%</td><td class="n">9.02%</td><td class="n">33.13%</td><td class="n">4.16%</td><td class="n">–</td></tr>
+            <tr><td class="mono">P05</td><td class="n">3,400.0</td><td class="n">480.0</td><td class="n">120.0</td><td class="n">11.20</td><td class="n">32.27</td><td class="n">42.35</td><td class="n">0.33%</td><td class="n">6.72%</td><td class="n">35.29%</td><td class="n">2.15%</td><td class="n">9.00</td></tr>
+            <tr><td class="mono">P06</td><td class="n">2,128.0</td><td class="n">89.6</td><td class="n">22.4</td><td class="n">0.76</td><td class="n">2.03</td><td class="n">5.59</td><td class="n">0.04%</td><td class="n">2.27%</td><td class="n">24.96%</td><td class="n">0.37%</td><td class="n">–</td></tr>
+            <tr class="total"><td>Total</td><td class="n">9,267.6</td><td class="n">1,368.6</td><td class="n">363.8</td><td class="n">30.35</td><td class="n">106.20</td><td class="n">124.49</td><td class="n">0.33%</td><td class="n">7.76%</td><td class="n">34.22%</td><td class="n">2.37%</td><td class="n">17.56</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">Stage 1 holds 12-month ECL, stage 2 lifetime ECL, and stage 3 is GCA × TTC LGD. The off-balance provision is 0.88% of the €2.0bn undrawn.</p>
+    </div>
+  </section>
+
+  <!-- 8 · ttc_pd_matrix -->
+  <section id="ttc_pd_matrix">
+    <div class="ds-head">
+      <div class="ds-title"><h2>ttc_pd_matrix</h2><span class="chip">Parquet</span><span class="chip">847 rows × 7 columns</span><span class="chip">key segment, from_grade, to_grade</span></div>
+      <p class="intro">One through-the-cycle, one-year rating migration matrix per reference segment, stored long: one row per cell. Each matrix runs over ten performing grades G1–G10 and the absorbing default grade D, so 7 segments × 11 × 11 = 847 rows. R3 uses it to rebuild each facility's SICR line; R6 shifts it with the year's Z-score into a point-in-time matrix (see <a href="../pd-curves/pd-curve-flow.html">How the engine builds PD curves</a>).</p>
+    </div>
+    <div class="card">
+      <h3>Columns</h3>
+      <div class="scroll">
+        <table class="cols">
+          <thead><tr><th>Column</th><th>What it holds</th></tr></thead>
+          <tbody>
+            <tr><td class="col">segment</td><td>P01–P05, P06_GG, P06_CI</td></tr>
+            <tr><td class="col">from_grade, to_grade</td><td>G1 … G10, D</td></tr>
+            <tr><td class="col">probability</td><td>one-year probability of moving from <code>from_grade</code> to <code>to_grade</code>; each row sums to 1 (largest error 2.2e-16), and D → D is 1</td></tr>
+            <tr><td class="col">from_rank, to_rank</td><td>1–10 for the performing grades, 11 for D</td></tr>
+            <tr><td class="col">master_scale_pd</td><td>the master-scale one-year PD of <code>from_grade</code>; equals the D column</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Master scale: one-year PD of each grade</h3>
+      <div class="scroll">
+        <div class="scale">
+          <div><b>G1</b>0.02%</div><div><b>G2</b>0.05%</div><div><b>G3</b>0.12%</div><div><b>G4</b>0.30%</div><div><b>G5</b>0.70%</div><div><b>G6</b>1.60%</div><div><b>G7</b>3.00%</div><div><b>G8</b>4.80%</div><div><b>G9</b>9.00%</div><div><b>G10</b>18.00%</div><div><b>D</b>100%</div>
+        </div>
+      </div>
+      <p class="cap">The same in every segment. The segments differ in how much the grades move.</p>
+    </div>
+    <div class="card">
+      <h3>Per segment</h3>
+      <div class="scroll">
+        <table class="mid">
+          <thead><tr><th>Segment</th><th class="n">Stay in grade</th><th class="n">Upgrade</th><th class="n">Downgrade</th><th class="n">S1 PD, data</th><th class="n">S1 target</th><th class="n">S2 PD, data</th><th class="n">S2 target</th></tr></thead>
+          <tbody>
+            <tr><td><b class="mono">P01</b> mortgages</td><td class="n">87.5%</td><td class="n">3.9%</td><td class="n">4.8%</td><td class="n">0.80%</td><td class="n">0.80%</td><td class="n">4.00%</td><td class="n">4.00%</td></tr>
+            <tr><td><b class="mono">P02</b> consumer</td><td class="n">78.8%</td><td class="n">7.8%</td><td class="n">9.7%</td><td class="n">3.00%</td><td class="n">3.00%</td><td class="n">12.00%</td><td class="n">12.00%</td></tr>
+            <tr><td><b class="mono">P03</b> SME</td><td class="n">80.5%</td><td class="n">7.0%</td><td class="n">8.7%</td><td class="n">2.00%</td><td class="n">2.00%</td><td class="n">8.00%</td><td class="n">8.00%</td></tr>
+            <tr><td><b class="mono">P04</b> CRE</td><td class="n">83.2%</td><td class="n">5.8%</td><td class="n">7.3%</td><td class="n">1.50%</td><td class="n">1.50%</td><td class="n">6.00%</td><td class="n">6.00%</td></tr>
+            <tr><td><b class="mono">P05</b> corporate</td><td class="n">83.2%</td><td class="n">5.8%</td><td class="n">7.3%</td><td class="n">1.00%</td><td class="n">1.00%</td><td class="n">5.00%</td><td class="n">5.00%</td></tr>
+            <tr><td><b class="mono">P06_GG</b> governments</td><td class="n">89.3%</td><td class="n">3.1%</td><td class="n">3.9%</td><td class="n">0.05%</td><td class="n">0.05%</td><td class="n">0.50%</td><td class="n">0.50%</td></tr>
+            <tr><td><b class="mono">P06_CI</b> banks</td><td class="n">87.5%</td><td class="n">3.9%</td><td class="n">4.8%</td><td class="n">0.20%</td><td class="n">0.20%</td><td class="n">1.50%</td><td class="n">1.50%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">Stay, upgrade and downgrade are averages over G1–G10 of the diagonal, the cells to the left of it and the performing cells to the right of it. The S1 and S2 PDs are the one-year TTC PDs of the facilities' current grades, weighted by drawn exposure; SYN-PAR-05 calibrates them to the §8.7 targets, and they match.</p>
+    </div>
+  </section>
+
+  <!-- 9 · scenarios -->
+  <section id="scenarios">
+    <div class="ds-head">
+      <div class="ds-title"><h2>scenarios</h2><span class="chip yaml">YAML</span><span class="chip">180 values</span><span class="chip">key scenario, variable, year</span></div>
+      <p class="intro">The macroeconomic paths: <code>SYN-SCN-1.3</code>, the illustrative common paths of §6.2 of the requirements, release 2026-10-17, status SYNTHETIC. The file lists the scenarios and variables, 2026 starting values, and one value per scenario, variable, country and year. Every value is stated in percent with its unit, value type, source, release, completeness and status; R2 converts them to decimals. R4 turns them into a Z-score per segment, country, scenario and year.</p>
+    </div>
+    <div class="card">
+      <h3>Paths, 2027–2029, percent</h3>
+      <ul class="legend" aria-label="Scenarios">
+        <li><span class="key-line base"></span>Baseline</li>
+        <li><span class="key-line adv"></span>Adverse</li>
+      </ul>
+      <div class="sm" id="scnCharts"></div>
+      <p class="cap">All six countries (NL, DE, FR, PL, ES, IT) share the same path, so one line stands for six. Hover a year for both values.</p>
+    </div>
+    <div class="card">
+      <h3>Values</h3>
+      <div class="scroll">
+        <table class="wide">
+          <thead>
+            <tr><th rowspan="2">Variable</th><th rowspan="2">Type</th><th class="n" rowspan="2">2026 start</th><th colspan="3" style="text-align:center">Baseline</th><th colspan="3" style="text-align:center">Adverse</th><th rowspan="2">Z driver of</th></tr>
+            <tr><th class="n">2027</th><th class="n">2028</th><th class="n">2029</th><th class="n">2027</th><th class="n">2028</th><th class="n">2029</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Real GDP annual growth</td><td>growth</td><td class="n">–</td><td class="n">1.5</td><td class="n">1.7</td><td class="n">1.8</td><td class="n">−3.0</td><td class="n">−2.0</td><td class="n">0.5</td><td>every segment</td></tr>
+            <tr><td>Unemployment level</td><td>level</td><td class="n">6.0</td><td class="n">6.0</td><td class="n">5.8</td><td class="n">5.7</td><td class="n">7.5</td><td class="n">9.0</td><td class="n">9.2</td><td>P01, P02, P03, P06_CI</td></tr>
+            <tr><td>Residential property price change</td><td>growth</td><td class="n">index 100</td><td class="n">2.0</td><td class="n">2.5</td><td class="n">3.0</td><td class="n">−12.0</td><td class="n">−10.0</td><td class="n">−3.0</td><td>P01</td></tr>
+            <tr><td>CRE price change</td><td>growth</td><td class="n">index 100</td><td class="n">2.0</td><td class="n">2.5</td><td class="n">3.0</td><td class="n">−15.0</td><td class="n">−12.0</td><td class="n">−5.0</td><td>P04</td></tr>
+            <tr><td>Reference interest rate level</td><td>level</td><td class="n">2.5</td><td class="n">2.5</td><td class="n">2.3</td><td class="n">2.2</td><td class="n">4.0</td><td class="n">4.5</td><td class="n">3.5</td><td>P03, P04, P05, P06_GG, P06_CI</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">The two price changes also have an index form (<code>index_of</code>), starting at 100 in 2026. The reference rate is only a Z-score driver: it resets no loan's interest rate.</p>
+    </div>
+  </section>
+
+  <!-- 10 · parameter_set -->
+  <section id="parameter_set">
+    <div class="ds-head">
+      <div class="ds-title"><h2>parameter_set</h2><span class="chip yaml">YAML</span><span class="chip">SYN-PS-0.1-proposed · v0.1 · PROPOSED</span></div>
+      <p class="intro">Every number the run applies that is not data about a loan or the economy. These are synthetic test conventions, not estimated or EBA-prescribed values (SYN-PAR-06).</p>
+    </div>
+    <div class="card">
+      <h3>Top-level sections</h3>
+      <div class="scroll">
+        <table class="cols mid">
+          <thead><tr><th>Key</th><th>What it holds</th><th>In this set</th></tr></thead>
+          <tbody>
+            <tr><td class="col">horizon</td><td>snapshot and projection years</td><td>snapshot 2026-12-31; projection 2027, 2028, 2029; default-date buckets to 2060</td></tr>
+            <tr><td class="col">master_scale</td><td>grades and their one-year TTC PD</td><td>G1–G10 and D; see <a href="#ttc_pd_matrix">ttc_pd_matrix</a></td></tr>
+            <tr><td class="col">segments</td><td>per-segment Z drivers and parameters</td><td>7 segments, table below</td></tr>
+            <tr><td class="col">terminal_rule</td><td>what happens after 2029</td><td>adverse reverts linearly to baseline over 6 years; baseline stays flat</td></tr>
+            <tr><td class="col">conventions</td><td>methodological choices</td><td>SICR horizon = remaining life at opening; constant-hazard stub PD; calendar-year-end default buckets; opening allowance from the TTC matrix with a bullet schedule</td></tr>
+            <tr><td class="col">tolerances</td><td>limits for the checks</td><td>counts exact; probabilities and rates 1e-10; amounts €0.01; aggregates max(€1, 1e-8 relative)</td></tr>
+            <tr><td class="col">variants</td><td>run variants</td><td><code>core</code> bullet, fixed CCF · <code>annuity</code> · <code>linear</code> for amortising products · <code>utilisation</code> CCF 75% for P03 and P05 (AT-35)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Per segment</h3>
+      <div class="scroll">
+        <table class="wide">
+          <thead><tr><th>Segment</th><th>Z drivers (β)</th><th class="n">ρ</th><th class="n">SICR k</th><th class="n">LGD w</th><th class="n">CPR TTC</th><th class="n">CPR v</th><th class="n">CCF</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">P01</td><td>GDP +0.4 · unemployment −0.3 · residential prices +0.3</td><td class="n">0.15</td><td class="n">2.5</td><td class="n">0.20</td><td class="n">6%</td><td class="n">0.25</td><td class="n">–</td></tr>
+            <tr><td class="mono">P02</td><td>GDP +0.5 · unemployment −0.5</td><td class="n">0.06</td><td class="n">2.0</td><td class="n">0.10</td><td class="n">10%</td><td class="n">0.20</td><td class="n">–</td></tr>
+            <tr><td class="mono">P03</td><td>GDP +0.6 · unemployment −0.2 · reference rate −0.2</td><td class="n">0.12</td><td class="n">2.5</td><td class="n">0.15</td><td class="n">5%</td><td class="n">0.15</td><td class="n">50%</td></tr>
+            <tr><td class="mono">P04</td><td>GDP +0.3 · CRE prices +0.5 · reference rate −0.2</td><td class="n">0.15</td><td class="n">2.5</td><td class="n">0.25</td><td class="n">3%</td><td class="n">0.15</td><td class="n">–</td></tr>
+            <tr><td class="mono">P05</td><td>GDP +0.7 · reference rate −0.3</td><td class="n">0.12</td><td class="n">2.5</td><td class="n">0.15</td><td class="n">5%</td><td class="n">0.15</td><td class="n">50%</td></tr>
+            <tr><td class="mono">P06_GG</td><td>GDP +0.8 · reference rate −0.2</td><td class="n">0.20</td><td class="n">3.0</td><td class="n">0.10</td><td class="n">0%</td><td class="n">0.00</td><td class="n">–</td></tr>
+            <tr><td class="mono">P06_CI</td><td>GDP +0.6 · unemployment −0.2 · reference rate −0.2</td><td class="n">0.20</td><td class="n">3.0</td><td class="n">0.10</td><td class="n">0%</td><td class="n">0.00</td><td class="n">–</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <dl class="facts">
+        <dt>Z drivers</dt><dd>Z = Σ β · (x − mean) / sd. Means and sds: GDP 1.5% / 3%, unemployment 6.5% / 2%, residential prices 2.5% / 8%, CRE prices 2% / 10%, reference rate 2.5% / 1.5%.</dd>
+        <dt>ρ</dt><dd>asset correlation: how far Z shifts the TTC matrix into a PiT matrix</dd>
+        <dt>SICR k</dt><dd>stage 2 when the lifetime PD at the current grade is at least k × the lifetime PD at origination</dd>
+        <dt>LGD w</dt><dd>sensitivity of the LGD to Z</dd>
+        <dt>CPR TTC, v</dt><dd>through-the-cycle prepayment rate, and its sensitivity to Z</dd>
+        <dt>CCF</dt><dd>conversion of undrawn commitments into exposure</dd>
+      </dl>
+    </div>
+  </section>
+
+  <footer>
+    <p>Figures computed with pandas from <code>inputs/514ed0e86e3dc760/</code> on 18 October 2026, at commit a171bca. <code>notebooks/03_input_data_overview.ipynb</code> checks the same set against its manifest and the targets in <code>docs/spec/</code>; the dataset schemas are in <code>src/stress/contracts/inputs.py</code>.</p>
+    <p><code>inputs/</code> also holds <code>32415eb9d5bbcd74</code>, an earlier set from the same generator and seed. The runbook and README name <code>514ed0e86e3dc760</code> as the current one. Kept in <code>docs/input-data/</code>.</p>
+  </footer>
+</div>
+
+<div id="tip" role="tooltip"></div>
+
+<script>
+(function () {
+  const tip = document.getElementById("tip");
+  function show(text, x, y) {
+    tip.textContent = text;
+    tip.classList.add("on");
+    const r = tip.getBoundingClientRect();
+    let left = x + 14, top = y + 14;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - 14;
+    if (top + r.height > window.innerHeight - 8) top = y - r.height - 14;
+    tip.style.left = Math.max(8, left) + "px";
+    tip.style.top = Math.max(8, top) + "px";
+  }
+  function hide() { tip.classList.remove("on"); }
+  function bindTip(el, text, onEnter, onLeave) {
+    el.addEventListener("pointermove", e => { show(text, e.clientX, e.clientY); if (onEnter) onEnter(); });
+    el.addEventListener("pointerleave", () => { hide(); if (onLeave) onLeave(); });
+    el.addEventListener("focus", () => { const r = el.getBoundingClientRect(); show(text, r.left + r.width / 2, r.top + r.height / 2); if (onEnter) onEnter(); });
+    el.addEventListener("blur", () => { hide(); if (onLeave) onLeave(); });
+  }
+  const fmt = (v, d) => v.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  // GCA by portfolio and stage
+  const STAGES = [
+    ["P01", "Residential mortgages", [1056.0, 120.0, 24.0], [3520, 400, 80]],
+    ["P02", "Consumer credit", [48.6, 9.0, 2.4], [2430, 450, 120]],
+    ["P03", "SME lending", [1155.0, 270.0, 75.0], [1155, 270, 75]],
+    ["P04", "Commercial real estate", [1480.0, 400.0, 120.0], [370, 100, 30]],
+    ["P05", "Corporate lending", [3400.0, 480.0, 120.0], [680, 96, 24]],
+    ["P06", "Sovereigns and credit institutions", [2128.0, 89.6, 22.4], [190, 8, 2]],
+  ];
+  const AXIS_MAX = 4000, AXIS_SPAN = 88; // 4,000 sits at 88% of the track, leaving room for the end label
+  const chart = document.getElementById("gcaChart");
+  for (const [p, name, gca, n] of STAGES) {
+    const total = gca[0] + gca[1] + gca[2];
+    const row = document.createElement("div");
+    row.className = "hb-row";
+    row.tabIndex = 0;
+    row.innerHTML = `<div class="hb-lab"><b>${p}</b>${name}</div>
+      <div class="hb-track"><div class="hb-bar" style="width:${(total / AXIS_MAX * AXIS_SPAN).toFixed(2)}%">
+      ${gca.map((v, i) => `<span class="s${i + 1}" style="flex-grow:${v}"></span>`).join("")}</div>
+      <span class="hb-val">${fmt(total, 0)}</span></div>`;
+    const lines = gca.map((v, i) => `Stage ${i + 1}: €${fmt(v, 1)}m · ${fmt(n[i], 0)} facilities (${fmt(v / total * 100, 1)}%)`);
+    bindTip(row, `${p} ${name}\nGCA €${fmt(total, 1)}m\n` + lines.join("\n"));
+    chart.appendChild(row);
+  }
+  const axis = document.createElement("div");
+  axis.className = "hb-axis";
+  axis.innerHTML = `<div></div><div class="hb-ticks">${[0, 1000, 2000, 3000, 4000]
+    .map(t => `<span style="left:${t / AXIS_MAX * AXIS_SPAN}%">${fmt(t, 0)}</span>`).join("")}</div>`;
+  chart.appendChild(axis);
+
+  // Grade heatmap: shade by share of the portfolio's facilities
+  for (const tr of document.querySelectorAll("#gradeHeat tbody tr")) {
+    const cells = [...tr.querySelectorAll("td.h")];
+    const counts = cells.map(td => Number(td.textContent.replace(/,/g, "")));
+    const total = counts.reduce((a, b) => a + b, 0);
+    const p = tr.cells[0].textContent;
+    const grades = ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10", "D"];
+    cells.forEach((td, i) => {
+      const share = counts[i] / total;
+      const v = counts[i] ? Math.min(1, 0.08 + share / 0.45 * 0.92) : 0;
+      td.style.setProperty("--v", v.toFixed(3));
+      if (!counts[i]) { td.classList.add("z"); td.textContent = "·"; return; }
+      if (v > 0.5) td.classList.add("inv");
+      td.tabIndex = 0;
+      bindTip(td, `${p} · ${grades[i]}\n${fmt(counts[i], 0)} facilities, ${fmt(share * 100, 1)}% of ${p}`);
+    });
+  }
+
+  // Interest-rate ranges: axis 0–14%
+  for (const tr of document.querySelectorAll("#rateRows tr")) {
+    const d = tr.dataset, x = v => (Number(v) / 14 * 100).toFixed(2) + "%";
+    const box = tr.querySelector(".rng");
+    box.innerHTML = `<div class="tr"></div><div class="iq" style="left:${x(d.lo)};width:calc(${x(d.hi)} - ${x(d.lo)})"></div>
+      <div class="md" style="left:${x(d.md)}"></div><div class="rf" style="left:${x(d.rf)}"></div>`;
+    box.tabIndex = 0;
+    bindTip(box, `${tr.cells[0].textContent}\n5%: ${d.lo}% · median ${d.md}% · 95%: ${d.hi}%\nreference EIR ${d.rf}%`);
+  }
+
+  // Scenario small multiples
+  const SCN = [
+    ["Real GDP growth", "annual growth, %", [1.5, 1.7, 1.8], [-3.0, -2.0, 0.5], true],
+    ["Unemployment", "level, %", [6.0, 5.8, 5.7], [7.5, 9.0, 9.2], false],
+    ["Residential prices", "annual change, %", [2.0, 2.5, 3.0], [-12.0, -10.0, -3.0], true],
+    ["CRE prices", "annual change, %", [2.0, 2.5, 3.0], [-15.0, -12.0, -5.0], true],
+    ["Reference rate", "level, %", [2.5, 2.3, 2.2], [4.0, 4.5, 3.5], false],
+  ];
+  const YEARS = [2027, 2028, 2029];
+  const NS = "http://www.w3.org/2000/svg";
+  function el(name, attrs, parent) {
+    const e = document.createElementNS(NS, name);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function ticks(lo, hi) {
+    const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+    const out = [];
+    let t = Math.floor(lo / step) * step;
+    out.push(Math.round(t * 100) / 100);
+    while (t < hi - 1e-9) { t += step; out.push(Math.round(t * 100) / 100); }
+    return out;
+  }
+  const signed = v => (v < 0 ? "−" : "") + fmt(Math.abs(v), 1);
+  const host = document.getElementById("scnCharts");
+  for (const [title, unit, base, adv, growth] of SCN) {
+    const fig = document.createElement("figure");
+    fig.innerHTML = `<figcaption>${title}<span>${unit}</span></figcaption>`;
+    const W = 220, H = 150, m = { l: 30, r: 34, t: 8, b: 22 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": `${title}, ${unit}. Baseline ${base.map(signed).join(", ")}; adverse ${adv.map(signed).join(", ")} for 2027 to 2029.` });
+    const all = base.concat(adv).concat(growth ? [0] : []);
+    let lo = Math.min(...all), hi = Math.max(...all);
+    const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+    const tk = ticks(lo, hi);
+    lo = tk[0]; hi = tk[tk.length - 1];
+    const X = i => m.l + i * (W - m.l - m.r) / 2;
+    const Y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+    for (const t of tk) {
+      el("line", { class: t === 0 && growth ? "zero" : "grid", x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t) }, svg);
+      el("text", { class: "tick", x: m.l - 5, y: Y(t) + 3.5, "text-anchor": "end" }, svg).textContent = signed(t).replace(".0", "");
+    }
+    YEARS.forEach((yr, i) => el("text", { class: "tick", x: X(i), y: H - 5, "text-anchor": "middle" }, svg).textContent = yr);
+    const hair = el("line", { class: "hair", x1: 0, x2: 0, y1: m.t, y2: H - m.b }, svg);
+    for (const [vals, col] of [[base, "var(--base)"], [adv, "var(--adv)"]]) {
+      el("polyline", { class: "ln", stroke: col, points: vals.map((v, i) => `${X(i)},${Y(v)}`).join(" ") }, svg);
+      vals.forEach((v, i) => el("circle", { class: "dot", cx: X(i), cy: Y(v), r: 4, fill: col }, svg));
+      el("text", { class: "end", x: X(2) + 8, y: Y(vals[2]) + 4 }, svg).textContent = signed(vals[2]);
+    }
+    YEARS.forEach((yr, i) => {
+      const w = (W - m.l - m.r) / 2;
+      const hit = el("rect", { class: "hit", x: X(i) - w / 2, y: 0, width: w, height: H }, svg);
+      bindTip(hit, `${title}, ${yr}\nBaseline ${signed(base[i])}%\nAdverse ${signed(adv[i])}%`,
+        () => { hair.setAttribute("x1", X(i)); hair.setAttribute("x2", X(i)); hair.style.opacity = 1; },
+        () => { hair.style.opacity = 0; });
+    });
+    fig.appendChild(svg);
+    host.appendChild(fig);
+  }
+})();
+</script>
+</body>
+</html>

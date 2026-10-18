@@ -14,6 +14,7 @@ v1 is complete and working. The work now is improving it, not building it: every
 | Assumptions taken and conflicts between documents | `docs/assumptions.md` |
 | Running, rerunning and rebuilding inputs | `docs/runbook.md` |
 | Rules for one step | the `CLAUDE.md` in that step's folder, where there is one |
+| Items to fix or settle in the future, each with its open decisions and steps | `TODO.md` at the root |
 
 The design leads. If another document disagrees with it, follow the design and tell the user about the conflict so it can be resolved.
 
