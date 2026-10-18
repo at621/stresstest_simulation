@@ -163,13 +163,37 @@ Recommendation: option 1.
 - Size of option 1 before deciding: its effect on the adverse cumulative charge and the S3 build-up, and whether A19 or ρ need retuning. A first, tighter A19 set gave 7.6% of GCA and was judged too severe.
 - A separate pattern to check after the fix: in baseline, S2 coverage keeps falling after 2027 (5.5% → 4.4% → 3.6%) while the S2 book grows. It may be the worst S2 grades defaulting out each year, but it has not been checked.
 
+### Findings (18 October 2026)
+
+**Size of option 1.** Measured with an experimental run: the engine with the √(1−ρ) divisor dropped in memory, written to a scratch folder outside the repository, against run `20261018T1959Z-core-36ace84d`. That run is the `main` code and reproduces `20261017T2304Z-core-b559d9dd` exactly. No repository file changed, and the experimental run is not a result.
+
+| EUR m | Baseline now | Baseline option 1 | Adverse now | Adverse option 1 |
+|---|---:|---:|---:|---:|
+| Engine's own end-2026 view (O4: 278.6) | 238.2 | 267.3 | 439.9 | 495.0 |
+| 2027 charge | −5.0 | +38.9 | 343.5 | 439.5 |
+| Cumulative charge 2027–2029 | 60.6 | 129.7 | 496.0 | 634.9 |
+| Cumulative charge, % of GCA | 0.55% | 1.18% | 4.51% | 5.77% |
+| Closing provisions 2029 | 339.2 | 408.3 | 774.6 | 913.5 |
+| S3 GCA 2029 | 716.5 | 845.9 | 1,360.4 | 1,601.0 |
+
+- The baseline 2027 release disappears. The gap between O4 and the engine's opening view falls from −40.4 to −11.3. What is left comes from the baseline Z sitting slightly above 0 (+0.06 to +0.18), which also moves LGD and prepayment.
+- The adverse cumulative charge rises by €138.9m (+28%), and the adverse-minus-baseline difference by €69.8m (435.4 → 505.2). S3 GCA at end-2029 rises by €240.6m in the adverse and €129.4m in the baseline.
+- A19 and ρ: Z itself is unchanged. At 5.8% of GCA the adverse sits between today's 4.5% and the 7.6% of the first, tighter A19 set that was judged too severe. Nothing forces a retune; whether 5.8% is plausible is the owner's judgement.
+- The 0.80% TTC PD example (ρ = 0.15) checks out. Z = 0: 0.45% → 0.80%. Baseline 2027 (Z = +0.056): 0.42% → 0.75%. Adverse 2027 (Z = −1.294): 1.93% → 2.82%.
+
+**Baseline S2 coverage pattern.** Explained, and it is not the worst grades defaulting out.
+- The S2 grade mix barely matters. Holding the 2027 segment × grade mix fixed gives 5.50% → 4.44% → 3.61%, against 5.50% → 4.42% → 3.59% actual.
+- Coverage falls within each segment and grade because the same facilities age. Their GCA-weighted remaining maturity drops from 5.9 to 4.9 to 4.1 years, and the lifetime horizon shrinks with it. A facility is replaced only at maturity (D7, A15).
+- The fall is steepest in the short-dated books: P02 coverage goes 14.0% → 10.7% → 8.2% and P03 8.4% → 6.5% → 5.2%.
+- It is the expected behaviour of a static balance sheet with replacement at maturity. Option 1 keeps the pattern: 6.6% → 5.3% → 4.3%.
+
 ### Open decision (owner)
 
 - [ ] Option 1, 2 or 3. Options 1 and 2 change results. Option 1 departs from design D13; option 2 reverses A8 (item 3) and C2.
 
 ### Steps
 
-- [ ] Work out the points under "Things to find out" and bring them to the owner.
+- [x] Work out the points under "Things to find out" and bring them to the owner (findings above, 18 October 2026).
 - [ ] Settle the decision above. If it departs from the design, agree it first and update the design with it (D13, including the "a little below TTC" wording).
 - [ ] Create a branch off `main` for this work.
 - [ ] Run it through `/improve` and show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`. Option 2 also needs `uv run python -m foundation.synth` to build the new input set.
