@@ -50,7 +50,7 @@ Settled by the owner on 18 October 2026: all four recommendations confirmed, as 
 - [x] Settle the open decisions above (confirmed by the owner, 18 October 2026).
 - [x] Create a branch off `main` for this work.
 - [x] Notebook `notebooks/04_loan_term_structure.ipynb` (02 was already taken): open a sealed run with `nb.open_run(...)` and read the tables through `run.table(...)` and `run.data(...)`.
-- [x] Build the term-structure table: parameters joined to the PD curves by segment, country, scenario, valuation date, grade, bucket and fraction, plus the rate and maturity.
+- [x] Build the term-structure table: parameters joined to the PD curves by segment, country, scenario, valuation date, grade, bucket and fraction, plus the rate and maturity. (With the part-year item, the curves hold whole years: the join drops `fraction`, and a part-year bucket takes `d × m`.)
 - [x] Build the loan summary: stage, 12-month and lifetime ECL (on and off balance), 12-month PD (m[1]), lifetime PD (F at maturity), LGD and DF of bucket 1, remaining maturity, rate, and the booked provision.
 - [x] Controls, each recomputed from the run's own tables (no hand-typed expected values). All pass on run `20261018T1959Z-core-36ace84d`, both scenarios, every valuation date:
   - [x] S1 loans, 2026–2028: the recomputed 12-month ECL equals `raw_on` / `raw_off` in `provisions.parquet`.
@@ -100,15 +100,15 @@ Settled by the owner on 18 October 2026: all four recommendations confirmed, as 
 
 ### Open decision (owner)
 
-- [ ] Keep the part-year PD in R6, or move it to R8. If R8: exact (pass the grade spreads) or the simpler rule (changes results)? Recommendation: keep it in R6 (findings above).
+- [x] Keep the part-year PD in R6, or move it to R8. If R8: exact (pass the grade spreads) or the simpler rule (changes results)? Recommendation: keep it in R6 (findings above). *Settled by the owner on 18 October 2026: the part-year is captured by the maturity in the ECL calculation, pro rata. The curves hold whole years, and R8 takes `d × m[n+1]` (end-2029 S1: `d × PD`). This departs from PD-06's constant-hazard wording; see C10 in `docs/assumptions.md`.*
 
 ### Steps
 
 - [x] Create a branch off `main` for this work (`todo/part-year-pd`).
 - [x] Work out the points under "Things to find out" and bring them to the owner (findings above, 18 October 2026).
-- [ ] Settle the decision above. If it departs from the design, agree it first and update the design with it.
-- [ ] If moving: run it through `/improve`. Keeping the formula must reproduce the last run (`stress compare`); the simpler rule must show its effect with `stress compare` output.
-- [ ] Record where the part-year PD is built in `docs/assumptions.md`, and update the loan term-structure task above if its join changes.
+- [x] Settle the decision above. If it departs from the design, agree it first and update the design with it. (Agreed by the owner; the design's R6 PD curve and R8 text are updated. PD-06's text is the owner's to change, C10.)
+- [x] If moving: run it through `/improve`. Keeping the formula must reproduce the last run (`stress compare`); the simpler rule must show its effect with `stress compare` output. (`stress compare` from `20261018T2152Z-core-fdcada28` to `20261018T2212Z-core-e1cf1ab2`: S2 provisions −0.09% to −0.29%, S1 at most −0.05%, S3 unchanged; cumulative charge −€0.14m baseline, −€0.34m adverse; `pd_curves.parquet` 252,720 → 38,000 rows.)
+- [x] Record where the part-year PD is built in `docs/assumptions.md`, and update the loan term-structure task above if its join changes. (A7, A27 and C10 updated. The loan term-structure notebook now joins the curves on whole buckets and takes `d × m` for a part-year bucket. That needs this branch, which merges `todo/loan-term-structure`.)
 
 ## End-2029 Stage 1: why a loss-rate blend instead of the PD curve?
 

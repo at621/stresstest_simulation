@@ -639,7 +639,7 @@ html { scroll-behavior: smooth; }
         <div class="step-id">R8</div>
         <div class="step-body">
           <h3>Year-end provisions <code>ecl/</code> <span class="loop">loops 2027 → 2029</span></h3>
-          <p>S1 grades: ECL = Σ m[k] · EAD[k] · LGD[k] · DF[k] over bucket y+1 only. S2 grades: the same sum from y+1 to maturity. S1 at end-2029 uses the interpolated 2030 loss rate. Original S3: max(GCA × LGD of the year, prior allowance), checked per exposure. New S3: flow × LGD of the default year, booked once and floored after that. The drawn part goes to the on-balance allowance and the undrawn part to the off-balance provision. Raw and constrained values are both kept.</p>
+          <p>S1 grades: ECL = Σ m[k] · EAD[k] · LGD[k] · DF[k] over bucket y+1 only. S2 grades: the same sum from y+1 to maturity. A final bucket of d years takes d × its whole-year marginal PD, pro rata by the maturity (owner decision, 18 October 2026). S1 at end-2029 uses the interpolated 2030 loss rate. Original S3: max(GCA × LGD of the year, prior allowance), checked per exposure. New S3: flow × LGD of the default year, booked once and floored after that. The drawn part goes to the on-balance allowance and the undrawn part to the off-balance provision. Raw and constrained values are both kept.</p>
         </div>
         <dl class="step-meta">
           <dt>Requirements</dt><dd><span class="chip">ECL-01–11</span><span class="chip">EAD-08</span><span class="chip">REG-05</span><span class="chip">REG-06</span></dd>
@@ -1070,7 +1070,7 @@ html { scroll-behavior: smooth; }
         <span class="tag">R6 · PD curve of a grade</span>
         <h3>Products of future matrices</h3>
         <div class="eq">F[k] = ( e_g × M(y+1) × … × M(y+k) )[D]<br>m[k] = F[k] − F[k−1],  S[k] = 1 − F[k]</div>
-        <p>This is the lifetime PD of a slice at grade g, under the scenario's own future matrices (perfect foresight, ECL-06). It allows for rating migration on the way to default. The PD-03 identities are checked on every curve.</p>
+        <p>This is the lifetime PD of a slice at grade g, under the scenario's own future matrices (perfect foresight, ECL-06). It allows for rating migration on the way to default. The PD-03 identities are checked on every curve. Curves hold whole years only; R8 takes the part of a final bucket that the maturity covers.</p>
       </div>
       <div class="fcard">
         <span class="tag">R7 · stage of a slice</span>

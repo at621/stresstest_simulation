@@ -19,6 +19,12 @@ def ecl_split(m, ead_drawn, ead_undrawn, lgd, df) -> tuple[float, float]:
     return ecl(m, ead_drawn, lgd, df), ecl(m, ead_undrawn, lgd, df)
 
 
+def part_year_pd(marginal, fraction):
+    """PD of a final bucket of ``fraction`` years: the whole year's marginal PD, pro rata by the
+    maturity (owner decision of 18 October 2026, assumption A7). The curves hold whole years."""
+    return np.asarray(marginal, dtype=float) * np.asarray(fraction, dtype=float)
+
+
 def s1_loss_rate_provision(exposure: float, pd: float, lgd: float, df: float = 1.0) -> float:
     """12-month provision with a single bucket: exposure x PD x LGD x DF (AT-05)."""
     return exposure * pd * lgd * df

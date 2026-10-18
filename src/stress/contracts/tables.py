@@ -109,11 +109,11 @@ PIT_MATRICES = TableSpec(
 
 # PD ParameterRecords. Every facility of a segment, country and grade shares one curve, so the
 # record is keyed by the curve (segment, country) instead of facility_id; cohort is the grade
-# slice. A stub final bucket carries its fraction of a year (PD-06).
+# slice. Curves hold whole years only: R8 takes the part of a final bucket that the maturity
+# covers (assumption A7).
 PD_CURVES = TableSpec(
     "pd_curves", "pd_curves.parquet",
-    key=("segment", "country", "scenario", "valuation_year", "cohort", "default_bucket",
-         "fraction", "basis"),
+    key=("segment", "country", "scenario", "valuation_year", "cohort", "default_bucket", "basis"),
     columns=("bucket_year", "q", "m", "s", "f", "source_version"),
 )
 

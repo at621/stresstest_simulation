@@ -99,29 +99,26 @@ def pit_table(book: PitBook, keys: list[tuple[str, str, str]], years: range,
 
 def pd_curves(book: PitBook, schedule: pandas.DataFrame, perf: pandas.DataFrame, scenarios: list[str],
               grades: list[str], tol: float) -> pandas.DataFrame:
-    """Grade-level PD curves (PD-11) for every valuation date, full buckets to the longest
-    maturity in each segment and country, plus the stub buckets the facilities need."""
+    """Grade-level PD curves (PD-11) for every valuation date: whole-year buckets up to the
+    longest maturity in each segment and country. A final bucket shorter than a year has its
+    whole-year row here; R8 takes the part of it the maturity covers (A7)."""
     performing = np.array(grades[:-1])
     n = len(performing)
     sched = schedule.merge(perf[["facility_id", "segment", "country"]], on="facility_id")
-    last_rows = sched.loc[sched.groupby(["facility_id", "valuation_year"])["period"].idxmax()]
     cols: dict[str, list] = {c: [] for c in ("segment", "country", "scenario", "valuation_year", "cohort",
-                                             "default_bucket", "fraction", "q", "m", "s", "f")}
+                                             "default_bucket", "q", "m", "s", "f")}
 
-    def add(segment, country, scenario, valuation, cohort, bucket, fraction, q, m, s, f):
+    def add(segment, country, scenario, valuation, cohort, bucket, q, m, s, f):
         size = len(q)
         for name, value in (("segment", segment), ("country", country), ("scenario", scenario),
                             ("valuation_year", valuation)):
             cols[name].append(np.full(size, value, dtype=object if isinstance(value, str) else int))
-        for name, value in (("cohort", cohort), ("default_bucket", bucket), ("fraction", fraction),
-                            ("q", q), ("m", m), ("s", s), ("f", f)):
+        for name, value in (("cohort", cohort), ("default_bucket", bucket), ("q", q), ("m", m),
+                            ("s", s), ("f", f)):
             cols[name].append(np.asarray(value))
 
-    for (segment, country, valuation), rows in last_rows.groupby(["segment", "country", "valuation_year"]):
+    for (segment, country, valuation), rows in sched.groupby(["segment", "country", "valuation_year"]):
         horizon = int(rows["period"].max())
-        stubs = rows.loc[rows["fraction"] < 1.0, ["period", "fraction"]].drop_duplicates()
-        stub_period = stubs["period"].to_numpy(dtype=int)
-        stub_fraction = stubs["fraction"].to_numpy(dtype=float)
         for scenario in scenarios:
             matrices = [book.get(segment, country, scenario, valuation + k) for k in range(1, horizon + 1)]
             dist = grade_distributions(matrices)
@@ -136,29 +133,7 @@ def pd_curves(book: PitBook, schedule: pandas.DataFrame, perf: pandas.DataFrame,
                             f"PD curve {segment}/{country}/{scenario}/{valuation}/{performing[g]}")
             buckets = np.arange(1, horizon + 1)
             add(segment, country, scenario, valuation, np.repeat(performing, horizon),
-                np.tile(buckets, n), np.ones(n * horizon), q.ravel(), m.ravel(), s.ravel(), f.ravel())
-            if stub_period.size == 0:
-                continue
-            # Stub buckets, all at once: each grade's distribution at the start of the stub times
-            # the constant-hazard stub PD of every grade (PD-06).
-            whole = stub_period - 1
-            start = dist[whole][:, :n, :n]  # stubs x grades x grades
-            year_pd = np.stack([matrices[w][:n, -1] for w in whole])  # stubs x grades
-            stub_pd = 1.0 - (1.0 - year_pd) ** stub_fraction[:, None]
-            stub_m = np.einsum("sij,sj->si", start, stub_pd)
-            base_f = dist[whole][:, :n, -1]
-            stub_f = base_f + stub_m
-            base_s = 1.0 - base_f
-            stub_q = np.divide(stub_m, base_s, out=np.zeros_like(stub_m), where=base_s > 0)
-            # The stub extends each grade's curve by one step: bounds, F + S = 1 and a
-            # non-decreasing F (PD-03), checked per grade.
-            if ((stub_m < -tol) | (stub_f > 1 + tol) | (stub_q > 1 + tol)).any():
-                raise BlockingError(STEP, Block.PD_IDENTITY,
-                                    f"stub PD {segment}/{country}/{scenario}/{valuation} out of bounds")
-            count = len(whole)
-            add(segment, country, scenario, valuation, np.tile(performing, count),
-                np.repeat(stub_period, n), np.repeat(stub_fraction, n), stub_q.ravel(),
-                stub_m.ravel(), (1.0 - stub_f).ravel(), stub_f.ravel())
+                np.tile(buckets, n), q.ravel(), m.ravel(), s.ravel(), f.ravel())
     out = pandas.DataFrame({name: np.concatenate(parts) for name, parts in cols.items()})
     out["bucket_year"] = out["valuation_year"] + out["default_bucket"]
     out["basis"] = BASIS_ACCOUNTING

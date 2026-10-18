@@ -22,8 +22,8 @@ def test_run_interpolates_the_2030_s1_loss_rate(core_run, full_tables):
     first = params[(params["valuation_year"] == last) & (params["default_bucket"] == 1)
                    & (params["fraction"] == 1.0)][["scenario", "facility_id", "ead_drawn", "discount_factor"]]
     curves = builders.result(ctx, "pd_curves.parquet")
-    pd_last = curves[(curves["valuation_year"] == last - 1) & (curves["default_bucket"] == 1)
-                     & (curves["fraction"] == 1.0)][["scenario", "segment", "country", "cohort", "m"]]
+    pd_last = curves[(curves["valuation_year"] == last - 1)
+                     & (curves["default_bucket"] == 1)][["scenario", "segment", "country", "cohort", "m"]]
     lgd = builders.result(ctx, "lgd_of_year.parquet")
     lgd = lgd[lgd["year"] == last][["scenario", "facility_id", "lgd"]]
     z = builders.result(ctx, "drivers.parquet")

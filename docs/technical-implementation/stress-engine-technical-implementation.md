@@ -613,13 +613,9 @@ This allows for rating migration on the way to default, under the scenario's own
 - F + S = 1;
 - the marginal PDs sum to F.
 
-A **stub final bucket** of fraction d uses the grade distribution P[n] at the start of the stub and the constant-hazard PD of each grade (A7):
+Curves hold **whole years only**, up to the longest maturity in each segment and country. A final bucket shorter than a year has its whole-year row here, and R8 takes the part of it that the maturity covers (A7, §5.9). Until 18 October 2026, R6 also built a part-year row per grade with the constant hazard `Σ_j P[n](g, j) × (1 − (1 − PD(j))^d)`. The owner then decided to capture the part-year by the maturity in the ECL instead.
 
-```text
-m_g[stub] = Σ_j  P[n](g, j) × (1 − (1 − PD(j))^d)
-```
-
-The reference run stores 252,720 PD-curve records. They are keyed by curve rather than by facility (A3), because every facility of a segment, country and grade shares one curve.
+The reference run stores 252,720 PD-curve records, 214,720 of them such part-year rows; whole years alone are 38,000. They are keyed by curve rather than by facility (A3), because every facility of a segment, country and grade shares one curve.
 
 ![Figure 8: TTC to PiT for P03. (a) The one-year PD by grade: adverse 2027 lies above TTC and baseline 2027 slightly below it, since baseline Z is near 0. (b) The lifetime cumulative PD of grade G6 from end-2026, built from products of future matrices.](images/fig-08-pd-ttc-pit.png)
 
@@ -652,8 +648,7 @@ Prepayment is applied once, in EAD, and never in the default survival. The undra
 **Other blocks.** These conditions block in R6:
 
 - a Z missing for any bucket year a facility needs (`MISSING_TERMINAL_INPUT`, AT-41);
-- a PD curve that fails PD-03;
-- a stub PD out of bounds.
+- a PD curve that fails PD-03.
 
 ## 5.8 R7: project the year (`projection/`)
 
@@ -696,7 +691,10 @@ ECL_12m(f, g)  = m_g[1] × EAD_f[1] × LGD_f[1] × DF_f[1]
 ECL_life(f, g) = Σ (k = 1 … K_f)  m_g[k] × EAD_f[k] × LGD_f[k] × DF_f[k]
 
 K_f = the facility's number of buckets to maturity, from R5
+m_g[K_f] → d × m_g[K_f] when the final bucket covers only d years
 ```
+
+The PD curves hold whole years. A final bucket of d years takes d × its whole-year marginal PD, pro rata by the maturity (A7, owner decision of 18 October 2026). A curve with a missing grade or bucket blocks (`PARAMETER_ALIGNMENT`).
 
 The drawn part of EAD goes to the on-balance allowance and the undrawn part to the off-balance provision (EAD-08, AT-34). A slice's provision is the facility's per-grade ECL multiplied by the slice's share of the facility's GCA (on-balance) or undrawn (off-balance). S1 slices take the 12-month value and S2 slices the lifetime value to maturity.
 
@@ -706,7 +704,7 @@ The drawn part of EAD goes to the on-balance allowance and the undrawn part to t
 LR_2030 = a × PD_s(2029) × LGD_s(2029) + (1 − a) × PD_baseline(2029) × LGD_baseline(2029)
 ```
 
-Here a = 5/6 for adverse and 1 for baseline. PD and LGD are not interpolated separately. A first bucket shorter than a year applies the stub to each PD first (A27), and a missing 2030 or baseline input blocks (AT-41).
+Here a = 5/6 for adverse and 1 for baseline. PD and LGD are not interpolated separately. A first bucket shorter than a year takes d × each PD first (A27), and a missing 2030 or baseline input blocks (AT-41).
 
 **S3 (ECL-11, D6, A9, A14).**
 
@@ -1098,7 +1096,7 @@ Every assumption is PROPOSED and awaits the owner's approval.
 | A4 | run_id | Kept out of stored rows; it lives only in the manifest |
 | A5 | Country in the scenario key | Yes; the §6.2 common paths are copied to all six countries |
 | A6 | SICR horizon | Residual maturity at opening, fixed per facility |
-| A7 | Stub final bucket | Constant hazard per grade |
+| A7 | Stub final bucket | Pro rata in R8, d × the whole-year marginal PD; curves hold whole years (owner, 18 October 2026). O4 and the SICR line keep the constant hazard |
 | A8 | Opening allowances | TTC matrix itself (not PiT at Z = 0), bullet schedule; LGD-01/04 not built; §8.7 LGD is the segment mean |
 | A9 | Undrawn of a new S3 cohort | Stays as nominal undrawn; its provision is undrawn flow × CCF × LGD, then floored |
 | A10 | AT-48, AT-51, AT-52 numbers | Left OPEN; their tests prove the rules |
@@ -1118,7 +1116,7 @@ Every assumption is PROPOSED and awaits the owner's approval.
 | A24 | Overlays | None in v1 (explicit zero); carried unchanged |
 | A25 | CCF source | Commitment CCF must equal the parameter set's segment CCF |
 | A26 | Rounding | CSV to cents and 10 decimals; summary in EUR m to one decimal; Parquet unrounded |
-| A27 | End-2029 S1 with a stub first bucket | Stub applied to each scenario's 2029 PD before interpolation |
+| A27 | End-2029 S1 with a stub first bucket | d × each scenario's 2029 PD before interpolation |
 | A28 | Run log and Excel | Log outside the outputs; workbook byte-reproducible without run ID |
 
 ## 11.3 Conflicts between documents (C1–C7)
