@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from foundation.matrices import build_matrix
@@ -174,13 +174,14 @@ def test_lgd_bounds(lgd_ttc, w, z):
 
 @pytest.mark.req("EAD-11")
 @given(open_prob, st.floats(0.0, 1.0), st.lists(zs, min_size=1, max_size=30))
+@example(cpr_ttc=0.9999989999999999, v=1.0, path=[4.0, 0.0])  # the rate rounds to 1.0
 def test_not_prepaid_share(cpr_ttc, v, path):
     rates = prepayment_rate(np.full(len(path), cpr_ttc), v, np.array(path))
     sp = not_prepaid_share(rates)
     assert sp[0] == 1.0 and (np.diff(sp) <= 0).all() and ((sp >= 0) & (sp <= 1)).all()
-    # SP stays positive wherever the product it stands for is representable. In float64 the
-    # probit shift can round to exactly 1 for extreme inputs (CPR_TTC near 1 with a large
-    # v x Z): everything is then prepaid, and SP is 0 from the next bucket on.
+    # SP stays positive wherever the product of the computed factors (1 - CPR) does not
+    # underflow. In float64 the probit shift can round to exactly 1 for extreme inputs (CPR_TTC
+    # near 1 with a large v x Z): everything is then prepaid, and SP is 0 from the next bucket on.
     with np.errstate(divide="ignore"):
         log_sp = np.concatenate(([0.0], np.cumsum(np.log1p(-rates[:-1]))))
     assert (sp[log_sp > np.log(np.finfo(float).tiny)] > 0).all()
