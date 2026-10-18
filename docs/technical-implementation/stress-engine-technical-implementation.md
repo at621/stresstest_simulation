@@ -597,7 +597,7 @@ C_PiT(i, j) = Φ( Φ⁻¹(C_TTC(i, j)) − √ρ × Z )
 M_PiT(i, j) = C_PiT(i, j) − C_PiT(i, j + 1)
 ```
 
-A worse economy (Z < 0) moves probability toward worse grades and default, and every row still sums to 1. Each PiT matrix is checked: rows sum to 1 within 1e-10, no negative cell, D absorbing and PD rising with the grade (`INVALID_PIT_MATRIX`, AT-46). Z = 0 gives back the TTC matrix exactly, as the LGD and prepayment rules give back their TTC values (D13). The first build divided by √(1 − ρ), which made Z = 0 the median year, well below the TTC average (a 0.80% TTC PD with ρ = 0.15 became 0.45%); the owner dropped the divisor on 18 October 2026 (A1). What the change gives up: with the divisor, the PiT PD averaged over Z ~ N(0, 1) gave back the TTC PD exactly. Without it, the cycle average lies above the TTC PD, at Φ(Φ⁻¹(PD_TTC) ÷ √(1 + ρ)): a 0.80% TTC PD with ρ = 0.15 averages 1.23%, and across the master scale the ratio is 1.04–1.46 at ρ = 0.06 and 1.12–3.08 at ρ = 0.20, highest for G1. "TTC" therefore now means the matrix of an average year (Z = 0), as LGD_TTC and CPR_TTC already do, not the average over the cycle. (A29). The reference run of §8 predates that change. `PitBook` caches matrices by (segment, Z); the reference run needs 77 distinct shifts. PiT matrices are reported for 2027–2036.
+A worse economy (Z < 0) moves probability toward worse grades and default, and every row still sums to 1. Each PiT matrix is checked: rows sum to 1 within 1e-10, no negative cell, D absorbing and PD rising with the grade (`INVALID_PIT_MATRIX`, AT-46). Z = 0 gives back the TTC matrix exactly, as the LGD and prepayment rules give back their TTC values (D13). The first build divided by √(1 − ρ), which made Z = 0 the median year, well below the TTC average (a 0.80% TTC PD with ρ = 0.15 became 0.45%); the owner dropped the divisor on 18 October 2026 (A1). What the change gives up: with the divisor, the PiT PD averaged over Z ~ N(0, 1) gave back the TTC PD exactly. Without it, the cycle average lies above the TTC PD, at Φ(Φ⁻¹(PD_TTC) ÷ √(1 + ρ)): a 0.80% TTC PD with ρ = 0.15 averages 1.23%, and across the master scale the ratio is 1.04–1.46 at ρ = 0.06 and 1.12–3.08 at ρ = 0.20, highest for G1. "TTC" therefore now means the matrix of an average year (Z = 0), as LGD_TTC and CPR_TTC already do, not the average over the cycle (A29). The reference run of §8 predates that change. `PitBook` caches matrices by (segment, Z); the reference run needs 77 distinct shifts. PiT matrices are reported for 2027–2036.
 
 **PD curves (PD-11, PD-03).** For every segment, country, scenario, valuation year and start grade g, the cumulative PD is the default column of a product of future PiT matrices:
 
@@ -1088,7 +1088,7 @@ All fourteen were taken as proposed (A1).
 | D13 | One TTC matrix per segment on a shared master scale; one-factor shift with ρ per segment, without the √(1 − ρ) divisor, so Z = 0 gives back the TTC matrix (owner decision, 18 October 2026) |
 | D14 | Prepayment rate driven by Z, applied only to the drawn balance in EAD, with SP[1] = 1 |
 
-## 11.2 Assumptions (A1–A28)
+## 11.2 Assumptions
 
 Every assumption is PROPOSED and awaits the owner's approval, unless its entry records a dated owner decision.
 
