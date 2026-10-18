@@ -16,6 +16,9 @@ dist/
 runs/*
 !runs/README.md
 
+# Notebook exports are built from local run folders, so they stay local too
+notebooks/output/
+
 # Protected; never committed
 inputs/bank/
 
