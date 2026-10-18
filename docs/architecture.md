@@ -81,7 +81,7 @@ v1 is complete. These items wait on the owner, and until they are settled the en
 
 1. **Parameter values and oracle values** (requirements §1.5): proposed values are in `foundation/parameter_set.yaml` and await the owner. The AT-48, AT-51 and AT-52 numbers stay open. See [assumptions.md](assumptions.md) A2 and A10.
 2. **LGD-01 and LGD-04:** kept for later production work and not built (A12). Confirm, or remove them (requirements §1.5).
-3. **SYN-PAR-09 (opening allowances):** settled on 18 October 2026. The owner dropped the √(1−ρ) divisor of PD-10 (D13), so the PiT matrix at Z = 0 is the TTC matrix and O4 agrees with the engine (A8, C2). The PD-10 requirement text still shows the divisor; changing it is the owner's (C9).
+3. **PD-10 requirement text (C9):** the owner dropped the √(1−ρ) divisor of the PD-10 shift on 18 October 2026 (D13, A29), which also settles SYN-PAR-09 (A8, C2). PD-10's text still prescribes the divisor and calls Z = 0 the median year. The owner updates it (C9 proposes wording); O1 then reruns, and a new input set follows.
 4. **§8.7 opening performing LGD:** used as each segment's reference (mean) TTC LGD (A13). Confirm.
 5. **`inputs/bank/`:** protected and not in git. Delete it by hand, or keep it as the future place for real data (OPS-05).
 6. **Fail-closed hooks:** the terminal `claude` CLI is 2.1.263. After updating it to 2.1.295 or later, add `"onFailure": "block"` to both hooks so they fail closed (C7). A person then runs the protection check in [runbook.md](runbook.md), and every attempt must be blocked.

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
+from scipy.special import ndtr, ndtri
 
 from foundation.matrices import build_matrix
 from stress.accounting.kernels import charge
@@ -128,6 +129,14 @@ def test_zero_z_gives_the_ttc_matrix(ttc, rho):
     # Z = 0 is an average year: the shift gives back the TTC matrix for every rho, as the LGD
     # and prepayment rules give back their TTC values (D13, owner decision 18 October 2026).
     assert np.allclose(pit_matrix(ttc, 0.0, rho), ttc, atol=1e-12)
+
+
+@pytest.mark.req("PD-10")
+@given(ttc_matrices(), zs, rhos)
+def test_d_column_is_the_one_grade_shift(ttc, z, rho):
+    # The D column needs only the grade's own TTC PD: PD(y) = Phi(Phi^-1(PD_TTC) - sqrt(rho) Z).
+    expected = ndtr(ndtri(ttc[:-1, -1]) - np.sqrt(rho) * z)
+    assert np.allclose(pit_matrix(ttc, z, rho)[:-1, -1], expected, rtol=0, atol=1e-12)
 
 
 @pytest.mark.req("PD-10")

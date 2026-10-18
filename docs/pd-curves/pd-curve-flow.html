@@ -238,12 +238,12 @@ footer p { margin: 0; max-width: 80ch; }
         <h3>PiT matrix M(y) for each year</h3>
         <p class="in-chip">Also takes: TTC matrix per segment (G1–G10 and D), the segment's ρ</p>
         <dl class="eqs">
-          <dt>C_PiT = Φ((Φ⁻¹(C_TTC) − √ρ·Z) / √(1−ρ))</dt><dd>shift each row</dd>
+          <dt>C_PiT = Φ(Φ⁻¹(C_TTC) − √ρ·Z)</dt><dd>shift each row; Z = 0 gives back the TTC matrix</dd>
           <dt>M(i, j) = C_PiT(i, j) − C_PiT(i, j+1)</dt><dd>back to cells</dd>
         </dl>
         <p><code>C(i, j)</code> is the probability of ending in grade j or worse from grade i. Shifting it moves the whole row toward worse grades, not only the D column. D stays absorbing.</p>
         <div class="gate"><b>Blocks the run if</b>a row does not sum to 1 within 1e-10, a cell is negative, or PD does not rise with the grade.</div>
-        <p class="ref">src/stress/params/matrix.py:22 · src/stress/params/__init__.py:67</p>
+        <p class="ref">src/stress/params/matrix.py:24 · src/stress/params/__init__.py:67</p>
       </div>
     </div>
     <div class="row"><div class="link"><span>M(v+1), M(v+2), …</span></div></div>
@@ -337,7 +337,7 @@ footer p { margin: 0; max-width: 80ch; }
 
     <div class="row">
       <div class="verified">
-        <b class="kick">Checked against run 20261017T2304Z-core-b559d9dd</b>
+        <b class="kick">Checked against run 20261017T2304Z-core-b559d9dd, before the √(1−ρ) divisor was dropped on 18 October 2026</b>
         <p class="big">Recomputing F, m and q from the run's stored PiT matrices reproduces 26,000 curve points. The largest difference is 7.8 × 10⁻¹⁶.</p>
         <p>The check covers buckets up to 2036, the last year for which the run stores PiT matrices. Later buckets are built by the same code.</p>
       </div>

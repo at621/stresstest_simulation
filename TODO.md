@@ -176,7 +176,7 @@ Recommendation: option 1.
 | Closing provisions 2029 | 339.2 | 408.3 | 774.6 | 913.5 |
 | S3 GCA 2029 | 716.5 | 845.9 | 1,360.4 | 1,601.0 |
 
-- The baseline 2027 release disappears. The gap between O4 and the engine's opening view falls from −40.4 to −11.3. What is left comes from the baseline Z sitting slightly above 0 (+0.06 to +0.18), which also moves LGD and prepayment.
+- The baseline 2027 release disappears. The gap between O4 and the engine's opening view falls from −40.4 to −11.3. What is left comes from the baseline Z sitting at or slightly above 0 (0.00 to +0.25 across segments in 2027–2029), which also moves LGD and prepayment. Where the baseline 2027 Z is exactly 0.00 (P04, P05, P06_GG), the engine's end-2026 S1 valuation equals O4 to the cent.
 - The adverse cumulative charge rises by €138.9m (+28%), and the adverse-minus-baseline difference by €69.8m (435.4 → 505.2). S3 GCA at end-2029 rises by €240.6m in the adverse and €129.4m in the baseline.
 - A19 and ρ: Z itself is unchanged. At 5.8% of GCA the adverse sits between today's 4.5% and the 7.6% of the first, tighter A19 set that was judged too severe. Nothing forces a retune; whether 5.8% is plausible is the owner's judgement.
 - The 0.80% TTC PD example (ρ = 0.15) checks out. Z = 0: 0.45% → 0.80%. Baseline 2027 (Z = +0.056): 0.42% → 0.75%. Adverse 2027 (Z = −1.294): 1.93% → 2.82%.
@@ -226,7 +226,7 @@ The input data must carry all three for every facility, as checked inputs that c
 ### Things to find out
 
 - **Projection.** The flags exist at end-2026 only. In 2027–2029 the engine moves grades, not DPD, watchlist or forbearance. A flag belongs to a facility while stage belongs to a grade slice, so a flagged facility would make all its performing slices S2.
-- **Effect.** Today, S2 slices whose grade improves back over the line return to S1 (€47.5m in baseline 2027). If a flag holds a facility in S2, part of that return stops.
+- **Effect.** Today, S2 slices whose grade improves back over the line return to S1 (€47.5m in baseline 2027, run `20261017T2304Z-core-b559d9dd`, before the √(1−ρ) divisor was dropped). If a flag holds a facility in S2, part of that return stops.
 - **Facilities that can never reach S2.** The 930 facilities with no S2 grade (€417.7m, mostly long-dated P01 mortgages) can reach S2 only through these triggers. Check how many of them the new O3 flags.
 - **Reporting.** Whether the stage migration report should split S2 by trigger: PD test, DPD, watchlist or forbearance.
 
