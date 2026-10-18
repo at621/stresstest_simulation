@@ -276,6 +276,7 @@ figcaption { color: var(--muted); font-size: 13.5px; max-width: 86ch; }
 .decisions p { margin: 0; max-width: 72ch; }
 .decisions .rec { font-weight: 500; }
 .decisions .rec::before { content: "Proposal  "; font: 600 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ok); }
+.decisions .rec.decided::before { content: "Decided  "; }
 .decisions .why { color: var(--muted); font-size: 14px; }
 .decisions .d-tags { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; justify-content: flex-end; }
 
@@ -1428,10 +1429,10 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D5</span>
         <div class="d-body">
           <h3>Parameters after 2029</h3>
-          <p class="rec">Adverse Z reverts linearly to baseline 2029 over 2030–2035 (weights 5/6 down to 0), and baseline stays flat. The PiT matrices and LGD follow from the reverted Z. S1 at end-2029 interpolates the loss rate (AT-06). S2 lifetime uses the reverted matrices and LGD.</p>
+          <p class="rec decided">Adverse Z reverts linearly to baseline 2029 over 2030–2035 (weights 5/6 down to 0), and baseline stays flat. The PiT matrices and LGD follow from the reverted Z. S1 at end-2029 interpolates the loss rate (AT-06). S2 lifetime uses the reverted matrices and LGD.</p>
           <p class="why">AT-06 pins only the first year. ECL-05 says interpolating the loss rate and interpolating its drivers can give different answers. <strong>Signed off by the owner on 18 October 2026</strong>, S2 included. The S1 rule is the formula of Boxes 4–5 of the 2027 draft methodological note. The draft's ¶124 reverts each S1/S2 parameter linearly rather than through Z; that difference is recorded as conflict C8 in assumptions.md, with its size.</p>
         </div>
-        <div class="d-tags"><span class="chip st">R4</span><span class="chip st">R6</span><span class="chip st">R8</span></div>
+        <div class="d-tags"><span class="chip at">signed off 18 Oct 2026</span><span class="chip st">R4</span><span class="chip st">R6</span><span class="chip st">R8</span></div>
       </li>
       <li>
         <span class="d-id">D6</span>

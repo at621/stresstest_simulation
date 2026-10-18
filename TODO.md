@@ -104,7 +104,7 @@ All the inputs exist already. The task joins tables and recomputes ECL; it adds 
 
 - ECL-10: end-2029 S1 uses the interpolated 2030 loss rate. ECL-05: interpolating the product PD × LGD is not the same as interpolating PD and LGD separately. AT-06 is the oracle: adverse 6% / 40%, baseline 2% / 30% → 5/6 × 2.4% + 1/6 × 0.6% = 2.1%.
 - ECL-10 calls itself "the project's reading of ECL-03–ECL-05 and SYN-PAR-04". ECL-03 and ECL-04 cite the draft at [S3 ¶55, ¶123–125, Boxes 4–9].
-- Design decision D5 ("Parameters after 2029") already notes that AT-06 pins only the first year and that the S2 choice awaits the owner's sign-off.
+- Design decision D5 ("Parameters after 2029") already notes that AT-06 pins only the first year and that the S2 choice awaits the owner's sign-off. (Signed off on 18 October 2026; see below.)
 - `docs/assumptions.md` A27: with a part-year first bucket, the part-year rule is applied to each scenario's 2029 PD before the blend (see the part-year task above).
 
 ### Things to find out
@@ -118,19 +118,19 @@ All the inputs exist already. The task joins tables and recomputes ECL; it adds 
 
 **The draft.** The draft note was downloaded from the URL in requirements §15 (S3): "2027 EU-wide stress test – Draft Methodological Note", 11 June 2026, 210 pages. The requirements had not checked it before ("Direct access to the two draft PDFs was unavailable").
 - **End-2029 S1: the engine follows the draft.**
-  - Box 4 (new S1, p. 53) and Box 5 (existing S1, pp. 53–54) write the adverse 2029 provision as `… × (5/6 × PD-12M-S1Adv(2029) × LGD S1Adv(2029) + 1/6 × PD-12M-S1Base(2029) × LGD S1Base(2029))`. That is a blend of loss-rate products, using each scenario's 2029 PD and LGD for the missing 2030 values.
+  - Box 4 (new S1, pp. 52–53) and Box 5 (existing S1, pp. 53–54) write the adverse 2029 provision as `… × (5/6 × PD-12M-S1Adv(2029) × LGD S1Adv(2029) + 1/6 × PD-12M-S1Base(2029) × LGD S1Base(2029))`. That is a blend of loss-rate products, using each scenario's 2029 PD and LGD for the missing 2030 values.
   - The baseline uses its own 2029 product, "given that PD-12M-S1Base is the same in 2029 and in 2030". That is the engine's rule, with a = 1.
   - The draft has no numerical example. The AT-06 numbers are the project's own, and correct: 2.1%, against 2.04% if PD and LGD were interpolated separately.
 - **The citations hold.**
   - ¶55 (p. 28): forward-looking parameters for S1/S2, same-year parameters for S3.
-  - ¶123–125 (pp. 49–50): perfect foresight, flat macro variables for S3 after 2029, the 6-year reversion for S1/S2, and time slices after the horizon.
+  - ¶123–125 (pp. 49–51): perfect foresight, flat macro variables for S3 after 2029, the 6-year reversion for S1/S2, and time slices after the horizon.
   - Boxes 4–9 are the provisioning boxes.
-  - Box 1 (p. 26) restates the 6-year reversion and could be added to the citations. The §15 note that the references are unverified can now be updated through O1.
+  - Box 1 (p. 26) restates the 6-year reversion and could be added to the citations. The §15 note that the references are unverified can now be updated by the owner (step below).
 - **S2 after 2029 differs from the draft's wording (D5).**
-  - ¶124 (p. 50): "The path of each of the credit risk parameters for S1 and S2 exposures is assumed to linearly revert to those observed at the end of the baseline scenario over 6 years". The parameters are "stage transition probabilities/PDs and the corresponding loss rates across stages", and the paragraph opens "Notwithstanding these assumptions on macroeconomic variables".
+  - ¶124 (p. 50): "The path of each of the credit risk parameters for S1 and S2 exposures is assumed to linearly revert to those observed at the end of the baseline scenario over 6 years following the end of the adverse scenario." The parameters are "stage transition probabilities/PDs and the corresponding loss rates across stages", and the paragraph opens "Notwithstanding these assumptions on macroeconomic variables".
   - ¶125 has the time slices after the horizon follow that path.
   - The engine instead reverts Z linearly (ECL-10) and derives the matrices and LGD from it. Through Φ that path is not linear in the parameters: the PDs of 2030–2034 come out below the linear path. P03 IT G7: 2030 3.36% vs 3.43%, 2032 2.70% vs 2.83%.
-  - The draft is not consistent with itself either: Boxes 4–5 blend loss-rate products "for simplification", while ¶124 reverts each parameter. The engine follows the boxes for S1 and its own Z reading for S2.
+  - For the end-2029 S1 provision, Boxes 4–5 simplify ¶124 to a blend of loss-rate products (Box 4: "Hence"; Box 5: "For simplification"). The engine follows the boxes for S1 and its own Z reading for S2.
 - **Discounting.** The draft's S1 formulas carry no discount factor. The engine's `× EAD × DF` comes from ECL-08 (DESIGN), not from the draft.
 
 **Size of the effect, adverse (the baseline blend equals the curve).**
@@ -169,6 +169,7 @@ All the inputs exist already. The task joins tables and recomputes ECL; it adds 
 - [x] Work out the points under "Things to find out" and bring them to the owner. No engine change is needed for this. (Findings above, 18 October 2026.)
 - [x] Settle the decisions above and record the answers in the design (D5) and, if the method changes, in the requirements. (D5 updated; the method does not change.)
 - [x] If the method changes: create a branch off `main`, run it through `/improve`, and show the effect with `stress compare` output. (Not needed: the method stays.)
+- [ ] Owner: update requirements §15, whose note says the draft's paragraph references are unverified (they were checked on 18 October 2026, C8), and consider adding the draft's Box 1 (p. 26) to the citations of ECL-04 and ECL-10. `docs/spec/` is the owner's to edit; O1 then retranscribes it (GOV-03).
 
 ## Baseline 2027 releases provisions: O4 and the engine measure PD differently
 
