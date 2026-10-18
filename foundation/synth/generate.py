@@ -172,6 +172,8 @@ class Generator:
                 or ("forborne" in enabled and row["forborne"])):
             return
         mix = {t: w for t, w in cfg.FLAG_ONLY_TRIGGER_MIX.items() if t in settings["enabled"]}
+        if not mix:
+            raise ValueError("flag-only S2 facilities need at least one switched-on trigger (A30)")
         pick = str(self.flag_rng.choice(list(mix), p=np.array(list(mix.values())) / sum(mix.values())))
         if pick == "dpd":
             row["dpd"] = int(self.flag_rng.integers(settings["dpd_days"], cfg.DEFAULT_DPD))
@@ -399,6 +401,9 @@ class Generator:
         rows = []
         snap = self.snapshot
         sicr_days = int(self.params["sicr_triggers"]["dpd_days"])  # the 30+ DPD backstop
+        if not 2 <= sicr_days < cfg.DEFAULT_DPD:
+            raise ValueError(f"O3 draws past-due days below and above the SICR threshold, so dpd_days must "
+                             f"be 2 to {cfg.DEFAULT_DPD - 1}; it is {sicr_days}")
         for i, f in enumerate(facilities, start=1):
             stage = f["ifrs_stage"]
             portfolio = f["portfolio"]

@@ -168,6 +168,8 @@ def _check_triggers(settings) -> None:
         raise BlockingError(STEP, Block.MISSING_PARAMETER,
                             f"sicr_triggers: hold {settings['hold']!r} is not supported; v1 holds a flag until "
                             f"default ({HOLD_UNTIL_DEFAULT!r}, A30)")
+    if not isinstance(settings["enabled"], list):
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, "sicr_triggers: enabled is not a list of triggers")
     unknown = sorted(set(settings["enabled"]) - set(TRIGGERS))
     if unknown:
         raise BlockingError(STEP, Block.MISSING_PARAMETER, f"sicr_triggers: unknown triggers {unknown}")

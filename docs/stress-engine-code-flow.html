@@ -1371,7 +1371,7 @@ html { scroll-behavior: smooth; }
         </div>
         <div class="contract">
           <h3>Facility slice: the projection state</h3>
-          <p>One row per facility and slice. Stage is derived from the grade. Amounts can be fractional (MIG-06).</p>
+          <p>One row per facility and slice. Stage is derived from the grade, or from a qualitative trigger that holds the facility in S2. Amounts can be fractional (MIG-06).</p>
           <div class="fields">facility_id · slice {grade 1…N, S3_orig, S3_new} · stage · origination_grade · entry_year · origin_stage · gca · undrawn · allowance_on · provision_off</div>
           <div class="refs"><span class="chip">MIG-03</span><span class="chip">ECL-07</span><span class="chip">RPT-06</span></div>
         </div>
@@ -1394,7 +1394,7 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D1</span>
         <div class="d-body">
           <h3>How finely to project</h3>
-          <p class="rec">One row per facility and slice: one slice for each performing grade, plus original S3 and each new S3 cohort. Stage is derived from the grade (D2).</p>
+          <p class="rec">One row per facility and slice: one slice for each performing grade, plus original S3 and each new S3 cohort. Stage is derived from the grade, or from a qualitative trigger (D2).</p>
           <p class="why">AT-18 needs no-release checked for each exposure, and RPT-06 sums ECL from facility results. 10,000 facilities × (N grades + up to 4 S3 cohorts) × 3 years × 2 scenarios is still small.</p>
         </div>
         <div class="d-tags"><span class="chip st">R7</span><span class="chip st">R8</span></div>
