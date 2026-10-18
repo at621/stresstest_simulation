@@ -33,7 +33,7 @@ from stress.contracts.tables import (
     ROUTE_S3_ORIGINAL,
     RoutedPortfolio,
 )
-from stress.validate.sicr import TtcLifetime, sicr_rank
+from stress.validate.sicr import TRIGGERS, TtcLifetime, qualitative_trigger, sicr_rank
 
 STEP = "R3"
 LOG = logging.getLogger("stress.R3")
@@ -143,6 +143,26 @@ def _check_parameters(ps: dict, segments: set[str], variant: str) -> None:
                 raise BlockingError(STEP, Block.MISSING_PARAMETER, f"segment {seg}: {name} is OPEN")
         if not params["z_drivers"]:
             raise BlockingError(STEP, Block.MISSING_PARAMETER, f"segment {seg}: no Z drivers")
+    _check_triggers(ps["sicr_triggers"])
+
+
+def _check_triggers(settings) -> None:
+    """The qualitative SICR triggers (MIG-05, A30): which are switched on, the days-past-due
+    threshold, and a source definition for each switched-on trigger (section 4.2)."""
+    if not isinstance(settings, dict):
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, "sicr_triggers is not a mapping")
+    missing = [k for k in ("enabled", "dpd_days", "definitions", "source") if settings.get(k) is None]
+    if missing:
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, f"sicr_triggers lacks {missing}")
+    unknown = sorted(set(settings["enabled"]) - set(TRIGGERS))
+    if unknown:
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, f"sicr_triggers: unknown triggers {unknown}")
+    days = settings["dpd_days"]
+    if isinstance(days, bool) or not isinstance(days, int) or days < 1:
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, "sicr_triggers: dpd_days must be a positive integer")
+    undefined = [t for t in settings["enabled"] if not settings["definitions"].get(t)]
+    if undefined:
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, f"sicr_triggers: no source definition for {undefined}")
 
 
 def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio:
@@ -210,8 +230,13 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     add(_usable(fst, "accounting_category") & (f["accounting_category"] != ON_BALANCE_CATEGORY),
         Reason.NON_AC_ON_BALANCE, "on-balance asset is not at amortised cost")
     # A missing flag is never read as True or False (missing is never a default).
-    for col in ("poci", "accrued_in_gca"):
+    for col in ("poci", "accrued_in_gca", "dpd", "watchlist", "forborne"):
         add(~_usable(fst, col), Reason.MISSING_FLAG, f"{col} missing")
+    observed = pd.to_datetime(f["credit_status_date"], errors="coerce")
+    add(~_usable(fst, "credit_status_date") | observed.isna(), Reason.INVALID_CREDIT_STATUS_DATE,
+        "credit status observation date missing (section 4.2)")
+    add(observed > pd.Timestamp(snapshot), Reason.INVALID_CREDIT_STATUS_DATE,
+        "credit status observed after the snapshot date")
     add((f["_merge"] == "both") & ~f["_default_usable"], Reason.MISSING_FLAG,
         "obligor regulatory default flag missing")
     add(f["poci"].eq(True), Reason.POCI_NOT_IN_V1, "POCI has its own treatment, not in v1")
@@ -318,7 +343,8 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
         "its commitment or opening provision was rejected")
     bad_rows = log.ids("facility")
 
-    # Grade explains stage (MIG-07), for performing facilities that passed so far.
+    # Grade or qualitative trigger explains stage (MIG-07, MIG-05, A30), for performing
+    # facilities that passed so far.
     cand = f.loc[~f["_row"].isin(bad_rows) & performing].copy()
     lifetime = TtcLifetime(matrices)
     sicr = np.full(len(cand), default_rank, dtype=int)
@@ -332,10 +358,12 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
         sicr[pos] = line
     cand["sicr_rank"] = sicr
     cand["current_rank"] = cand["current_grade"].map(rank)
-    derived = np.where(cand["current_rank"] >= cand["sicr_rank"], 2, 1)
+    cand["qualitative_trigger"] = qualitative_trigger(cand["dpd"], cand["watchlist"], cand["forborne"],
+                                                      ps["sicr_triggers"])
+    derived = np.where((cand["current_rank"] >= cand["sicr_rank"]) | cand["qualitative_trigger"], 2, 1)
     conflict = pd.Series(derived != cand["ifrs_stage"].astype(int).to_numpy(), index=cand.index)
     log.add(cand, conflict, "facility", "facility_id", Reason.STAGE_GRADE_CONFLICT,
-            "the SICR rule does not give back the reported stage")
+            "neither the SICR line nor a qualitative trigger gives back the reported stage")
     bad_rows = log.ids("facility")
     good_fac_ids = set(f.loc[~f["_row"].isin(bad_rows), "facility_id"])
     log.add(com, com["facility_id"].isin(set(f["facility_id"]) - good_fac_ids)
@@ -355,6 +383,8 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     ok["sicr_rank"] = ok["facility_id"].map(dict(zip(cand["facility_id"], cand["sicr_rank"])))
     ok.loc[ok["route"] == ROUTE_S3_ORIGINAL, "sicr_rank"] = default_rank
     ok["sicr_rank"] = ok["sicr_rank"].astype(int)
+    trigger = dict(zip(cand["facility_id"], cand["qualitative_trigger"]))
+    ok["qualitative_trigger"] = ok["facility_id"].map(trigger).fillna(False).astype(bool)
     ok["current_rank"] = ok["current_grade"].map(rank_d).astype(int)
     ok["origination_rank"] = ok["origination_grade"].map(rank).astype(int)
     good_com = com.loc[~com["_row"].isin(log.ids("commitment"))]
@@ -377,6 +407,10 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
              f"{len(portfolio) - perf_count:,}")
     LOG.info("SICR line computed for %s performing facilities; every accepted grade explains its stage",
              f"{perf_count:,}")
+    held = int(portfolio.loc[portfolio["route"] == ROUTE_PERFORMING, "qualitative_trigger"].sum())
+    LOG.info("qualitative SICR triggers (%s; %s+ days past due): %s performing facilities flagged, "
+             "held in S2 until default", ", ".join(ps["sicr_triggers"]["enabled"]),
+             ps["sicr_triggers"]["dpd_days"], f"{held:,}")
     if rejections.empty:
         LOG.info("no record rejected")
     else:

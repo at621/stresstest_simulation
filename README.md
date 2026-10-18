@@ -15,7 +15,7 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 **Status:** v1 is complete and runs end to end, in synthetic mode only; regulatory mode blocks the run. From here on, work goes into improvements, each on its own branch (see [Making changes](#making-changes)).
 
 Still open with the owner ([architecture §6](docs/architecture.md#6-open-items)):
-- Sign-off of the transcribed spec in `docs/spec/`, the input set `inputs/514ed0e86e3dc760/` and the first full-run results.
+- Sign-off of the transcribed spec in `docs/spec/`, the input set `inputs/d62d0386f2c5256e/` (with the qualitative SICR triggers; it replaces `514ed0e86e3dc760`) and the full-run results.
 - The parameter values (N, ρ, k, β, μ, σ, w, CPR_TTC, v). Claude Code proposed them (requirements §1.5, [assumptions A2](docs/assumptions.md)).
 - The oracle values of AT-48, AT-51 and AT-52.
 
@@ -104,7 +104,7 @@ uv run ruff check
 ## Running
 
 ```
-uv run stress run --inputs inputs/514ed0e86e3dc760 --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
 uv run stress report --run runs/<run_id>      # print results/reports/summary.md
 uv run stress rerun --run runs/<run_id>       # rerun from the manifest; output hashes must match
 uv run stress compare --base runs/<a> --new runs/<b>

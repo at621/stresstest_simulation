@@ -8,6 +8,12 @@ TOP_GROUP_SIZE_FACTOR = 3.0  # initial size multiple for facilities of the ten l
 ACCRUED_MONTHS_MAX = 3.0  # accrued interest covers up to three months of interest
 ONE_YEAR_SHARE = 0.03  # share of facilities with exactly one year to run, where the range allows
 SICR_MARGIN = 1e-6  # generated grades stay clear of the SICR line by this relative margin
+# A30: the share of each segment's S2 facilities that is S2 by a qualitative trigger alone, with
+# a grade above the SICR line, and the mix of the trigger given to those that drew none. These
+# draws use their own random stream, so the rest of the book is the same as without them.
+FLAG_ONLY_S2_SHARE = 0.25
+FLAG_ONLY_TRIGGER_MIX = {"dpd": 0.4, "watchlist": 0.4, "forborne": 0.2}
+FLAG_STREAM = 1
 
 # Per portfolio: facilities per obligor (size, probability), product mix of performing
 # facilities, contractual repayment profiles per product, floating-rate share, rate spread

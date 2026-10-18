@@ -75,9 +75,40 @@ def test_grade_must_explain_stage(mini, tmp_path):
     conflict = first(mini, ifrs_stage=2, segment="P05")
     fac.loc[missing, "origination_grade"] = None
     fac.loc[conflict, "origination_grade"] = fac.loc[conflict, "current_grade"]  # no SICR left
+    fac.loc[conflict, ["dpd", "watchlist", "forborne"]] = [0, False, False]  # and no trigger
     _, rej = run_with(mini, tmp_path)
     assert "MISSING_GRADE" in reasons(rej, fac.loc[missing, "facility_id"])
     assert "STAGE_GRADE_CONFLICT" in reasons(rej, fac.loc[conflict, "facility_id"])
+
+
+@pytest.mark.control("Grade and stage")
+def test_credit_status_must_be_complete_and_explain_stage(mini, tmp_path):
+    # MIG-05 with the owner decision of 18 October 2026: a missing flag is never read as "no
+    # trigger", each flag carries its observation date (section 4.2), and a flag on a facility
+    # reported S1 is a stage the rule cannot explain.
+    fac = mini["facilities"]
+    snapshot = pd.Timestamp(fac["snapshot_date"].iloc[0])
+    gone = first(mini, ifrs_stage=1, segment="P02")
+    undated = first(mini, ifrs_stage=1, segment="P03")
+    later = first(mini, ifrs_stage=1, segment="P04")
+    flagged = first(mini, ifrs_stage=1, segment="P05")
+    fac["watchlist"] = fac["watchlist"].astype(object)
+    fac.loc[gone, "watchlist"] = None
+    fac.loc[undated, "credit_status_date"] = None
+    fac.loc[later, "credit_status_date"] = (snapshot + pd.Timedelta(days=1)).date().isoformat()
+    fac.loc[flagged, "forborne"] = True
+    _, rej = run_with(mini, tmp_path)
+    assert "MISSING_FLAG" in reasons(rej, fac.loc[gone, "facility_id"])
+    assert "INVALID_CREDIT_STATUS_DATE" in reasons(rej, fac.loc[undated, "facility_id"])
+    assert "INVALID_CREDIT_STATUS_DATE" in reasons(rej, fac.loc[later, "facility_id"])
+    assert "STAGE_GRADE_CONFLICT" in reasons(rej, fac.loc[flagged, "facility_id"])
+
+
+@pytest.mark.control("Grade and stage")
+def test_trigger_settings_are_required(mini, tmp_path):
+    del mini["parameter_set"]["sicr_triggers"]
+    _, manifest = builders.run(builders.write(mini, tmp_path / "in"), tmp_path / "runs")
+    assert manifest["status"] == "BLOCKED" and manifest["blocked"]["code"] == "MISSING_PARAMETER"
 
 
 @pytest.mark.control("Cash-flow inputs")

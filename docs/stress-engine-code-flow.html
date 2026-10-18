@@ -217,6 +217,7 @@ figcaption { color: var(--muted); font-size: 13.5px; max-width: 86ch; }
 .chip.at-new { background: var(--surface); color: var(--ok); border: 1px dashed var(--ok); }
 .chip.st { background: var(--run-soft); color: var(--run); }
 .chip.so { background: var(--once-soft); color: var(--once); }
+.chip.decided { background: var(--surface); color: var(--ok); border: 1px solid var(--ok); }
 .chip.sc { background: var(--cf-soft); color: var(--cf); }
 
 /* Input table */
@@ -276,6 +277,7 @@ figcaption { color: var(--muted); font-size: 13.5px; max-width: 86ch; }
 .decisions p { margin: 0; max-width: 72ch; }
 .decisions .rec { font-weight: 500; }
 .decisions .rec::before { content: "Proposal  "; font: 600 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ok); }
+.decisions .rec.decided::before { content: "Decided  "; }
 .decisions .why { color: var(--muted); font-size: 14px; }
 .decisions .d-tags { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; justify-content: flex-end; }
 
@@ -579,7 +581,7 @@ html { scroll-behavior: smooth; }
         <div class="step-id">R3</div>
         <div class="step-body">
           <h3>Validate and route <code>validate/</code> <span class="stage">data ingestion</span></h3>
-          <p>Check the schema and referential integrity across tables. Enforce EUR only, and AC only for on-balance records; off-balance records take "not applicable". Check every TTC matrix: rows sum to 1, no negative cell, and D is absorbing. Check that each facility's grade gives back its reported stage. Send each record down one route (<a href="#ingestion">figure</a>). A rejected record goes to the log with a reason code and never reaches a total. Reconcile the starting point to the §5 targets.</p>
+          <p>Check the schema and referential integrity across tables. Enforce EUR only, and AC only for on-balance records; off-balance records take "not applicable". Check every TTC matrix: rows sum to 1, no negative cell, and D is absorbing. Check that each facility's grade, or a qualitative trigger (30+ DPD, watchlist, forbearance), gives back its reported stage. Send each record down one route (<a href="#ingestion">figure</a>). A rejected record goes to the log with a reason code and never reaches a total. Reconcile the starting point to the §5 targets.</p>
         </div>
         <dl class="step-meta">
           <dt>Requirements</dt><dd><span class="chip">DAT-01</span><span class="chip">DAT-04</span><span class="chip">SCP-02</span><span class="chip">SCP-06</span><span class="chip">MIG-01</span><span class="chip">MIG-07</span><span class="chip">§12.2</span></dd>
@@ -627,7 +629,7 @@ html { scroll-behavior: smooth; }
         <div class="step-id">R7</div>
         <div class="step-body">
           <h3>Project the year <code>projection/</code> <span class="loop">loops 2027 → 2029</span></h3>
-          <p>Move each facility's grade distribution one year: closing = opening × M(y). Whatever reaches D becomes a new S3 cohort, which keeps its entry year and origin stage. Every grade slice takes its stage from the SICR rule against the facility's origination grade (D2). Stage flows are therefore sums of matrix cells and need no separate shares. S3 never cures. Total GCA and undrawn stay at end-2026 levels, and a facility that matures is replaced like for like (<a href="#year">figure</a>).</p>
+          <p>Move each facility's grade distribution one year: closing = opening × M(y). Whatever reaches D becomes a new S3 cohort, which keeps its entry year and origin stage. Every grade slice takes its stage from the SICR rule against the facility's origination grade (D2); a facility with a qualitative trigger stays S2 in every grade until it defaults. Stage flows are therefore sums of matrix cells and need no separate shares. S3 never cures. Total GCA and undrawn stay at end-2026 levels, and a facility that matures is replaced like for like (<a href="#year">figure</a>).</p>
         </div>
         <dl class="step-meta">
           <dt>Requirements</dt><dd><span class="chip">EXP-01–03</span><span class="chip">EXP-05</span><span class="chip">MIG-01–08</span><span class="chip">PD-05</span><span class="chip">PD-06</span><span class="chip">REG-02</span><span class="chip">REG-04</span></dd>
@@ -696,7 +698,7 @@ html { scroll-behavior: smooth; }
         <thead><tr><th>Dataset</th><th>Contents</th><th>Key</th><th>Requirements</th></tr></thead>
         <tbody>
           <tr class="grp"><td colspan="4">portfolio</td></tr>
-          <tr><td class="file">facilities</td><td>Product, segment, IFRS stage, POCI flag, accounting category, <mark>drawn balance (GCA with accrued interest)</mark>, contractual limit, <mark>interest rate (EIR)</mark>, fixed/floating, <mark>residual maturity</mark>, <mark>repayment profile</mark>, regulatory approach and class, <mark class="pd">current rating grade</mark>, <mark class="pd">origination grade</mark>, TTC LGD, DPD, watchlist and forbearance flags, default and stage entry dates</td><td class="key">facility_id</td><td class="refs"><span class="chip">§4.2</span> <span class="chip">PD-01</span> <span class="chip">EAD-01</span></td></tr>
+          <tr><td class="file">facilities</td><td>Product, segment, IFRS stage, POCI flag, accounting category, <mark>drawn balance (GCA with accrued interest)</mark>, contractual limit, <mark>interest rate (EIR)</mark>, fixed/floating, <mark>residual maturity</mark>, <mark>repayment profile</mark>, regulatory approach and class, <mark class="pd">current rating grade</mark>, <mark class="pd">origination grade</mark>, TTC LGD, DPD, watchlist and forbearance flags with their observation date, default and stage entry dates</td><td class="key">facility_id</td><td class="refs"><span class="chip">§4.2</span> <span class="chip">PD-01</span> <span class="chip">EAD-01</span></td></tr>
           <tr><td class="file">obligors</td><td>Country, counterparty sector, NACE code and version, SME flag, connected group, regulatory default</td><td class="key">obligor_id, group_id</td><td class="refs"><span class="chip">DAT-01</span> <span class="chip">DAT-04</span> <span class="chip">SYN-01</span></td></tr>
           <tr><td class="file">commitments</td><td>Off-balance nominal undrawn, accounting CCF and its source, linked facility, asset category "not applicable"</td><td class="key">commitment_id</td><td class="refs"><span class="chip">SCP-06</span> <span class="chip">EAD-03–04</span></td></tr>
           <tr class="grp"><td colspan="4">starting provisions</td></tr>
@@ -704,7 +706,7 @@ html { scroll-behavior: smooth; }
           <tr class="grp"><td colspan="4">rating matrices, scenarios and parameters</td></tr>
           <tr><td class="file">ttc_pd_matrix</td><td><mark class="pd">One-year probability of moving from each performing grade to each grade or to default</mark>, one matrix per reference segment, with the master-scale grade definitions</td><td class="key">segment + from + to</td><td class="refs"><span class="chip">MIG-01</span> <span class="chip">PD-04</span> <span class="chip">PD-05</span></td></tr>
           <tr><td class="file">scenarios</td><td>Variable, unit, value type (level, growth, index), year, country, scenario, source, release, completeness and status</td><td class="key">scenario + variable + year</td><td class="refs"><span class="chip">SCN-01–04</span></td></tr>
-          <tr><td class="file">parameter_set</td><td>Z-score weights with driver means and standard deviations, <mark class="pd">matrix correlation ρ per segment</mark>, LGD sensitivity w per segment, <mark class="pd">SICR threshold k per segment</mark>, prepayment rate CPR_TTC and its Z sensitivity v per segment, CCFs, terminal rule</td><td class="key">parameter_set_id</td><td class="refs"><span class="chip">MIG-05</span> <span class="chip">SYN-PAR-04</span> <span class="chip">MOD-06</span></td></tr>
+          <tr><td class="file">parameter_set</td><td>Z-score weights with driver means and standard deviations, <mark class="pd">matrix correlation ρ per segment</mark>, LGD sensitivity w per segment, <mark class="pd">SICR threshold k per segment, the qualitative SICR triggers with their source definitions</mark>, prepayment rate CPR_TTC and its Z sensitivity v per segment, CCFs, terminal rule</td><td class="key">parameter_set_id</td><td class="refs"><span class="chip">MIG-05</span> <span class="chip">SYN-PAR-04</span> <span class="chip">MOD-06</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -1075,8 +1077,8 @@ html { scroll-behavior: smooth; }
       <div class="fcard">
         <span class="tag">R7 · stage of a slice</span>
         <h3>Stage comes from the grade</h3>
-        <div class="eq">S3  if grade = D<br>S2  if PDlife(g) ≥ k × PDlife(g0)<br>S1  otherwise</div>
-        <p>Both lifetime PDs come from the TTC matrix over the same remaining horizon (PD-06), so the line stays fixed per facility. k is a test convention per segment (MIG-05). A slice returns to S1 when its grade improves back over the line. D never cures.</p>
+        <div class="eq">S3  if grade = D<br>S2  if PDlife(g) ≥ k × PDlife(g0), or a trigger holds<br>S1  otherwise</div>
+        <p>Both lifetime PDs come from the TTC matrix over the same remaining horizon (PD-06), so the line stays fixed per facility. k is a test convention per segment (MIG-05). A slice returns to S1 when its grade improves back over the line, unless the facility carries a qualitative trigger (30+ DPD, watchlist, forbearance): that holds it in S2 until it defaults (D2). D never cures.</p>
       </div>
     </div>
   </section>
@@ -1401,19 +1403,19 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D2</span>
         <div class="d-body">
           <h3>SICR rule</h3>
-          <p class="rec">A performing slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade. Both come from the TTC matrix over the same remaining horizon. k is set per segment and labelled a test convention; you supply it. A slice returns to S1 when its grade improves back over the line.</p>
-          <p class="why">PD-06 asks for a lifetime comparison with origination, and MIG-05 for a labelled synthetic threshold. Basing the line on TTC keeps it fixed per facility, so only rating moves change stage. A PiT-based line would also move S2 volumes with the economy.</p>
+          <p class="rec decided">A performing slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade. Both come from the TTC matrix over the same remaining horizon. k is set per segment and labelled a test convention; you supply it. A slice returns to S1 when its grade improves back over the line. A facility that is 30 or more days past due, on the watchlist or forborne is S2 in every performing grade, and the flag holds it there until it defaults (A30).</p>
+          <p class="why">PD-06 asks for a lifetime comparison with origination, and MIG-05 for a labelled synthetic threshold and qualitative triggers. Basing the line on TTC keeps it fixed per facility, so only rating moves and the triggers change stage. A PiT-based line would also move S2 volumes with the economy. <strong>The triggers were added by the owner's decision of 18 October 2026.</strong> The flags are not projected, so they are held at their opening value. The requirement text of MIG-07 still says they are not used (C11).</p>
         </div>
-        <div class="d-tags"><span class="chip st">R7</span><span class="chip">parameter_set</span></div>
+        <div class="d-tags"><span class="chip decided">triggers decided 18 Oct 2026</span><span class="chip st">R3</span><span class="chip st">R7</span><span class="chip">parameter_set</span></div>
       </li>
       <li>
         <span class="d-id">D3</span>
         <div class="d-body">
           <h3>Opening grades</h3>
-          <p class="rec">The generator gives each facility an origination grade and a current grade. They are chosen so that the stage rule gives back the facility's §5.2 opening stage, and so that each segment's S1 and S2 average PD matches §8.7. Qualitative S2 triggers (30+ DPD, watchlist, forbearance) are not used.</p>
-          <p class="why">Then grade and stage never conflict (DAT-04), and R3 can block any facility whose stage the rule cannot explain.</p>
+          <p class="rec decided">The generator gives each facility an origination grade and a current grade. They are chosen so that the stage rule gives back the facility's §5.2 opening stage, and so that each segment's S1 and S2 average PD matches §8.7. A quarter of each segment's S2 facilities is S2 by a qualitative trigger alone: they keep their calibrated grade but take an origination grade that leaves it above the SICR line, and carry 30+ DPD, a watchlist or a forbearance flag (A30). No S1 facility carries a trigger.</p>
+          <p class="why">Then grade, trigger and stage never conflict (DAT-04), and R3 can block any facility whose stage neither the rule nor a trigger explains. The flag-only draws use their own random stream, so the rest of the book is unchanged. <strong>Changed by the owner's decision of 18 October 2026</strong>; until then the triggers were not used.</p>
         </div>
-        <div class="d-tags"><span class="chip so">O3</span><span class="chip st">R3</span></div>
+        <div class="d-tags"><span class="chip decided">decided 18 Oct 2026</span><span class="chip so">O3</span><span class="chip st">R3</span></div>
       </li>
       <li>
         <span class="d-id">D4</span>

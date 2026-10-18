@@ -87,5 +87,5 @@ v1 is complete. These items wait on the owner, and until they are settled the en
 6. **Fail-closed hooks:** the terminal `claude` CLI is 2.1.263. After updating it to 2.1.295 or later, add `"onFailure": "block"` to both hooks so they fail closed (C7). A person then runs the protection check in [runbook.md](runbook.md), and every attempt must be blocked.
 7. **Owner sign-offs of the v1 build.** Claude Code's reviewer approved each of these, but the owner has not yet:
    - the transcribed spec in `docs/spec/` (GOV-03);
-   - the input set `inputs/514ed0e86e3dc760/`;
+   - the input set `inputs/d62d0386f2c5256e/`, which since 18 October 2026 carries the qualitative SICR triggers (A30) and replaces `inputs/514ed0e86e3dc760/`;
    - the results of the first full core run, including the first-year charge that comes from O4 (see "Results that need the owner's eye" in [assumptions.md](assumptions.md)).

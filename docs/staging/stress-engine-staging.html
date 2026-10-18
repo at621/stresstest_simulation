@@ -265,9 +265,9 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 
 <div class="page">
   <header class="masthead">
-    <p class="eyebrow">Stress engine v1 · input set 514ed0e86e3dc760 · run 20261017T2304Z-core-b559d9dd</p>
+    <p class="eyebrow">Stress engine v1 · input set 514ed0e86e3dc760 · run 20261017T2304Z-core-b559d9dd · qualitative triggers added 18 October 2026, input set d62d0386f2c5256e</p>
     <h1>How staging works in the stress engine</h1>
-    <p class="lede">Stage follows the rating grade. A performing grade slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade, and S3 when it reaches default grade D. R3 checks this rule against the reported opening stage. R7 applies it to every grade slice in each projection year, 2027 to 2029. Later steps only read the result. Days past due, watchlist and forbearance are loaded with the data but not used yet. Adding them as triggers is planned in <code>TODO.md</code>.</p>
+    <p class="lede">Stage follows the rating grade. A performing grade slice is S2 when its lifetime PD is at least k times the lifetime PD at the facility's origination grade, and S3 when it reaches default grade D. R3 checks this rule against the reported opening stage. R7 applies it to every grade slice in each projection year, 2027 to 2029. Later steps only read the result. Since the owner's decision of 18 October 2026 a performing facility is also S2 when it is 30 or more days past due, on the watchlist or forborne, whatever its grade, and the flag holds it in S2 until it defaults (MIG-05, A30). R3 then checks "grade rule or trigger" against the reported stage.</p>
 
     <dl class="answers">
       <div>
@@ -275,7 +275,8 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
         <dd><ul>
           <li><span class="st st-2">S2</span><span>Lifetime PD of the current grade ≥ k × lifetime PD at origination, with k from 2.0 to 3.0 by segment</span></li>
           <li><span class="st st-3">S3</span><span>Grade migrates to D in the year's matrix</span></li>
-          <li><span class="st st-1">S1</span><span>Grade improves back above the SICR line</span></li>
+          <li><span class="st st-2">S2</span><span>30+ days past due, watchlist or forbearance, any one, held until default (since 18 October 2026)</span></li>
+          <li><span class="st st-1">S1</span><span>Grade improves back above the SICR line, unless a trigger holds</span></li>
         </ul></dd>
       </div>
       <div>
@@ -290,8 +291,6 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
       <div>
         <dt>Not used</dt>
         <dd><ul>
-          <li><span class="pill pill-plan">planned</span><span>30+ DPD backstop</span></li>
-          <li><span class="pill pill-plan">planned</span><span>Watchlist, forbearance</span></li>
           <li><span class="pill pill-excl">never</span><span>S3 cure, sale or write-off</span></li>
         </ul></dd>
       </div>
@@ -321,7 +320,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
     </div>
     <figure>
       <div class="fig-scroll">
-        <svg class="diagram" viewBox="0 0 1000 392" style="min-width: 760px" role="img" aria-label="Three stage boxes S1, S2 and S3. S1 to S2 when the grade reaches the SICR line, lifetime PD of the grade at least k times lifetime PD at origination. S2 to S1 when the grade moves back above the line, in the same year with no probation period. S1 and S2 to S3 when the grade migrates to D, creating a new S3 cohort that keeps its origin stage. S3 is absorbing: no cure, sale or write-off. A dashed box below shows 30+ DPD, watchlist and forbearance, loaded with each facility but never read, with a crossed-out arrow toward S2.">
+        <svg class="diagram" viewBox="0 0 1000 392" style="min-width: 760px" role="img" aria-label="Three stage boxes S1, S2 and S3. S1 to S2 when the grade reaches the SICR line, lifetime PD of the grade at least k times lifetime PD at origination. S2 to S1 when the grade moves back above the line, in the same year with no probation period. S1 and S2 to S3 when the grade migrates to D, creating a new S3 cohort that keeps its origin stage. S3 is absorbing: no cure, sale or write-off. A box below shows 30+ DPD, watchlist and forbearance: any one makes the facility S2 and holds it there until default.">
           <defs>
             <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
             <marker id="ah-s3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-s3"/></marker>
@@ -354,7 +353,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
           <!-- S2 to S1 -->
           <path class="edge" d="M418,222 H194" marker-end="url(#ah)"/>
           <text class="t-lab" x="305" y="248" text-anchor="middle">Grade back above the line</text>
-          <text class="t-sub" x="305" y="266" text-anchor="middle">same year, no probation period</text>
+          <text class="t-sub" x="305" y="266" text-anchor="middle">same year, no probation; not while a trigger holds</text>
 
           <!-- S2 to S3 -->
           <path class="edge-s3" d="M572,202 H796" marker-end="url(#ah-s3)"/>
@@ -367,13 +366,11 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
           <text class="t-sub" x="875" y="340" text-anchor="middle">no cure, sale or write-off</text>
 
           <!-- not used -->
-          <path class="edge-off" d="M495,306 V250" marker-end="url(#ah-off)"/>
-          <line class="cross" x1="487" y1="270" x2="503" y2="286"/>
-          <line class="cross" x1="503" y1="270" x2="487" y2="286"/>
-          <rect class="n-off" x="320" y="308" width="350" height="76" rx="8"/>
-          <text class="t-off-b" x="495" y="332" text-anchor="middle">Not used to set stage yet · planned</text>
-          <text class="t-off" x="495" y="352" text-anchor="middle">30+ DPD backstop · watchlist · forbearance</text>
-          <text class="t-off" x="495" y="370" text-anchor="middle">loaded with each facility in R2, never read</text>
+          <path class="edge" d="M495,306 V250" marker-end="url(#ah)"/>
+          <rect class="n-s2" x="320" y="308" width="350" height="76" rx="8"/>
+          <text class="t-lab" x="495" y="332" text-anchor="middle">Qualitative triggers · since 18 October 2026</text>
+          <text class="t-sub" x="495" y="352" text-anchor="middle">30+ DPD backstop · watchlist · forbearance</text>
+          <text class="t-sub" x="495" y="370" text-anchor="middle">any one: S2, held until default (A30)</text>
         </svg>
       </div>
       <figcaption>The three moves and what triggers each. g is the slice's grade, g0 the facility's origination grade and k the segment's SICR multiple. Exposure is moved in expected amounts, so one facility can be partly S1 and partly S2 after a year (MIG-06).</figcaption>
@@ -413,26 +410,26 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
             <td>R3 rejects a facility whose flag and stage disagree</td>
             <td><span class="chip">DAT-04</span></td>
           </tr>
-          <tr class="off">
-            <td>30+ days past due backstop<span class="sub">Planned in <code>TODO.md</code></span></td>
+          <tr>
+            <td>30+ days past due backstop<span class="sub">30 days or more past due; held until default (since 18 October 2026)</span></td>
             <td><span class="st st-1">S1</span> → <span class="st st-2">S2</span></td>
-            <td><span class="pill pill-plan">planned</span></td>
-            <td><code>dpd</code> loaded in R2, never read</td>
-            <td><span class="chip">MIG-07</span><span class="chip">D3</span></td>
+            <td><span class="pill pill-used">used</span></td>
+            <td>R3 checks <code>dpd</code> and its date; R7 holds the facility in S2</td>
+            <td><span class="chip">MIG-05</span><span class="chip">A30</span></td>
           </tr>
-          <tr class="off">
-            <td>Watchlist<span class="sub">Planned in <code>TODO.md</code></span></td>
+          <tr>
+            <td>Watchlist<span class="sub">on the watchlist; held until default (since 18 October 2026)</span></td>
             <td><span class="st st-1">S1</span> → <span class="st st-2">S2</span></td>
-            <td><span class="pill pill-plan">planned</span></td>
-            <td><code>watchlist</code> loaded in R2, never read</td>
-            <td><span class="chip">MIG-07</span><span class="chip">D3</span></td>
+            <td><span class="pill pill-used">used</span></td>
+            <td>R3 checks <code>watchlist</code> and its date; R7 holds the facility in S2</td>
+            <td><span class="chip">MIG-05</span><span class="chip">A30</span></td>
           </tr>
-          <tr class="off">
-            <td>Forbearance<span class="sub">Planned in <code>TODO.md</code></span></td>
+          <tr>
+            <td>Forbearance<span class="sub">forborne; held until default (since 18 October 2026)</span></td>
             <td><span class="st st-1">S1</span> → <span class="st st-2">S2</span></td>
-            <td><span class="pill pill-plan">planned</span></td>
-            <td><code>forborne</code> loaded in R2, never read</td>
-            <td><span class="chip">MIG-07</span><span class="chip">D3</span></td>
+            <td><span class="pill pill-used">used</span></td>
+            <td>R3 checks <code>forborne</code> and its date; R7 holds the facility in S2</td>
+            <td><span class="chip">MIG-05</span><span class="chip">A30</span></td>
           </tr>
           <tr class="off">
             <td>Cure, sale or write-off of S3</td>
@@ -465,7 +462,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
         <div class="fid once">O3</div>
         <div class="fbody">
           <div class="fhead"><h3>Generate the synthetic book <code>foundation/synth/</code></h3><span class="role builds">builds consistent inputs</span></div>
-          <p>Gives each facility an origination grade and a current grade, chosen so that the SICR rule returns its target opening stage (SYN-PAR-08, design D3). It also writes <code>dpd</code>, <code>watchlist</code> and <code>forborne</code> to agree with that stage: no S1 facility is 30+ days past due, on the watchlist or forborne.</p>
+          <p>Gives each facility an origination grade and a current grade, chosen so that the SICR rule returns its target opening stage (SYN-PAR-08, design D3). It also writes <code>dpd</code>, <code>watchlist</code> and <code>forborne</code>, with their observation date. No S1 facility carries a trigger. Since 18 October 2026, 25% of each segment's S2 facilities are S2 by a trigger alone, with a grade above the SICR line (A30): 331 in input set d62d0386f2c5256e, of which 250 have no S2 grade at all.</p>
           <p class="where">foundation/synth/generate.py:384–414</p>
         </div>
       </li>
@@ -473,7 +470,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
         <div class="fid">R2</div>
         <div class="fbody">
           <div class="fhead"><h3>Load inputs <code>ingest/</code></h3><span class="role">loads stage fields</span></div>
-          <p>Reads <code>ifrs_stage</code>, <code>current_grade</code>, <code>origination_grade</code>, the obligor's <code>regulatory_default</code>, and the three qualitative flags. Only schema and type checks happen here.</p>
+          <p>Reads <code>ifrs_stage</code>, <code>current_grade</code>, <code>origination_grade</code>, the obligor's <code>regulatory_default</code>, and the three qualitative flags with <code>credit_status_date</code>. Only schema and type checks happen here.</p>
           <p class="where">src/stress/contracts/inputs.py:88–92</p>
         </div>
       </li>
@@ -487,8 +484,9 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
             <li>S3 if and only if the current grade is D. <span class="rc">STAGE_GRADE_CONFLICT</span></li>
             <li>The obligor's regulatory default flag agrees with S3 (DAT-04). <span class="rc">DEFAULT_STAGE_CONFLICT</span></li>
             <li>POCI is outside v1. <span class="rc">POCI_NOT_IN_V1</span></li>
-            <li>For each performing facility, compute the SICR line: the first grade, going down the scale, whose lifetime TTC PD over the residual maturity at end-2026 is at least k times that of the origination grade. The rule's stage must equal the reported stage. <span class="rc">STAGE_GRADE_CONFLICT</span></li>
-            <li>Route S3 to the original S3 cohort and S1 and S2 to the performing route. The SICR line is stored on the portfolio as <code>sicr_rank</code>.</li>
+            <li>DPD, watchlist and forbearance are present, never read as "no trigger", and observed no later than the snapshot. <span class="rc">MISSING_FLAG</span> <span class="rc">INVALID_CREDIT_STATUS_DATE</span></li>
+            <li>For each performing facility, compute the SICR line: the first grade, going down the scale, whose lifetime TTC PD over the residual maturity at end-2026 is at least k times that of the origination grade. The facility is S2 when its grade is at or past the line or a switched-on trigger holds; that stage must equal the reported stage. <span class="rc">STAGE_GRADE_CONFLICT</span></li>
+            <li>Route S3 to the original S3 cohort and S1 and S2 to the performing route. The SICR line is stored on the portfolio as <code>sicr_rank</code>, the trigger as <code>qualitative_trigger</code>.</li>
           </ol>
           <p class="outcome">Current run: 10,000 accepted, 0 rejected. 9,669 performing, 331 original S3. Every accepted grade explains its stage.</p>
           <p class="where">src/stress/validate/__init__.py:217, 226–227, 249–259, 321–356 · src/stress/validate/sicr.py</p>
@@ -694,16 +692,16 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
       <li>
         <span class="n">1</span>
         <div>
-          <h3>Qualitative triggers are off by design, and adding them is planned</h3>
-          <p>MIG-07 and design D3 leave out 30+ DPD, watchlist and forbearance for the synthetic books. MIG-05 and PD-06 expect a bank's SICR to use them and to keep them separate. The data does carry them, and O3 built them to agree with the opening stage: 432 S2 facilities are 30–89 days past due, 509 are on the watchlist and 143 are forborne, and no S1 facility has any of the three. So leaving them out changes nothing at end-2026. They are not projected, so they play no part in 2027–2029.</p>
-          <p>The task "Qualitative SICR triggers" in <code>TODO.md</code> adds all three. The input data has to carry them as checked inputs that can trigger S2 on their own, not as a copy of the stage. The task also covers the design change it needs (MIG-07, D3) and how the flags behave over 2027–2029.</p>
-        </div>
+          <h3>Qualitative triggers are in use since 18 October 2026</h3>
+          <p>MIG-07 and design D3 leave out 30+ DPD, watchlist and forbearance for the synthetic books. MIG-05 and PD-06 expect a bank's SICR to use them and to keep them separate. The data does carry them, and O3 built them to agree with the opening stage: 432 S2 facilities are 30–89 days past due, 509 are on the watchlist and 143 are forborne, and no S1 facility has any of the three. In the v1 data leaving them out changed nothing at end-2026.</p>
+          <p>Since the owner's decision of 18 October 2026 all three are in use (MIG-05, A30). A flagged facility is S2 in every performing grade until it defaults, because the flags are not projected and are held at their opening value (option (a)). On input set d62d0386f2c5256e, 960 performing facilities carry a trigger. Against the v1 run, S2 GCA is €32m / €59m / €82m higher in baseline 2027 / 2028 / 2029, and provisions €0.5–0.6m higher. MIG-07's last sentence and design D3 said the triggers were not used; the requirement text is the owner's to update (C11).</p>
+          <p>        </div>
       </li>
       <li>
         <span class="n">2</span>
         <div>
           <h3>930 facilities can never reach S2</h3>
-          <p>For 930 performing facilities (€417.7m GCA, 3.9% of performing GCA, all S1 and all originated at G6 or worse), even G10's lifetime PD is below k times the lifetime PD at origination. The relative test cannot fire, so they can only move from S1 straight to S3. 582 of them are P01 mortgages with a median 24 years to maturity, where lifetime PDs of all grades come close together. Nothing else catches them, since no absolute PD level or DPD backstop is in use. The planned qualitative triggers would give them a route to S2.</p>
+          <p>For 930 performing facilities (€417.7m GCA, 3.9% of performing GCA, all S1 and all originated at G6 or worse), even G10's lifetime PD is below k times the lifetime PD at origination. The relative test cannot fire, so they can only move from S1 straight to S3. 582 of them are P01 mortgages with a median 24 years to maturity, where lifetime PDs of all grades come close together. No absolute PD level catches them either. Since 18 October 2026 the qualitative triggers give such facilities a route to S2: in input set d62d0386f2c5256e, 250 flag-only S2 facilities (€184.6m) have no S2 grade. The 930 above stay S1, because §5.2 fixes the stage counts and a flag on a reported S1 facility would contradict its stage.</p>
         </div>
       </li>
       <li>
@@ -733,12 +731,12 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
       <li><code>src/stress/projection/__init__.py</code><span>R7 stage grid (91–94), stage flows (114–123), new S3 cohorts (132–143), S3 bypass (152–155)</span></li>
       <li><code>src/stress/ecl/__init__.py</code><span>R8 12-month vs lifetime ECL by stage (225–260)</span></li>
       <li><code>src/stress/accounting/__init__.py</code><span>R9 no-release and no-cure check on S3 slices (57–75)</span></li>
-      <li><code>foundation/synth/generate.py</code><span>O3 opening DPD, watchlist and forbearance flags (384–414)</span></li>
+      <li><code>foundation/synth/generate.py</code><span>O3 opening DPD, watchlist and forbearance flags; flag-only S2 facilities (<code>_flag_only</code>, <code>_ensure_trigger</code>)</span></li>
       <li><code>inputs/514ed0e86e3dc760/parameter_set.yaml</code><span>Master scale, <code>sicr_k</code> per segment</span></li>
       <li><code>docs/spec/…Requirements.md</code><span>MIG-03–MIG-08, PD-05, PD-06, DAT-04, EXP-02, EXP-05, REG-05, SYN-PAR-08</span></li>
       <li><code>docs/stress-engine-code-flow.html</code><span>Design decisions D2 (SICR rule) and D3 (opening grades)</span></li>
       <li><code>docs/assumptions.md</code><span>A6, A7, A10, C6</span></li>
-      <li><code>TODO.md</code><span>Planned task: qualitative SICR triggers (30+ DPD, watchlist, forbearance)</span></li>
+      <li><code>TODO.md</code><span>Qualitative SICR triggers (30+ DPD, watchlist, forbearance): built 18–19 October 2026</span></li>
       <li><code>runs/20261017T2304Z-core-b559d9dd/</code><span><code>run.log</code>, <code>stage_flows.parquet</code>, <code>slices.parquet</code>; notch counts recomputed from its <code>data/</code> with the engine's own functions</span></li>
     </ul>
   </section>

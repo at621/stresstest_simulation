@@ -48,6 +48,35 @@ def test_calibration_hits_every_stage_target(full_tables):
 
 
 @pytest.mark.req("SYN-PAR-08")
+def test_reported_stage_is_the_pd_test_or_a_flag(full_tables):
+    # O3 after the owner decision of 18 October 2026 (A30): the reported stage of a performing
+    # facility is S2 when the PD test or a qualitative trigger says so. S1 carries no trigger, and
+    # a share of S2 is S2 by a flag alone, with a grade above the SICR line.
+    from foundation.synth import config as cfg
+    from stress.params import ttc_arrays
+    from stress.validate.sicr import TtcLifetime, qualitative_trigger, sicr_rank
+
+    ps = full_tables["parameter_set"]
+    fac = full_tables["facilities"]
+    perf = fac[fac["ifrs_stage"] < 3]
+    matrices, grades = ttc_arrays(full_tables["ttc_pd_matrix"])
+    rank = {g: i + 1 for i, g in enumerate(grades)}
+    life = TtcLifetime(matrices)
+    line = np.array([sicr_rank(life.pd(s, float(h)), rank[g0], float(ps["segments"][s]["sicr_k"]))[0]
+                     for s, h, g0 in perf[["segment", "residual_maturity", "origination_grade"]].to_numpy()])
+    pd_test = perf["current_grade"].map(rank).to_numpy() >= line
+    flag = np.asarray(qualitative_trigger(perf["dpd"], perf["watchlist"], perf["forborne"], ps["sicr_triggers"]))
+    assert (np.where(pd_test | flag, 2, 1) == perf["ifrs_stage"].to_numpy()).all()
+    assert not flag[perf["ifrs_stage"].to_numpy() == 1].any(), "no S1 facility carries a trigger"
+    flag_only = (perf["ifrs_stage"].to_numpy() == 2) & ~pd_test
+    assert flag[flag_only].all()
+    for seg, part in perf.assign(flag_only=flag_only).groupby("segment"):
+        s2 = int((part["ifrs_stage"] == 2).sum())
+        assert int(part["flag_only"].sum()) == round(cfg.FLAG_ONLY_S2_SHARE * s2), seg
+    assert (fac["credit_status_date"] == fac["snapshot_date"]).all()
+
+
+@pytest.mark.req("SYN-PAR-08")
 def test_generator_is_deterministic_and_matches_the_committed_set(full_inputs, tmp_path):
     again = builders.full_input_set(tmp_path)
     assert again.name == full_inputs.name, "same seed and targets give the same input-set hash"

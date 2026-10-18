@@ -481,9 +481,9 @@ footer p { margin: 0; max-width: 84ch; }
             <tr class="grp"><td colspan="3">Status and history</td></tr>
             <tr><td class="col">stage_entry_date</td><td>date the facility entered its current stage</td><td>on every row</td></tr>
             <tr><td class="col">default_date</td><td>date of default</td><td>331 rows (stage 3): 2023-01-03 – 2026-12-27</td></tr>
-            <tr><td class="col">dpd</td><td>days past due <span class="unused">not used</span></td><td>0 – 360</td></tr>
-            <tr><td class="col">watchlist</td><td>on the watchlist <span class="unused">not used</span></td><td>840 true</td></tr>
-            <tr><td class="col">forborne</td><td>forbearance granted <span class="unused">not used</span></td><td>240 true</td></tr>
+            <tr><td class="col">dpd</td><td>days past due <span class="unused">S2 trigger at 30+ days since 18 October 2026</span></td><td>0 – 360</td></tr>
+            <tr><td class="col">watchlist</td><td>on the watchlist <span class="unused">S2 trigger since 18 October 2026</span></td><td>840 true</td></tr>
+            <tr><td class="col">forborne</td><td>forbearance granted <span class="unused">S2 trigger since 18 October 2026</span></td><td>240 true</td></tr>
             <tr><td class="col">…__status</td><td>companions of <code>default_date</code>, <code>collateral_type</code>, <code>ltv</code>, <code>dscr</code></td><td><code>supplied</code> or <code>not_applicable</code></td></tr>
           </tbody>
         </table>
@@ -527,7 +527,7 @@ footer p { margin: 0; max-width: 84ch; }
             </tbody>
           </table>
         </div>
-        <p class="warn"><b>Not a trigger</b>The stage comes from the grades alone (MIG-07): stage 3 is grade D, and stage 2 is a lifetime TTC PD at least k times the one at origination. O3 drew DPD, watchlist and forbearance from each facility's stage, so they agree with the 30- and 90-day backstops by construction. 491 of the 1,324 stage-2 facilities show none of them.</p>
+        <p class="warn"><b>Not a trigger in this set</b>In this input set the stage comes from the grades alone (MIG-07): stage 3 is grade D, and stage 2 is a lifetime TTC PD at least k times the one at origination. O3 drew DPD, watchlist and forbearance from each facility's stage, so they agree with the 30- and 90-day backstops by construction. 491 of the 1,324 stage-2 facilities show none of them. Since the owner's decision of 18 October 2026 the three flags are S2 triggers that hold until default (MIG-05, A30). The current input set <code>d62d0386f2c5256e</code> makes 331 stage-2 facilities S2 by a trigger alone, with a grade above the SICR line, and adds each flag's observation date.</p>
       </div>
     </div>
 
@@ -886,7 +886,7 @@ footer p { margin: 0; max-width: 84ch; }
 
   <footer>
     <p>Figures computed with pandas from <code>inputs/514ed0e86e3dc760/</code> on 18 October 2026, at commit a171bca. <code>notebooks/03_input_data_overview.ipynb</code> checks the same set against its manifest and the targets in <code>docs/spec/</code>; the dataset schemas are in <code>src/stress/contracts/inputs.py</code>.</p>
-    <p><code>inputs/</code> also holds <code>32415eb9d5bbcd74</code>, an earlier set from the same generator and seed. The runbook and README name <code>514ed0e86e3dc760</code> as the current one. Kept in <code>docs/input-data/</code>.</p>
+    <p><code>inputs/</code> also holds <code>32415eb9d5bbcd74</code>, an earlier set from the same generator and seed. The runbook and README named <code>514ed0e86e3dc760</code> as the current one until 18 October 2026. The qualitative SICR triggers then brought <code>d62d0386f2c5256e</code>. It differs from this set only in 331 stage-2 origination grades, 127 flag values and the new <code>credit_status_date</code> column; this page still describes <code>514ed0e86e3dc760</code>. Kept in <code>docs/input-data/</code>.</p>
   </footer>
 </div>
 

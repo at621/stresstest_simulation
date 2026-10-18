@@ -121,6 +121,7 @@ def parameter_document(params: dict, spec: dict) -> dict:
         "segments": segments,
         "terminal_rule": terminal,
         "conventions": params["conventions"],
+        "sicr_triggers": params["sicr_triggers"],
         "tolerances": targets["tolerances"],
         "variants": variants,
     }

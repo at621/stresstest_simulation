@@ -28,7 +28,7 @@ Ask Claude Code to add a line to `docs/spec/README.md`, a file under `inputs/<ha
 ### A full run
 
 ```
-uv run stress run --inputs inputs/514ed0e86e3dc760 --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
 ```
 
 1. The command prints the run ID, the status and two headline lines. Exit code 0 means the run is sealed SYNTHETIC. Exit code 2 means it blocked: the folder is still sealed, with status BLOCKED, and the step, reason code and message are in `manifest.json` under `blocked`.

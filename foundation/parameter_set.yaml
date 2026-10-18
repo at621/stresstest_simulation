@@ -113,6 +113,20 @@ conventions:
   opening_allowance_matrix: ttc                # A8: architecture section 6 item 3
   opening_allowance_schedule: bullet           # A8: SYN-PAR-09 and D8
 
+# Qualitative SICR triggers (MIG-05; owner decision of 18 October 2026, A30). A performing
+# facility is S2 when any switched-on trigger holds, whatever its grade, and the flag holds it
+# in S2 until it defaults (option (a)). Each switched-on trigger needs a source definition, and
+# every facility carries the observation date of its flags (section 4.2, credit status).
+sicr_triggers:
+  enabled: [dpd, watchlist, forborne]
+  dpd_days: 30                                 # the 30+ days past due backstop
+  hold: until_default
+  definitions:
+    dpd: days past due on the facility's contractual payments at the observation date
+    watchlist: on the bank's credit watchlist at the observation date
+    forborne: a forbearance measure in place at the observation date (forborne exposure)
+  source: synthetic, set by the generator O3 (foundation/synth) and observed at the snapshot date
+
 # Variants (section 8.7 SYN-PAR-07). Core is bullet for every facility. The
 # amortising variants change the profile of amortising products only; revolvers and debt
 # securities stay bullet. The utilisation variant is the AT-35 CCF sensitivity.
