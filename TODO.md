@@ -206,6 +206,31 @@ The input data must carry all three for every facility, as checked inputs that c
 - **Facilities that can never reach S2.** The 930 facilities with no S2 grade (€417.7m, mostly long-dated P01 mortgages) can reach S2 only through these triggers. Check how many of them the new O3 flags.
 - **Reporting.** Whether the stage migration report should split S2 by trigger: PD test, DPD, watchlist or forbearance.
 
+### Findings (18 October 2026, input set `514ed0e86e3dc760`, run `20261018T1959Z-core-36ace84d`)
+
+- **The flags today.**
+  - No S1 facility is flagged.
+  - Of the 1,324 S2 facilities, 432 are 30–89 DPD, 509 on the watchlist and 143 forborne. 833 carry at least one flag. The other 491 (€580.3m of €1,368.6m S2 GCA) are S2 on the PD test alone.
+  - All 331 S3 facilities are 90+ DPD and on the watchlist, and 97 are forborne.
+  - No flag is missing anywhere: `dpd` is an integer and `watchlist` and `forborne` are booleans, with no `__status` column. Making them required inputs therefore rejects nothing in today's set.
+- **Facilities that can never reach S2: 930, €417.7m.** The PD test cannot move them, because k × their lifetime PD at origination is higher than the lifetime PD of any grade. Every one was originated at a weak grade.
+
+  | Segment, product | Facilities | GCA, EUR m | Origination grades |
+  |---|---:|---:|---|
+  | P01 mortgage | 582 | 180.1 | G6, G7 |
+  | P02 consumer loan | 216 | 4.3 | G9, G10 |
+  | P03 revolver and term loan | 105 | 100.5 | G8, G9 |
+  | P04 term loan | 18 | 91.8 | G8 |
+  | P05 revolver and term loan | 9 | 41.0 | G8 |
+
+  By count most are long-dated P01 mortgages (23.8 years on average). By GCA, 57% are SME and corporate loans. The new O3 should flag some of them, so that the triggers have something to do there.
+- **Effect of option (a) with today's flags.**
+  - Every flagged facility is already S2 at the opening. Option (a) therefore stops only their returns to S1.
+  - The PD test sends €47.5m / €53.0m / €56.7m of S2 GCA back to S1 in the baseline (2027 / 2028 / 2029), and €13.8m / €18.0m / €39.3m in the adverse.
+  - The part that belongs to flagged facilities is €27.3m / €50.8m / €70.5m of S1 GCA in the baseline (€8.1m / €13.3m / €21.8m adverse). Valuing it at lifetime instead of 12 months adds €0.43m / €0.53m / €0.49m to provisions in the baseline and €0.25–0.28m in the adverse.
+  - With today's data the triggers are therefore almost neutral. Their real effect depends on the new O3: how many S1-by-grade facilities it flags, and which ones.
+- **Projection and reporting.** Nothing new found. The points above stand: a flag is per facility and a stage per slice, and splitting S2 by trigger is a report choice.
+
 ### Open decisions (owner)
 
 - [ ] **Agree the departure from the design.** This reverses the last sentence of MIG-07 and design D3. Agree it first, then update the design (D2, D3 and the R3 and R7 text) and the requirements (MIG-07, SYN-PAR-08). `docs/spec/` is written by code only, so the requirements change goes through O1.
