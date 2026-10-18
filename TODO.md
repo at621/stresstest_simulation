@@ -161,14 +161,14 @@ All the inputs exist already. The task joins tables and recomputes ECL; it adds 
 
 ### Open decisions (owner)
 
-- [ ] Keep the loss-rate blend for end-2029 S1, as ECL-10 and AT-06 prescribe, or use the curve as in every other year. Changing it departs from the requirements and the design: it needs the owner's agreement, and AT-06 would change with it. Recommendation: keep it (the draft's Boxes 4–5).
-- [ ] The S2 choice in design decision D5 (reverted matrices and LGD), still awaiting sign-off. Recommendation: sign off Z reversion and record the ¶124 difference as a conflict (findings above).
+- [x] Keep the loss-rate blend for end-2029 S1, as ECL-10 and AT-06 prescribe, or use the curve as in every other year. Changing it departs from the requirements and the design: it needs the owner's agreement, and AT-06 would change with it. Recommendation: keep it (the draft's Boxes 4–5). *Settled by the owner on 18 October 2026: keep the blend.*
+- [x] The S2 choice in design decision D5 (reverted matrices and LGD), still awaiting sign-off. Recommendation: sign off Z reversion and record the ¶124 difference as a conflict (findings above). *Settled by the owner on 18 October 2026: Z reversion signed off; the ¶124 difference is conflict C8 in `docs/assumptions.md`.*
 
 ### Steps
 
 - [x] Work out the points under "Things to find out" and bring them to the owner. No engine change is needed for this. (Findings above, 18 October 2026.)
-- [ ] Settle the decisions above and record the answers in the design (D5) and, if the method changes, in the requirements.
-- [ ] If the method changes: create a branch off `main`, run it through `/improve`, and show the effect with `stress compare` output.
+- [x] Settle the decisions above and record the answers in the design (D5) and, if the method changes, in the requirements. (D5 updated; the method does not change.)
+- [x] If the method changes: create a branch off `main`, run it through `/improve`, and show the effect with `stress compare` output. (Not needed: the method stays.)
 
 ## Baseline 2027 releases provisions: O4 and the engine measure PD differently
 

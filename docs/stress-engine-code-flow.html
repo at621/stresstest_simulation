@@ -1303,7 +1303,7 @@ html { scroll-behavior: smooth; }
           <text class="t-label-run" x="420" y="237">S2 lifetime → maturity</text>
         </svg>
       </div>
-      <figcaption>Parameters are indexed by the year a default could happen, not by the report date (SYN-PAR-04). Each year-end provision reads buckets forward from the following year, up to the facility's maturity from R5. That is why an end-2029 S1 provision needs a 2030 bucket and blocks if one is missing (AT-41). After 2029 the weights move Z, so the PiT matrices and LGD revert together. The weights and the S2 treatment are a proposed reading of ECL-04/05, listed as D5.</figcaption>
+      <figcaption>Parameters are indexed by the year a default could happen, not by the report date (SYN-PAR-04). Each year-end provision reads buckets forward from the following year, up to the facility's maturity from R5. That is why an end-2029 S1 provision needs a 2030 bucket and blocks if one is missing (AT-41). After 2029 the weights move Z, so the PiT matrices and LGD revert together. The weights and the S2 treatment are the project's reading of ECL-04/05, signed off as D5.</figcaption>
     </figure>
   </section>
 
@@ -1429,7 +1429,7 @@ html { scroll-behavior: smooth; }
         <div class="d-body">
           <h3>Parameters after 2029</h3>
           <p class="rec">Adverse Z reverts linearly to baseline 2029 over 2030–2035 (weights 5/6 down to 0), and baseline stays flat. The PiT matrices and LGD follow from the reverted Z. S1 at end-2029 interpolates the loss rate (AT-06). S2 lifetime uses the reverted matrices and LGD.</p>
-          <p class="why">AT-06 pins only the first year. ECL-05 says interpolating the loss rate and interpolating its drivers can give different answers, so the S2 choice needs your sign-off.</p>
+          <p class="why">AT-06 pins only the first year. ECL-05 says interpolating the loss rate and interpolating its drivers can give different answers. <strong>Signed off by the owner on 18 October 2026</strong>, S2 included. The S1 rule is the formula of Boxes 4–5 of the 2027 draft methodological note. The draft's ¶124 reverts each S1/S2 parameter linearly rather than through Z; that difference is recorded as conflict C8 in assumptions.md, with its size.</p>
         </div>
         <div class="d-tags"><span class="chip st">R4</span><span class="chip st">R6</span><span class="chip st">R8</span></div>
       </li>
