@@ -217,6 +217,7 @@ figcaption { color: var(--muted); font-size: 13.5px; max-width: 86ch; }
 .chip.at-new { background: var(--surface); color: var(--ok); border: 1px dashed var(--ok); }
 .chip.st { background: var(--run-soft); color: var(--run); }
 .chip.so { background: var(--once-soft); color: var(--once); }
+.chip.decided { background: var(--surface); color: var(--ok); border: 1px solid var(--ok); }
 .chip.sc { background: var(--cf-soft); color: var(--cf); }
 
 /* Input table */
@@ -1503,7 +1504,7 @@ html { scroll-behavior: smooth; }
           <p class="rec decided">One TTC matrix per reference segment (7) on a shared master scale of N performing grades plus D, built once in O2. Each row shifts with C_PiT = Φ(Φ⁻¹(C_TTC) − √ρ × Z), with ρ per segment in the parameter set. You choose N and ρ.</p>
           <p class="why">This is the one-factor shift without the √(1 − ρ) divisor: every shifted row is still a valid distribution, default moves together with rating migration, and Z = 0 gives back the TTC matrix exactly, as the LGD rule does. <strong>Decided by the owner on 18 October 2026.</strong> The first build kept the divisor, which made Z = 0 the median year, well below the TTC average: a 0.80% TTC PD with ρ = 0.15 became 0.45%. The opening allowances (O4, at TTC) and the engine then disagreed, and baseline 2027 released €5m. What the change gives up: with the divisor, the PiT PD averaged over Z ~ N(0, 1) gave back the TTC PD exactly. Without it, the cycle average lies above the TTC PD, at Φ(Φ⁻¹(PD_TTC) ÷ √(1 + ρ)): a 0.80% TTC PD with ρ = 0.15 averages 1.23%, and across the master scale the ratio is 1.04–1.46 at ρ = 0.06 and 1.12–3.08 at ρ = 0.20, highest for G1. "TTC" therefore now means the matrix of an average year (Z = 0), as LGD_TTC and CPR_TTC already do, not the average over the cycle.</p>
         </div>
-        <div class="d-tags"><span class="chip at">decided 18 Oct 2026</span><span class="chip so">O2</span><span class="chip st">R6</span></div>
+        <div class="d-tags"><span class="chip decided">decided 18 Oct 2026</span><span class="chip so">O2</span><span class="chip st">R6</span></div>
       </li>
       <li>
         <span class="d-id">D14</span>
