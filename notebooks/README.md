@@ -18,7 +18,7 @@ In VS Code, open the `.ipynb` and pick the kernel `.venv\Scripts\python.exe` (Py
 | [01_full_run_walkthrough.ipynb](01_full_run_walkthrough.ipynb) | Runs R1–R11 on one input set and shows each step's tables, with the identities behind them. It follows one facility from its cash flows to its charge. |
 | [02_annual_pd_calculation.ipynb](02_annual_pd_calculation.ipynb) | Rebuilds every annual PD by hand from the input set (Z-score, PiT matrices, PD curves, portfolio PD) and checks each value against a sealed run. |
 | [03_input_data_overview.ipynb](03_input_data_overview.ipynb) | What the engine starts from: the input set, its portfolios, loans, interest rates and SICR triggers. It reads files only and starts no run. |
-| [04_loan_term_structure.ipynb](04_loan_term_structure.ipynb) | Two tables per loan from a sealed run: a loan summary (stage, 12-month and lifetime ECL, PD, LGD, maturity, rate, booked provision) and a term structure (PD, LGD, EAD, DF and ECL share per default bucket). Controls recompute the booked S1 and S2 provisions and R8's `ecl_buckets` for every scenario and valuation date. Exports to `output/<run_id>/`. |
+| [04_loan_term_structure.ipynb](04_loan_term_structure.ipynb) | Two tables per loan from a sealed run: a loan summary (stage, 12-month and lifetime ECL, PD, LGD, maturity, rate, booked provision) and a term structure (PD, LGD, EAD, DF and ECL share per default bucket). Controls recompute the booked S1 and S2 provisions and R8's `ecl_buckets` for every scenario and valuation date; end-2029 S1 is recomputed from the loss-rate blend it is booked from (ECL-10, AT-06) and shown against the curve. Exports to `output/<run_id>/`. |
 
 ## Shared helpers: `nbtools.py`
 
