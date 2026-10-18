@@ -38,16 +38,16 @@ All the inputs exist already. The task joins tables and recomputes ECL; it adds 
 
 ### Open decisions (owner)
 
-Proposed and used on branch `todo/loan-term-structure` (18 October 2026), as the recommendations say. Each box is ticked once the owner confirms.
+Settled by the owner on 18 October 2026: all four recommendations confirmed, as used on branch `todo/loan-term-structure`.
 
-- [ ] **Valuation dates.** The 2026 snapshot only, or every date from 2026 to 2029? From 2027 on, a loan can sit in several grades, so we'd need one row per slice or a GCA-weighted blend. Recommendation: 2026 first, with per-slice rows if later dates are wanted. *Used: the export holds 2026 (`EXPORT_YEARS = [2026]`). The tables are built per slice, so adding a later year to `EXPORT_YEARS` gives one row per slice. The controls always cover 2026–2029.*
-- [ ] **S3 loans.** Include them in the summary with stage 3 and their allowance, or leave them out? Recommendation: include them in the summary, but not in the term structure. *Used as recommended.*
-- [ ] **One-off or permanent.** A notebook that reads a sealed run, with no engine change. Or a new output of every run, which goes through `/improve` with tests, gate, compare and `change-reviewer`. Recommendation: the notebook first. *Used: notebook.*
-- [ ] **Format and location** of the export (CSV, Parquet, Excel). Never write into `runs/`, `inputs/` or a new root folder. *Used: both tables as Parquet (unrounded, every column) and the loan summary also as CSV, in `notebooks/output/<run_id>/`, which git ignores.*
+- [x] **Valuation dates.** The 2026 snapshot only, or every date from 2026 to 2029? From 2027 on, a loan can sit in several grades, so we'd need one row per slice or a GCA-weighted blend. Recommendation: 2026 first, with per-slice rows if later dates are wanted. *Used: the export holds 2026 (`EXPORT_YEARS = [2026]`). The tables are built per slice, so adding a later year to `EXPORT_YEARS` gives one row per slice. The controls always cover 2026–2029.*
+- [x] **S3 loans.** Include them in the summary with stage 3 and their allowance, or leave them out? Recommendation: include them in the summary, but not in the term structure. *Used as recommended.*
+- [x] **One-off or permanent.** A notebook that reads a sealed run, with no engine change. Or a new output of every run, which goes through `/improve` with tests, gate, compare and `change-reviewer`. Recommendation: the notebook first. *Used: notebook.*
+- [x] **Format and location** of the export (CSV, Parquet, Excel). Never write into `runs/`, `inputs/` or a new root folder. *Used: both tables as Parquet (unrounded, every column) and the loan summary also as CSV, in `notebooks/output/<run_id>/`, which git ignores.*
 
 ### Steps
 
-- [ ] Settle the open decisions above (proposals used on the branch; owner to confirm).
+- [x] Settle the open decisions above (confirmed by the owner, 18 October 2026).
 - [x] Create a branch off `main` for this work.
 - [x] Notebook `notebooks/04_loan_term_structure.ipynb` (02 was already taken): open a sealed run with `nb.open_run(...)` and read the tables through `run.table(...)` and `run.data(...)`.
 - [x] Build the term-structure table: parameters joined to the PD curves by segment, country, scenario, valuation date, grade, bucket and fraction, plus the rate and maturity.
