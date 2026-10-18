@@ -2,3 +2,5 @@
 
 Imports nothing from foundation. Pipeline steps share only stress.contracts; cli.py wires them.
 """
+
+__version__ = "0.1.0"

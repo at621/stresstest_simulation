@@ -1,0 +1,29 @@
+flowchart TB
+  IN["<b>Each loaded record</b><br/>facility · obligor · commitment · opening provision"]:::neutral
+  CHK(["Input controls pass?"]):::step
+  ST(["Reported stage?"]):::step
+  SICR(["Grade explains the stage?"]):::step
+  PERF["<b>Route: performing</b><br/>S1 or S2 · grade slices"]:::step
+  S3["<b>Route: s3_original</b><br/>grade D"]:::s3
+  REJ["<b>Rejected</b> · rejections.parquet<br/>reason code; linked records too"]:::block
+  RB(["Run-blocking reason?"]):::block
+  BLK["<b>Run BLOCKED</b><br/>sealed with the reason"]:::block
+  GAP["<b>Run continues</b><br/>DATA GAP line in summary"]:::neutral
+  IN --> CHK
+  CHK -->|yes| ST
+  CHK -->|no| REJ
+  ST -->|"3"| S3
+  ST -->|"1 or 2"| SICR
+  SICR -->|yes| PERF
+  SICR -->|no| REJ
+  REJ --> RB
+  RB -->|yes| BLK
+  RB -->|no| GAP
+  classDef oneoff fill:#e3f5ee,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b
+  classDef step fill:#e6effb,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b
+  classDef cash fill:#fdeee6,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b
+  classDef file fill:#fbf5e3,stroke:#c98500,stroke-width:1.5px,color:#0b0b0b
+  classDef block fill:#fdecec,stroke:#e34948,stroke-width:1.5px,color:#0b0b0b
+  classDef s3 fill:#dde5f1,stroke:#104281,stroke-width:1.5px,color:#0b0b0b
+  classDef neutral fill:#f5f5f3,stroke:#898781,stroke-width:1.5px,color:#0b0b0b
+  classDef tab fill:#ffffff,stroke:#898781,stroke-width:1px,color:#0b0b0b

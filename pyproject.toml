@@ -8,18 +8,32 @@ license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0",
+    "openpyxl>=3.1.5",
     "pandas>=2.2",
     "pyarrow>=16.0",
     "pyyaml>=6.0",
     "scipy>=1.13",
 ]
 
+[project.scripts]
+stress = "stress.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "import-linter>=2.0",
+    "hypothesis>=6.170.1",
 ]
+notebooks = [
+    "ipykernel>=7.4.0",
+    "jupyterlab>=4.6.4",
+    "matplotlib>=3.11.2",
+]
+
+[tool.uv]
+# A plain `uv sync` removes packages outside its groups, so the notebook kernel is kept by default.
+default-groups = ["dev", "notebooks"]
 
 [build-system]
 requires = ["hatchling"]
@@ -32,11 +46,13 @@ packages = ["src/stress", "foundation"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", ".", "tests"]
+cache-dir = "tests/.ruff_cache"  # tool caches stay out of the repository root
+src = ["src", ".", "tests", "notebooks"]
 extend-exclude = ["archive", "inputs", "runs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+cache_dir = "tests/.pytest_cache"
 pythonpath = ["src", "."]
 norecursedirs = ["archive", "inputs", "runs", ".*"]
 addopts = ["--import-mode=importlib", "--strict-markers"]
@@ -46,7 +62,8 @@ markers = [
     "control(name): requirements section 12.2 control this test proves",
 ]
 
-# Architecture contracts, checked with `lint-imports`.
+# Architecture contracts, checked with `lint-imports --cache-dir tests/.import_linter_cache` (import-linter takes its cache
+# folder only on the command line).
 
 [tool.importlinter]
 root_packages = ["stress", "foundation"]

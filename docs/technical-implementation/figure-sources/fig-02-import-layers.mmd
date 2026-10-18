@@ -1,0 +1,16 @@
+flowchart TB
+  CLI["<b>stress.cli</b><br/>the only module that wires the steps, in order"]:::step
+  STEPS["<b>Pipeline step packages</b><br/>never import each other<br/><br/>lineage (R1, R11) · ingest (R2)<br/>validate (R3) · scenario (R4)<br/>cashflows (R5) · params (R6)<br/>projection (R7) · ecl (R8)<br/>accounting (R9) · report (R10)<br/>capital (REA floor kernels)"]:::neutral
+  CON["<b>stress.contracts</b><br/>inputs · tables · run · status · errors"]:::file
+  F["<b>foundation</b><br/>one-off steps O1–O4"]:::oneoff
+  CLI -->|imports| STEPS -->|import only| CON
+  F ---|"forbidden in both directions"| CLI
+  linkStyle 2 stroke:#e34948,stroke-width:2px,stroke-dasharray:6 4
+  classDef oneoff fill:#e3f5ee,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b
+  classDef step fill:#e6effb,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b
+  classDef cash fill:#fdeee6,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b
+  classDef file fill:#fbf5e3,stroke:#c98500,stroke-width:1.5px,color:#0b0b0b
+  classDef block fill:#fdecec,stroke:#e34948,stroke-width:1.5px,color:#0b0b0b
+  classDef s3 fill:#dde5f1,stroke:#104281,stroke-width:1.5px,color:#0b0b0b
+  classDef neutral fill:#f5f5f3,stroke:#898781,stroke-width:1.5px,color:#0b0b0b
+  classDef tab fill:#ffffff,stroke:#898781,stroke-width:1px,color:#0b0b0b

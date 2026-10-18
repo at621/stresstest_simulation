@@ -9,7 +9,7 @@ How this repository is organised and what is enforced. The engine design is in [
 | `docs/spec/` | O1 (`foundation/transcribe`); requirements text by the project owner | Locked |
 | `inputs/<hash>/` | O2–O4 (`foundation/matrices`, `foundation/synth`) | Locked; R2 checks every file's hash |
 | `runs/<run_id>/` | R1–R11 | Locked; write-once, sealed by R11 |
-| `foundation/`, `src/stress/`, `tests/`, rest of `docs/` | People and Claude Code | Normal review |
+| `foundation/`, `src/stress/`, `tests/`, `notebooks/`, rest of `docs/` | People and Claude Code | Normal review |
 | `archive/` | People only | Claude Code fully blocked; not in git |
 | `inputs/bank/` | Nobody yet | Claude Code fully blocked; not in git |
 
@@ -63,22 +63,29 @@ Check the protection with [runbook.md](runbook.md) after any change to `.claude/
 
 ## 5. Claude Code setup
 
-**In place:**
 - **CLAUDE.md files:** at the root, plus one each in `src/stress/params/` and `src/stress/ecl/`. Those two list the "apply once" rules for R6 and R8.
-- **`.claude/settings.json`:** deny rules for the archive, `inputs/bank/` and the locked folders.
-- **The guard hook.**
-
-**Planned**, added when there is code to build:
-- a `/build-step` skill that builds one step until its acceptance cases pass;
-- a `step-reviewer` agent that must approve every step;
-- a test gate that runs when Claude stops;
-- a git pre-commit hook.
+- **`.claude/settings.json`:** deny rules for the archive, `inputs/bank/` and the locked folders, and the two hooks below. The hooks run with `py -3 -I`, so they work under any active virtualenv.
+- **The guard hook** `.claude/hooks/guard_paths.py`, before every tool call.
+- **`/improve`** (`.claude/skills/improve/SKILL.md`) makes one improvement on its own branch:
+  1. Tests first.
+  2. The gate.
+  3. A full run, compared against the run before the change.
+  4. Review.
+- **`change-reviewer`** (`.claude/agents/change-reviewer.md`): a read-only reviewer that must approve every change before it is merged. It returns APPROVE or CHANGES REQUESTED.
+- **Test gate** `.claude/hooks/test_gate.py`, a Stop hook: when code under `src/`, `foundation/` or `tests/` has changed, it runs pytest, lint-imports and ruff, and blocks the stop until they pass.
+- **Git pre-commit hook** `.githooks/pre-commit`: refuses protected paths and run folders, then runs the same three checks. Enable it once per clone with `git config core.hooksPath .githooks`.
 
 ## 6. Open items
 
-1. **Parameter values and oracle values** (requirements §1.5).
-2. **LGD-01 and LGD-04:** keep them for later production work, or remove them (requirements §1.5).
-3. **SYN-PAR-09 (opening allowances):** it uses "PD curves from the TTC matrix (Z = 0)". Under PD-10 the PiT matrix at Z = 0 is not the TTC matrix. Confirm which one is meant.
-4. **§8.7 opening performing LGD:** the column has no stated use now that LGD comes from LGD_TTC and the Z-score. Confirm whether it is the reference LGD_TTC or can go.
+v1 is complete. These items wait on the owner, and until they are settled the engine runs on the assumptions in [assumptions.md](assumptions.md). When one is settled, record the answer in the design or the requirements and remove it here.
+
+1. **Parameter values and oracle values** (requirements §1.5): proposed values are in `foundation/parameter_set.yaml` and await the owner. The AT-48, AT-51 and AT-52 numbers stay open. See [assumptions.md](assumptions.md) A2 and A10.
+2. **LGD-01 and LGD-04:** kept for later production work and not built (A12). Confirm, or remove them (requirements §1.5).
+3. **SYN-PAR-09 (opening allowances):** "PD curves from the TTC matrix (Z = 0)". Under PD-10 the PiT matrix at Z = 0 is not the TTC matrix. Built with the TTC matrix itself (A8, C2). Confirm.
+4. **§8.7 opening performing LGD:** used as each segment's reference (mean) TTC LGD (A13). Confirm.
 5. **`inputs/bank/`:** protected and not in git. Delete it by hand, or keep it as the future place for real data (OPS-05).
-6. **Fail-closed hook:** the terminal `claude` CLI is 2.1.263. After updating it to 2.1.295 or later, add `"onFailure": "block"` to the hook so it fails closed.
+6. **Fail-closed hooks:** the terminal `claude` CLI is 2.1.263. After updating it to 2.1.295 or later, add `"onFailure": "block"` to both hooks so they fail closed (C7). A person then runs the protection check in [runbook.md](runbook.md), and every attempt must be blocked.
+7. **Owner sign-offs of the v1 build.** Claude Code's reviewer approved each of these, but the owner has not yet:
+   - the transcribed spec in `docs/spec/` (GOV-03);
+   - the input set `inputs/514ed0e86e3dc760/`;
+   - the results of the first full core run, including the first-year charge that comes from O4 (see "Results that need the owner's eye" in [assumptions.md](assumptions.md)).

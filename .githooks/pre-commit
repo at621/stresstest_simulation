@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit gate (docs/architecture.md section 5). Enable once per clone with:
+#   git config core.hooksPath .githooks
+#
+# 1. Protected and local-only paths are never committed.
+# 2. Lint, import rules and the full test suite pass.
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+blocked=$(printf '%s\n' "$staged" | grep -E '^(archive|inputs/bank)(/|$)')
+if [ -n "$blocked" ]; then
+    echo "pre-commit: protected paths are never committed:" >&2
+    printf '  %s\n' $blocked >&2
+    exit 1
+fi
+
+local_runs=$(printf '%s\n' "$staged" | grep -E '^runs/' | grep -v '^runs/README\.md$')
+if [ -n "$local_runs" ]; then
+    echo "pre-commit: run folders stay local (runs/README.md):" >&2
+    printf '  %s\n' $local_runs >&2
+    exit 1
+fi
+
+unset VIRTUAL_ENV
+uv run ruff check || exit 1
+uv run lint-imports --cache-dir tests/.import_linter_cache || exit 1
+uv run pytest -q -x -p no:cacheprovider || exit 1

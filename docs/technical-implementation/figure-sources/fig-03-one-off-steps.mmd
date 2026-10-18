@@ -1,0 +1,31 @@
+flowchart TB
+  REQ["<b>Requirements v1.3</b><br/>§5 · §6.2 · §8.7 · §12"]:::file
+  O1["<b>O1 · transcribe</b> · foundation/transcribe<br/>every number checked against its source text"]:::oneoff
+  subgraph SPEC["docs/spec/ (locked)"]
+    direction TB
+    T1[("targets.yaml<br/>§5, §12.3")]:::file
+    T2[("scenarios.yaml<br/>§6.2")]:::file
+    T3[("calibration_<br/>targets.yaml · §8.7")]:::file
+    T4[("oracles/<br/>36 × AT-xx.yaml")]:::file
+  end
+  PS["<b>parameter_set.yaml</b><br/>proposed values (A2)"]:::file
+  subgraph SYN["python -m foundation.synth"]
+    direction LR
+    O2["<b>O2</b><br/>TTC matrices<br/>+ grade mix"]:::oneoff
+    O3["<b>O3</b><br/>synthetic<br/>portfolio"]:::oneoff
+    O4["<b>O4</b><br/>opening<br/>allowances"]:::oneoff
+    W["<b>hash and<br/>write</b>"]:::oneoff
+    O2 --> O3 --> O4 --> W
+  end
+  INP[("<b>inputs/#lt;first 16 hex of the set hash#gt;/</b><br/>7 datasets · manifest.json · approval.json")]:::file
+  REQ --> O1 --> SPEC --> SYN
+  PS --> SYN
+  SYN --> INP
+  classDef oneoff fill:#e3f5ee,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b
+  classDef step fill:#e6effb,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b
+  classDef cash fill:#fdeee6,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b
+  classDef file fill:#fbf5e3,stroke:#c98500,stroke-width:1.5px,color:#0b0b0b
+  classDef block fill:#fdecec,stroke:#e34948,stroke-width:1.5px,color:#0b0b0b
+  classDef s3 fill:#dde5f1,stroke:#104281,stroke-width:1.5px,color:#0b0b0b
+  classDef neutral fill:#f5f5f3,stroke:#898781,stroke-width:1.5px,color:#0b0b0b
+  classDef tab fill:#ffffff,stroke:#898781,stroke-width:1px,color:#0b0b0b

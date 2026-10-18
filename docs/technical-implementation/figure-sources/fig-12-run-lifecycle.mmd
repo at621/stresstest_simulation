@@ -1,0 +1,27 @@
+flowchart TB
+  A["<b>R1</b> creates runs/#lt;run_id#gt;/ and config.yaml"]:::step
+  B["<b>R2–R10</b> write data/ and results/<br/>each table written once"]:::step
+  C["<b>Sealed SYNTHETIC</b><br/>manifest.json with every hash<br/>files read-only · exit 0"]:::step
+  D["<b>Sealed BLOCKED</b><br/>manifest names step, code, message<br/>exit 2 (1 for an engine fault)"]:::block
+  E["<b>stress rerun</b><br/>new folder from the<br/>manifest's config"]:::neutral
+  I["<b>stress compare</b><br/>impairment differences"]:::neutral
+  J["<b>stress report</b><br/>prints summary.md"]:::neutral
+  F{"Every output hash<br/>identical?"}:::neutral
+  G["reproduced · exit 0"]:::step
+  H["NOT reproduced · exit 3"]:::block
+  A --> B
+  B -->|completes| C
+  B -->|"blocked or fault"| D
+  C --> E --> F
+  C --> I
+  C --> J
+  F -->|yes| G
+  F -->|no| H
+  classDef oneoff fill:#e3f5ee,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b
+  classDef step fill:#e6effb,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b
+  classDef cash fill:#fdeee6,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b
+  classDef file fill:#fbf5e3,stroke:#c98500,stroke-width:1.5px,color:#0b0b0b
+  classDef block fill:#fdecec,stroke:#e34948,stroke-width:1.5px,color:#0b0b0b
+  classDef s3 fill:#dde5f1,stroke:#104281,stroke-width:1.5px,color:#0b0b0b
+  classDef neutral fill:#f5f5f3,stroke:#898781,stroke-width:1.5px,color:#0b0b0b
+  classDef tab fill:#ffffff,stroke:#898781,stroke-width:1px,color:#0b0b0b

@@ -1,0 +1,136 @@
+# Proposed synthetic parameter set (SYN-PAR-06), read by O2-O4 and copied into every input set.
+#
+# STATUS: PROPOSED. Every value below was chosen by Claude Code as a working assumption so the
+# engine can run end to end; none is owner-approved, estimated or EBA-prescribed. The project
+# owner replaces or approves them (requirements section 1.5 item 1, docs/architecture.md section 6 item 1). See
+# docs/assumptions.md for the reasoning behind each choice.
+#
+# Units: rates, probabilities and driver values are decimal fractions (0.015 = 1.5%).
+# Values that come from the spec (CCFs, tolerances, horizon years) are filled in by O3 from
+# docs/spec/ and are not repeated here.
+
+parameter_set_id: SYN-PS-0.1-proposed
+version: "0.1"
+status: PROPOSED
+
+# Shared master scale (PD-09, D13): N = 10 performing grades plus D. The one-year TTC PD of
+# each grade is the D column of every segment's TTC matrix. The rungs were set so that each
+# section 8.7 target lies between two grades inside the section 5.4 PD range of its portfolio.
+master_scale:
+  grades: [G1, G2, G3, G4, G5, G6, G7, G8, G9, G10]
+  default_grade: D
+  ttc_pd: [0.0002, 0.0005, 0.0012, 0.0030, 0.0070, 0.0160, 0.0300, 0.0480, 0.0900, 0.1800]
+
+# Migration shape of the TTC matrices (O2): the non-default mass of a row stays in its grade
+# with probability `stay`; the rest moves, `downgrade_share` of it downwards, each further notch
+# `decay` times as likely as the one before.
+migration:
+  P01: {stay: 0.90, downgrade_share: 0.55, decay: 0.30}
+  P02: {stay: 0.80, downgrade_share: 0.55, decay: 0.30}
+  P03: {stay: 0.82, downgrade_share: 0.55, decay: 0.30}
+  P04: {stay: 0.85, downgrade_share: 0.55, decay: 0.30}
+  P05: {stay: 0.85, downgrade_share: 0.55, decay: 0.30}
+  P06_GG: {stay: 0.92, downgrade_share: 0.55, decay: 0.30}
+  P06_CI: {stay: 0.90, downgrade_share: 0.55, decay: 0.30}
+
+# Z-score drivers (SCN-08): Z = sum beta * (x - mean) / sd. Positive beta for growth and
+# property prices, negative for unemployment and the interest rate, so Z > 0 is a better economy.
+# Means and standard deviations are rough long-run euro-area moments, so the section 6.2 adverse
+# path gives Z of about -1.3 in 2027-2028 and the baseline about +0.1.
+driver_moments:
+  gdp_growth: {mean: 0.015, sd: 0.030}
+  unemployment: {mean: 0.065, sd: 0.020}
+  residential_price_change: {mean: 0.025, sd: 0.080}
+  cre_price_change: {mean: 0.020, sd: 0.100}
+  reference_rate: {mean: 0.025, sd: 0.015}
+
+segments:
+  P01:
+    betas: {gdp_growth: 0.4, unemployment: -0.3, residential_price_change: 0.3}
+    rho: 0.15      # matrix correlation (PD-10)
+    sicr_k: 2.5    # SICR multiple, a test convention (MIG-05, MIG-07)
+    lgd_w: 0.20    # LGD sensitivity (LGD-12)
+    cpr_ttc: 0.06  # TTC prepayment rate (EAD-11)
+    cpr_v: 0.25    # prepayment sensitivity to Z
+  P02:
+    betas: {gdp_growth: 0.5, unemployment: -0.5}
+    rho: 0.06
+    sicr_k: 2.0
+    lgd_w: 0.10
+    cpr_ttc: 0.10
+    cpr_v: 0.20
+  P03:
+    betas: {gdp_growth: 0.6, unemployment: -0.2, reference_rate: -0.2}
+    rho: 0.12
+    sicr_k: 2.5
+    lgd_w: 0.15
+    cpr_ttc: 0.05
+    cpr_v: 0.15
+  P04:
+    betas: {gdp_growth: 0.3, cre_price_change: 0.5, reference_rate: -0.2}
+    rho: 0.15
+    sicr_k: 2.5
+    lgd_w: 0.25
+    cpr_ttc: 0.03
+    cpr_v: 0.15
+  P05:
+    betas: {gdp_growth: 0.7, reference_rate: -0.3}
+    rho: 0.12
+    sicr_k: 2.5
+    lgd_w: 0.15
+    cpr_ttc: 0.05
+    cpr_v: 0.15
+  P06_GG:
+    betas: {gdp_growth: 0.8, reference_rate: -0.2}
+    rho: 0.20
+    sicr_k: 3.0
+    lgd_w: 0.10
+    cpr_ttc: 0.0
+    cpr_v: 0.0
+  P06_CI:
+    betas: {gdp_growth: 0.6, unemployment: -0.2, reference_rate: -0.2}
+    rho: 0.20
+    sicr_k: 3.0
+    lgd_w: 0.10
+    cpr_ttc: 0.0
+    cpr_v: 0.0
+
+# Terminal rule (ECL-10, D5): adverse Z reverts linearly to baseline 2029 over six years,
+# baseline stays flat; S1 at the end of the horizon interpolates the loss rate (AT-06).
+terminal_rule:
+  method: linear_reversion_to_baseline
+  # reversion_years and last_scenario_year are read from the spec (ECL-10, AT-52) by O3.
+  baseline: flat
+  s1_end_of_horizon: loss_rate_interpolation
+  # Z is extended to this year; a facility needing a later bucket blocks (AT-41).
+  last_bucket_year: 2060
+
+conventions:
+  sicr_horizon: remaining_life_at_opening      # A6: owner input "SICR horizon"
+  stub_pd: constant_hazard_by_grade            # A7: owner input "PD for a stub final bucket"
+  default_buckets: calendar_year_end           # SYN-PAR-07
+  new_s3_undrawn: off_balance_flow_ccf_lgd     # A9: owner input "undrawn part of a new S3 cohort"
+  opening_allowance_matrix: ttc                # A8: architecture section 6 item 3
+  opening_allowance_schedule: bullet           # A8: SYN-PAR-09 and D8
+
+# Variants (section 8.7 SYN-PAR-07). Core is bullet for every facility. The
+# amortising variants change the profile of amortising products only; revolvers and debt
+# securities stay bullet. The utilisation variant is the AT-35 CCF sensitivity.
+variants:
+  core:
+    label: Core reference run (bullet, fixed CCF)
+    repayment_profile: {default: bullet}
+    ccf: {}
+  annuity:
+    label: Annuity repayment for amortising products
+    repayment_profile: {mortgage: annuity, consumer_loan: annuity, term_loan: annuity, default: bullet}
+    ccf: {}
+  linear:
+    label: Linear repayment for amortising products
+    repayment_profile: {mortgage: linear, consumer_loan: linear, term_loan: linear, default: bullet}
+    ccf: {}
+  utilisation:
+    label: AT-35 utilisation sensitivity
+    repayment_profile: {default: bullet}
+    # O3 replaces "AT-35" by the CCF the AT-35 oracle rises to, for every book with commitments.
+    ccf: {P03: AT-35, P05: AT-35}

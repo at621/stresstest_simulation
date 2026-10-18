@@ -21,7 +21,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_paths.py\""
+            "command": "py -3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_paths.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/test_gate.py\"",
+            "timeout": 1200
           }
         ]
       }
