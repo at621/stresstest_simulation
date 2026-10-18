@@ -78,17 +78,25 @@ def test_missing_curve_bucket_blocks_the_ecl(core_run, full_tables):
              & (curves["scenario"] == scenario) & (curves["valuation_year"] == year))
     last = int(curves.loc[curve, "default_bucket"].max())
     gaps = {
-        "a middle bucket of one grade": curve & (curves["cohort"] == grades[0]) & (curves["default_bucket"] == 2),
-        "the whole year behind a part-year bucket": curve & (curves["cohort"] == grades[0])
-        & (curves["default_bucket"] == int(part["default_bucket"])),
-        "the last bucket of every grade": curve & (curves["default_bucket"] == last),
+        "a middle bucket of one grade": (curve & (curves["cohort"] == grades[0])
+                                         & (curves["default_bucket"] == 2), "has gaps"),
+        "the whole year behind a part-year bucket": (curve & (curves["cohort"] == grades[0])
+                                                     & (curves["default_bucket"] == int(part["default_bucket"])),
+                                                     "has gaps"),
+        "the last bucket of every grade": (curve & (curves["default_bucket"] == last), "too short"),
     }
-    for what, drop in gaps.items():
+    for what, (drop, reason) in gaps.items():
         broken = Parameters(pit=params.pit, pd_curves=curves[~drop], facility=facility,
                             lgd_of_year=params.lgd_of_year)
         with pytest.raises(BlockingError) as err:
             performing_ecl(broken, portfolio, scenario, year, grades)
-        assert err.value.code == Block.PARAMETER_ALIGNMENT, what
+        assert err.value.code == Block.PARAMETER_ALIGNMENT and reason in str(err.value), what
+    unknown = curves.copy()
+    unknown.loc[curve & (unknown["cohort"] == grades[0]), "cohort"] = "not a grade"
+    broken = Parameters(pit=params.pit, pd_curves=unknown, facility=facility, lgd_of_year=params.lgd_of_year)
+    with pytest.raises(BlockingError) as err:
+        performing_ecl(broken, portfolio, scenario, year, grades)
+    assert err.value.code == Block.PARAMETER_ALIGNMENT and "unknown grade" in str(err.value)
 
 
 @pytest.mark.control("Parameter alignment")
