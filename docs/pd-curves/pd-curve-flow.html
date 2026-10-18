@@ -278,9 +278,9 @@ footer p { margin: 0; max-width: 80ch; }
       <aside class="side">
         <p class="kick">Works differently on purpose</p>
         <h4>Part-year final bucket</h4>
-        <p>When the last bucket is a fraction d of a year, there is no further product. The grade spread at the start of the bucket is applied to each grade's part-year PD (PD-06):</p>
-        <div class="eq">m_stub = Σⱼ P[n][g, j] · (1 − (1 − PDⱼ)^d)</div>
-        <p class="ref">src/stress/params/__init__.py:142-161</p>
+        <p>When the last bucket is a fraction d of a year, the curve still holds its whole year. The ECL step takes the part the maturity covers, pro rata (owner decision of 18 October 2026, A7). Until then R6 built a part-year row per grade with the constant hazard of PD-06.</p>
+        <div class="eq">m_part = d · m[n+1]</div>
+        <p class="ref">src/stress/ecl/kernels.py (part_year_pd) · src/stress/ecl/__init__.py (performing_ecl)</p>
       </aside>
     </div>
     <div class="row"><div class="link"><span>F[k]</span></div></div>

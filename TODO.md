@@ -68,9 +68,9 @@ Settled by the owner on 18 October 2026: all four recommendations confirmed, as 
 
 ## Part-year PD bucket: build it in the curves or in ECL?
 
-**Question.** When a facility's last period is shorter than a year, its PD for that part-year is `1 − (1 − PD)^d` (PD-06). Today R6 builds it while creating the PD curves. It may belong in the ECL calculation (R8) instead, so that the curves hold full years only. The design doesn't say which step owns it: its R6 PD curve shows full-year buckets only, and PD-06 gives just the formula.
+**Question.** When a facility's last period is shorter than a year, its PD for that part-year is `1 − (1 − PD)^d` (PD-06). Until 18 October 2026 R6 built it while creating the PD curves. It may belong in the ECL calculation (R8) instead, so that the curves hold full years only. The design doesn't say which step owns it: its R6 PD curve shows full-year buckets only, and PD-06 gives just the formula.
 
-### What the code does now
+### What the code did until 18 October 2026
 
 - **R6 builds it.** `pd_curves` (`src/stress/params/__init__.py:142-161`) adds a row per grade for every part-year length that facilities need, marked by `fraction < 1`. It applies each grade's part-year PD to the grade spread at the start of the bucket: `m = Σⱼ P[n][g, j] × (1 − (1 − PDⱼ)^d)`. In run `20261017T2304Z-core-b559d9dd` these are 214,720 of the 252,720 rows in `pd_curves.parquet`.
 - **R8 only looks them up** (`_curve_arrays`, `src/stress/ecl/__init__.py:94`).
@@ -109,6 +109,8 @@ Settled by the owner on 18 October 2026: all four recommendations confirmed, as 
 - [x] Settle the decision above. If it departs from the design, agree it first and update the design with it. (Agreed by the owner; the design's R6 PD curve and R8 text are updated. PD-06's text is the owner's to change, C10.)
 - [x] If moving: run it through `/improve`. Keeping the formula must reproduce the last run (`stress compare`); the simpler rule must show its effect with `stress compare` output. (`stress compare` from `20261018T2152Z-core-fdcada28` to `20261018T2212Z-core-e1cf1ab2`: S2 provisions −0.09% to −0.29%, S1 at most −0.05%, S3 unchanged; cumulative charge −€0.14m baseline, −€0.34m adverse; `pd_curves.parquet` 252,720 → 38,000 rows.)
 - [x] Record where the part-year PD is built in `docs/assumptions.md`, and update the loan term-structure task above if its join changes. (A7, A27 and C10 updated. The loan term-structure notebook now joins the curves on whole buckets and takes `d × m` for a part-year bucket. That needs this branch, which merges `todo/loan-term-structure`.)
+- [ ] Owner: amend PD-06 (and add a note to PD-02) as C10 proposes, then O1 retranscribes `docs/spec/` and the owner signs it off (GOV-03).
+- [ ] At the next input-set rebuild: rename or split the parameter-set convention `stub_pd: constant_hazard_by_grade`, which now describes O4 and the R3 SICR line only (A7).
 
 ## End-2029 Stage 1: why a loss-rate blend instead of the PD curve?
 

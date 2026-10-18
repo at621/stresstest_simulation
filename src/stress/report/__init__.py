@@ -139,8 +139,7 @@ def parameter_reports(ctx: RunContext, drivers: Drivers, params: Parameters, res
     out["property_indices.csv"] = drivers.indices
     out["ttc_matrices.csv"] = loaded.ttc_pd_matrix[["segment", "from_grade", "to_grade", "probability"]]
     out["pit_matrices.csv"] = params.pit
-    curves = params.pd_curves
-    full = curves  # whole years only (A7)
+    full = params.pd_curves  # whole years only (A7)
     out["pd_curves.csv"] = full[["segment", "country", "scenario", "valuation_year", "cohort",
                                  "default_bucket", "bucket_year", "q", "m", "s", "f"]].rename(
         columns={"cohort": "grade", "q": "conditional_pd", "m": "marginal_pd", "s": "survival",

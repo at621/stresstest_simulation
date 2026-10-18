@@ -8,6 +8,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from stress.ecl.kernels import part_year_pd
+from stress.params.pd import stub_pd
 from tests import builders
 from tests.support import tolerance
 
@@ -16,8 +17,10 @@ from tests.support import tolerance
 @given(st.floats(0.0, 1.0), st.floats(1e-6, 1.0))
 def test_part_year_pd_is_pro_rata(marginal, fraction):
     value = float(part_year_pd(marginal, fraction))
-    assert value == pytest.approx(marginal * fraction, abs=1e-15)
     assert 0.0 <= value <= marginal + 1e-15
+    # Never above the constant-hazard rule it replaced: 1 - (1 - x)^d >= d x for d in (0, 1].
+    assert value <= float(stub_pd(marginal, fraction)) + 1e-15
+    assert float(part_year_pd(marginal, 1.0)) == marginal  # a whole year is unchanged
 
 
 @pytest.mark.req("PD-11")
@@ -118,4 +121,33 @@ def test_terminal_s1_part_year_first_bucket_is_pro_rata(core_run, full_tables):
     assert np.allclose(rows["raw_on"], rate * rows["ead_drawn"] * rows["discount_factor"] * on,
                        rtol=0, atol=limit)
     assert np.allclose(rows["raw_off"], rate * rows["ead_undrawn"] * rows["discount_factor"] * off,
+                       rtol=0, atol=limit)
+
+
+@pytest.mark.req("ECL-08")
+def test_s1_part_year_first_bucket_is_pro_rata(core_run, full_tables):
+    # Before the end of the horizon, an S1 slice whose only bucket is a part-year takes d x m[1].
+    ctx, _ = core_run
+    params = builders.result(ctx, "parameters.parquet")
+    first = params[(params["default_bucket"] == 1) & (params["fraction"] < 1.0)]
+    prov = builders.result(ctx, "provisions.parquet")
+    s1 = prov[prov["method"] == "s1_12m"].rename(columns={"year": "valuation_year"})
+    rows = s1.merge(first[["scenario", "valuation_year", "facility_id", "fraction", "ead_drawn",
+                           "ead_undrawn", "lgd", "discount_factor"]],
+                    on=["scenario", "valuation_year", "facility_id"])
+    slices = builders.result(ctx, "slices.parquet").rename(columns={"year": "valuation_year"})
+    rows = rows.merge(slices[["scenario", "valuation_year", "facility_id", "slice", "grade", "gca", "undrawn"]],
+                      on=["scenario", "valuation_year", "facility_id", "slice"])
+    rows = rows.merge(_facts(full_tables), on="facility_id")
+    curves = builders.result(ctx, "pd_curves.parquet")
+    one = curves[curves["default_bucket"] == 1].rename(columns={"cohort": "grade"})
+    rows = rows.merge(one[["segment", "country", "scenario", "valuation_year", "grade", "m"]],
+                      on=["segment", "country", "scenario", "valuation_year", "grade"], validate="many_to_one")
+    assert len(rows) > 100, "the run has S1 slices whose first bucket is a part-year"
+    m = rows["m"] * rows["fraction"]
+    on, off = _shares(rows)
+    limit = tolerance("amount")["abs"]
+    assert np.allclose(rows["raw_on"], m * rows["ead_drawn"] * rows["lgd"] * rows["discount_factor"] * on,
+                       rtol=0, atol=limit)
+    assert np.allclose(rows["raw_off"], m * rows["ead_undrawn"] * rows["lgd"] * rows["discount_factor"] * off,
                        rtol=0, atol=limit)

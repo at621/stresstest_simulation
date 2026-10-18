@@ -18,6 +18,8 @@ date: "18 October 2026"
 | Status of values | Every number in the input set and the results is SYNTHETIC. The parameter values are PROPOSED and not yet approved by the project owner (assumption A2). |
 | Location | `docs/technical-implementation/`: this markdown source, its PDF, `images/` and `figure-sources/` |
 
+Owner decisions taken on 18 October 2026, after the v1 build, are marked where they change the text; §8 still shows the v1 reference run.
+
 At the time of writing, the v1 code sits uncommitted on branch `build/v1-engine` on top of commit `03f0457`. Run manifests therefore show a code version such as `0.1.0+03f04577c21e+dirty.5743ea01`, where the suffix is a digest of the uncommitted changes.
 
 # 1. Introduction
@@ -60,14 +62,14 @@ Rating grades decide stages through a significant-increase-in-credit-risk (SICR)
 | Design (code flow) | `docs/stress-engine-code-flow.html` | Leads. Defines steps O1–O4 and R1–R11, the formulas and decisions D1–D14. |
 | Requirements v1.3 | `docs/spec/EBA_2027_Credit_Portfolio_Stress_Test_Requirements.md` | Requirement IDs, synthetic targets, acceptance cases AT-xx, §12.2 controls, §12.3 tolerances |
 | Repository rules | `docs/architecture.md` | Who writes what, code rules, Claude Code setup, open items |
-| Assumptions and conflicts | `docs/assumptions.md` | Assumptions A1–A28 and document conflicts C1–C7 |
+| Assumptions and conflicts | `docs/assumptions.md` | Assumptions (A-numbers) and document conflicts (C-numbers) |
 | Runbook | `docs/runbook.md` | Protection check, running the engine, procedure after changes |
 | Folder rules | `CLAUDE.md`, `src/stress/params/CLAUDE.md`, `src/stress/ecl/CLAUDE.md` | Working rules, including the "apply once" rules for R6 and R8 |
 
 ## 1.5 Conventions in this document
 
 - **Step codes.** O1–O4 are the one-off steps; R1–R11 are the run steps.
-- **References.** Requirement IDs such as PD-03 or ECL-11 refer to the requirements document. Acceptance cases are AT-01 to AT-52, design decisions D1–D14, assumptions A1–A28 and conflicts C1–C7.
+- **References.** Requirement IDs such as PD-03 or ECL-11 refer to the requirements document. Acceptance cases are AT-01 to AT-52, design decisions D1–D14, assumptions A1 onward and conflicts C1 onward.
 - **Units.** Amounts are EUR, and rates and probabilities are decimal fractions. Tables quote EUR millions where marked.
 - **Source of figures.** Numerical examples and charts come from the reference run unless stated otherwise. They are synthetic test outputs, not forecasts.
 
@@ -201,7 +203,7 @@ The contracts package is the only code that the step packages share. It holds no
 | `indices` | scenario, country, variable, year | R4 | Annual change and compounded property index |
 | `cf_schedule` | facility, valuation year, period | R5 | Period end, bucket year, fraction, t, opening balance, interest, principal, closing balance, discount factor, profile, generation, remaining maturity |
 | `pit_matrices` | segment, country, scenario, year, from, to | R6 | PiT transition probability and the Z that produced it |
-| `pd_curves` | segment, country, scenario, valuation year, cohort (grade), bucket, fraction, basis | R6 | q, m, S, F per bucket |
+| `pd_curves` | segment, country, scenario, valuation year, cohort (grade), bucket, basis | R6 | q, m, S, F per whole-year bucket |
 | `parameters` | facility, scenario, valuation year, cohort, bucket, basis | R6 | ParameterRecord: Z, LGD, prepayment rate, not-prepaid share, balance, DF, undrawn, CCF, EAD drawn, undrawn and total |
 | `lgd_of_year` | facility, scenario, year | R6 | LGD of each projection year and the effective CCF |
 | `slices` | scenario, year, facility, slice | R7 then R8 | Projection state: stage, grade, cohort data, GCA, undrawn, allowances, replacement generation |
@@ -398,7 +400,7 @@ All values are PROPOSED by Claude Code as working assumptions (A2) and await the
 | CRE price change | 2.0% | 10.0% |
 | Reference rate level | 2.5% | 1.5% |
 
-The **terminal rule** is a linear reversion of adverse Z to baseline 2029 over six years, with baseline flat, and Z extended to 2060. The **conventions** record the readings of open owner inputs: SICR horizon fixed at opening (A6), constant-hazard stub PD (A7), calendar-year-end buckets, the new-S3 undrawn treatment (A9), and the opening allowances on the TTC matrix with a bullet schedule (A8). The **variants** are listed in §5.14.
+The **terminal rule** is a linear reversion of adverse Z to baseline 2029 over six years, with baseline flat, and Z extended to 2060. The **conventions** record the readings of open owner inputs: SICR horizon fixed at opening (A6), constant-hazard stub PD for O4 and the R3 SICR line (A7; R8 takes a part-year pro rata), calendar-year-end buckets, the new-S3 undrawn treatment (A9), and the opening allowances on the TTC matrix with a bullet schedule (A8). The **variants** are listed in §5.14.
 
 ## 4.7 Input sets in the repository
 
@@ -615,7 +617,7 @@ This allows for rating migration on the way to default, under the scenario's own
 
 Curves hold **whole years only**, up to the longest maturity in each segment and country. A final bucket shorter than a year has its whole-year row here, and R8 takes the part of it that the maturity covers (A7, §5.9). Until 18 October 2026, R6 also built a part-year row per grade with the constant hazard `Σ_j P[n](g, j) × (1 − (1 − PD(j))^d)`. The owner then decided to capture the part-year by the maturity in the ECL instead.
 
-The reference run stores 252,720 PD-curve records, 214,720 of them such part-year rows; whole years alone are 38,000. They are keyed by curve rather than by facility (A3), because every facility of a segment, country and grade shares one curve.
+A run now stores 38,000 PD-curve records. The reference run of §8 stored 252,720, of which 214,720 were part-year rows. They are keyed by curve rather than by facility (A3), because every facility of a segment, country and grade shares one curve.
 
 ![Figure 8: TTC to PiT for P03. (a) The one-year PD by grade: adverse 2027 lies above TTC and baseline 2027 slightly below it, since baseline Z is near 0. (b) The lifetime cumulative PD of grade G6 from end-2026, built from products of future matrices.](images/fig-08-pd-ttc-pit.png)
 
@@ -870,13 +872,13 @@ Run folders are local and never committed; the pre-commit hook refuses them. Eac
 
 ## 7.1 Test architecture
 
-The suite has 99 test functions in three folders. Hypothesis property tests and parametrised cases run many examples per function.
+The suite has 105 test functions in three folders. Hypothesis property tests and parametrised cases run many examples per function.
 
 | Folder | Files | Tests | Marker |
 |---|---|---|---|
 | `tests/acceptance/` | One file per acceptance case, `test_at_xx.py` | 36 | `@pytest.mark.at("AT-xx")` |
-| `tests/unit/` | `test_kernels.py`, `test_foundation.py`, `test_run_frame.py`, `test_reporting.py`, `test_terminal_s1.py` | 40 | `@pytest.mark.req(...)` |
-| `tests/controls/` | `test_input_controls.py`, `test_run_controls.py`, `test_repository_rules.py` | 23 | `@pytest.mark.control(...)` |
+| `tests/unit/` | `test_kernels.py`, `test_foundation.py`, `test_run_frame.py`, `test_reporting.py`, `test_terminal_s1.py`, `test_part_year_bucket.py` | 45 | `@pytest.mark.req(...)` |
+| `tests/controls/` | `test_input_controls.py`, `test_run_controls.py`, `test_repository_rules.py` | 24 | `@pytest.mark.control(...)` |
 
 **Traceability rule.** `tests/conftest.py` fails collection if a test has no `at`, `req` or `control` marker. It also fails if a marker names an unknown ID: an AT without an oracle file, a requirement ID absent from the requirements text, or a control that is not a §12.2 control name (or "Repository rules").
 
@@ -918,6 +920,7 @@ AT-48, AT-51 and AT-52 test the rule each case states. Their numerical expectati
 | `test_run_frame.py` (7) | Duplicate or missing key blocks; value status distinguishes missing, zero and supplied; run ID and write-once; a sealed run is labelled and read-only; a tampered input blocks; a scenario value without unit blocks; raw files are kept unchanged |
 | `test_reporting.py` (4) | The run log records every step; a blocked run's log names the reason; the Excel report matches the engine; the workbook is byte-reproducible |
 | `test_terminal_s1.py` (1) | The run interpolates the 2030 S1 loss rate |
+| `test_part_year_bucket.py` (5) | Curves hold whole years; a part-year bucket takes d × its whole-year marginal PD in S1, S2 and end-2029 S1; the pro-rata kernel never exceeds the constant hazard |
 
 ## 7.4 Control tests (§12.2)
 
@@ -1086,7 +1089,7 @@ All fourteen were taken as proposed (A1).
 
 ## 11.2 Assumptions (A1–A28)
 
-Every assumption is PROPOSED and awaits the owner's approval.
+Every assumption is PROPOSED and awaits the owner's approval, unless its entry records a dated owner decision.
 
 | ID | Topic | Assumption |
 |---|---|---|
@@ -1119,7 +1122,7 @@ Every assumption is PROPOSED and awaits the owner's approval.
 | A27 | End-2029 S1 with a stub first bucket | d × each scenario's 2029 PD before interpolation |
 | A28 | Run log and Excel | Log outside the outputs; workbook byte-reproducible without run ID |
 
-## 11.3 Conflicts between documents (C1–C7)
+## 11.3 Conflicts between documents
 
 | ID | Conflict | Resolution in the build |
 |---|---|---|
@@ -1130,6 +1133,7 @@ Every assumption is PROPOSED and awaits the owner's approval.
 | C5 | Design R1 blocks a synthetic scenario labelled official, but scenarios enter only in R2 | R1 blocks regulatory mode; provenance is checked in R4 |
 | C6 | MIG-07 fixes the SICR line; PD-06 warns against full-life PD as remaining-life PD | Both lifetime PDs use the opening horizon; owner to confirm |
 | C7 | `"onFailure": "block"` on the hooks needs a newer CLI | Not added yet; add after the CLI upgrade |
+| C10 | PD-06 prescribes the constant hazard for a fractional interval; the owner chose pro rata in the ECL | R8 takes d × the whole-year marginal PD; O4 and the SICR line keep the constant hazard; PD-06's text is the owner's to update |
 
 ## 11.4 Open items
 

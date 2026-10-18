@@ -88,10 +88,13 @@ def _curve_arrays(curves: pd.DataFrame, grades: tuple[str, ...]) -> dict:
     full = {}
     for (segment, country), cv in curves.groupby(["segment", "country"]):
         width = int(cv["default_bucket"].max())
+        rank = cv["cohort"].map(gindex)
+        if rank.isna().any():
+            raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, f"PD curve {segment}/{country} has an unknown grade")
         if len(cv) != n * width:
             raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, f"PD curve {segment}/{country} has gaps")
         arr = np.zeros((n, width))
-        arr[cv["cohort"].map(gindex).to_numpy(), cv["default_bucket"].to_numpy() - 1] = cv["m"].to_numpy()
+        arr[rank.to_numpy(dtype=int), cv["default_bucket"].to_numpy() - 1] = cv["m"].to_numpy()
         full[(segment, country)] = arr
     return full
 
