@@ -1063,8 +1063,8 @@ html { scroll-behavior: smooth; }
       <div class="fcard">
         <span class="tag">R6 · TTC matrix → PiT matrix M(y)</span>
         <h3>Shift each row with Z</h3>
-        <div class="eq">C(i,j) = P(end in grade j or worse | start in i)<br>C_PiT = Φ( (Φ⁻¹(C_TTC) − √ρ × Z) ÷ √(1 − ρ) )<br>M(i,j) = C_PiT(i,j) − C_PiT(i,j+1)</div>
-        <p>A worse economy (Z &lt; 0) moves probability toward worse grades and default. Every shifted row still sums to 1. The D column of M(y) is each grade's PD for year y. Each segment has its own ρ (D13).</p>
+        <div class="eq">C(i,j) = P(end in grade j or worse | start in i)<br>C_PiT = Φ( Φ⁻¹(C_TTC) − √ρ × Z )<br>M(i,j) = C_PiT(i,j) − C_PiT(i,j+1)</div>
+        <p>A worse economy (Z &lt; 0) moves probability toward worse grades and default. Every shifted row still sums to 1. Z = 0 gives back the TTC matrix, as the LGD and prepayment rules give back their TTC values. The D column of M(y) is each grade's PD for year y. Each segment has its own ρ (D13).</p>
       </div>
       <div class="fcard">
         <span class="tag">R6 · PD curve of a grade</span>
@@ -1499,8 +1499,8 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D13</span>
         <div class="d-body">
           <h3>TTC matrix: shape and Z shift</h3>
-          <p class="rec">One TTC matrix per reference segment (7) on a shared master scale of N performing grades plus D, built once in O2. Each row shifts with C_PiT = Φ((Φ⁻¹(C_TTC) − √ρ × Z) ÷ √(1 − ρ)), with ρ per segment in the parameter set. You choose N and ρ.</p>
-          <p class="why">This is the standard one-factor form: every shifted row is still a valid distribution, and default moves together with rating migration. Z = 0 gives the median year, a little below the TTC average. If Z = 0 should give back the TTC matrix exactly, as the LGD rule does, drop the √(1 − ρ) divisor.</p>
+          <p class="rec">One TTC matrix per reference segment (7) on a shared master scale of N performing grades plus D, built once in O2. Each row shifts with C_PiT = Φ(Φ⁻¹(C_TTC) − √ρ × Z), with ρ per segment in the parameter set. You choose N and ρ.</p>
+          <p class="why">This is the one-factor shift without the √(1 − ρ) divisor: every shifted row is still a valid distribution, default moves together with rating migration, and Z = 0 gives back the TTC matrix exactly, as the LGD rule does. <strong>Decided by the owner on 18 October 2026.</strong> The first build kept the divisor, which made Z = 0 the median year, well below the TTC average: a 0.80% TTC PD with ρ = 0.15 became 0.45%. The opening allowances (O4, at TTC) and the engine then disagreed, and baseline 2027 released €5m.</p>
         </div>
         <div class="d-tags"><span class="chip so">O2</span><span class="chip st">R6</span></div>
       </li>

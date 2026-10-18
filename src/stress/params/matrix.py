@@ -1,8 +1,10 @@
-"""TTC matrix to PiT matrix M(y) by the year's Z (PD-10).
+"""TTC matrix to PiT matrix M(y) by the year's Z (PD-10, D13).
 
 With ``C(i, j)`` the probability of ending in grade j or worse from grade i, and C = 0 beyond D:
-``C_PiT = Phi((Phi^-1(C_TTC) - sqrt(rho) * Z) / sqrt(1 - rho))`` and
-``M(i, j) = C_PiT(i, j) - C_PiT(i, j + 1)``. The D row stays absorbing.
+``C_PiT = Phi(Phi^-1(C_TTC) - sqrt(rho) * Z)`` and ``M(i, j) = C_PiT(i, j) - C_PiT(i, j + 1)``.
+The D row stays absorbing. Z = 0 gives back the TTC matrix exactly, as the LGD and prepayment
+rules give back their TTC values. The one-factor form with the ``sqrt(1 - rho)`` divisor, where
+Z = 0 is the median year below the TTC average, was dropped by the owner on 18 October 2026.
 """
 
 import numpy as np
@@ -26,7 +28,7 @@ def pit_matrix(ttc: np.ndarray, z: float, rho: float) -> np.ndarray:
     n = ttc.shape[0] - 1
     c = cumulative(ttc[:n])
     with np.errstate(invalid="ignore", divide="ignore"):
-        shifted = ndtr((ndtri(c) - np.sqrt(rho) * z) / np.sqrt(1.0 - rho))
+        shifted = ndtr(ndtri(c) - np.sqrt(rho) * z)
     shifted[:, 0] = 1.0
     out = np.zeros_like(ttc, dtype=float)
     out[:n, :-1] = shifted[:, :-1] - shifted[:, 1:]

@@ -189,15 +189,15 @@ Recommendation: option 1.
 
 ### Open decision (owner)
 
-- [ ] Option 1, 2 or 3. Options 1 and 2 change results. Option 1 departs from design D13; option 2 reverses A8 (item 3) and C2.
+- [x] Option 1, 2 or 3. Options 1 and 2 change results. Option 1 departs from design D13; option 2 reverses A8 (item 3) and C2. *Settled by the owner on 18 October 2026: option 1.*
 
 ### Steps
 
 - [x] Work out the points under "Things to find out" and bring them to the owner (findings above, 18 October 2026).
-- [ ] Settle the decision above. If it departs from the design, agree it first and update the design with it (D13, including the "a little below TTC" wording).
-- [ ] Create a branch off `main` for this work.
-- [ ] Run it through `/improve` and show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`. Option 2 also needs `uv run python -m foundation.synth` to build the new input set.
-- [ ] Update `docs/assumptions.md` (A1, A8, C2 and the first-year-charge note), the first-year-charge paragraph in `docs/technical-implementation/`, and `README.md` and `docs/runbook.md` wherever results or the input set hash appear.
+- [x] Settle the decision above. If it departs from the design, agree it first and update the design with it (D13, including the "a little below TTC" wording). (D13 and the R6 formula updated. PD-10's own text still shows the divisor; changing it is the owner's, see C9 in `docs/assumptions.md`.)
+- [x] Create a branch off `main` for this work (`todo/first-year-release`).
+- [x] Run it through `/improve` and show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`. Option 2 also needs `uv run python -m foundation.synth` to build the new input set. (Compared against `20261018T2152Z-core-fdcada28`, which reproduces it; new run `20261018T2154Z-core-c10c21fd`. Cumulative charge 2027–2029: baseline €60.6m → €129.7m, adverse €496.0m → €634.9m.)
+- [x] Update `docs/assumptions.md` (A1, A8, C2 and the first-year-charge note), the first-year-charge paragraph in `docs/technical-implementation/`, and `README.md` and `docs/runbook.md` wherever results or the input set hash appear. (`README.md` and `docs/runbook.md` name no results and the input set is unchanged, so they need nothing. Also done: C9, `docs/architecture.md` §6 items 3 and 7, `src/stress/params/CLAUDE.md`, and `notebooks/02_annual_pd_calculation.ipynb`, which rebuilds the shift by hand.)
 
 ## Qualitative SICR triggers: 30+ DPD, watchlist and forbearance
 

@@ -123,6 +123,14 @@ def test_pit_matrix_is_valid(ttc, z, rho):
 
 
 @pytest.mark.req("PD-10")
+@given(ttc_matrices(), rhos)
+def test_zero_z_gives_the_ttc_matrix(ttc, rho):
+    # Z = 0 is an average year: the shift gives back the TTC matrix for every rho, as the LGD
+    # and prepayment rules give back their TTC values (D13, owner decision 18 October 2026).
+    assert np.allclose(pit_matrix(ttc, 0.0, rho), ttc, atol=1e-12)
+
+
+@pytest.mark.req("PD-10")
 @given(ttc_matrices(), zs)
 def test_zero_rho_gives_the_ttc_matrix(ttc, z):
     assert np.allclose(pit_matrix(ttc, z, 0.0), ttc, atol=1e-12)
