@@ -1092,7 +1092,7 @@ Every assumption is PROPOSED and awaits the owner's approval, unless its entry r
 
 | ID | Topic | Assumption |
 |---|---|---|
-| A1 | D1–D14 | All taken as written, including D5 and the √(1−ρ) divisor of D13 |
+| A1 | D1–D14 | All taken as written, including the √(1−ρ) divisor of D13; D5 signed off by the owner on 18 October 2026 (C8) |
 | A2 | Parameter values | Proposed values in `foundation/parameter_set.yaml` (§4.6) |
 | A3 | ParameterRecord key | Cohort is the slice; facility records carry cohort `performing`; PD records are keyed by curve |
 | A4 | run_id | Kept out of stored rows; it lives only in the manifest |
