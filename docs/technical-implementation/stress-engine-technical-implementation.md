@@ -18,6 +18,8 @@ date: "18 October 2026"
 | Status of values | Every number in the input set and the results is SYNTHETIC. The parameter values are PROPOSED and not yet approved by the project owner (assumption A2). |
 | Location | `docs/technical-implementation/`: this markdown source, its PDF, `images/` and `figure-sources/` |
 
+Owner decisions taken on 18 October 2026, after the v1 build, are marked where they change the text; §8 still shows the v1 reference run.
+
 At the time of writing, the v1 code sits uncommitted on branch `build/v1-engine` on top of commit `03f0457`. Run manifests therefore show a code version such as `0.1.0+03f04577c21e+dirty.5743ea01`, where the suffix is a digest of the uncommitted changes.
 
 # 1. Introduction
@@ -591,11 +593,11 @@ R6 builds every scenario-dependent value for each facility, scenario, valuation 
 **TTC to PiT (PD-10, D13).** With C(i, j) the probability of ending in grade j or worse from grade i, and Φ the standard normal distribution function:
 
 ```text
-C_PiT(i, j) = Φ( (Φ⁻¹(C_TTC(i, j)) − √ρ × Z) / √(1 − ρ) )
+C_PiT(i, j) = Φ( Φ⁻¹(C_TTC(i, j)) − √ρ × Z )
 M_PiT(i, j) = C_PiT(i, j) − C_PiT(i, j + 1)
 ```
 
-A worse economy (Z < 0) moves probability toward worse grades and default, and every row still sums to 1. Each PiT matrix is checked: rows sum to 1 within 1e-10, no negative cell, D absorbing and PD rising with the grade (`INVALID_PIT_MATRIX`, AT-46). Because of the √(1 − ρ) divisor, Z = 0 gives the median year, a little below the TTC average (A1). `PitBook` caches matrices by (segment, Z); the reference run needs 77 distinct shifts. PiT matrices are reported for 2027–2036.
+A worse economy (Z < 0) moves probability toward worse grades and default, and every row still sums to 1. Each PiT matrix is checked: rows sum to 1 within 1e-10, no negative cell, D absorbing and PD rising with the grade (`INVALID_PIT_MATRIX`, AT-46). Z = 0 gives back the TTC matrix exactly, as the LGD and prepayment rules give back their TTC values (D13). The first build divided by √(1 − ρ), which made Z = 0 the median year, well below the TTC average (a 0.80% TTC PD with ρ = 0.15 became 0.45%); the owner dropped the divisor on 18 October 2026 (A1). What the change gives up: with the divisor, the PiT PD averaged over Z ~ N(0, 1) gave back the TTC PD exactly. Without it, the cycle average lies above the TTC PD, at Φ(Φ⁻¹(PD_TTC) ÷ √(1 + ρ)): a 0.80% TTC PD with ρ = 0.15 averages 1.23%, and across the master scale the ratio is 1.04–1.46 at ρ = 0.06 and 1.12–3.08 at ρ = 0.20, highest for G1. "TTC" therefore now means the matrix of an average year (Z = 0), as LGD_TTC and CPR_TTC already do, not the average over the cycle (A29). The reference run of §8 predates that change. `PitBook` caches matrices by (segment, Z); the reference run needs 77 distinct shifts. PiT matrices are reported for 2027–2036.
 
 **PD curves (PD-11, PD-03).** For every segment, country, scenario, valuation year and start grade g, the cumulative PD is the default column of a product of future PiT matrices:
 
@@ -621,7 +623,7 @@ m_g[stub] = Σ_j  P[n](g, j) × (1 − (1 − PD(j))^d)
 
 The reference run stores 252,720 PD-curve records. They are keyed by curve rather than by facility (A3), because every facility of a segment, country and grade shares one curve.
 
-![Figure 8: TTC to PiT for P03. (a) The one-year PD by grade: adverse 2027 lies above TTC and baseline 2027 slightly below it, since baseline Z is near 0. (b) The lifetime cumulative PD of grade G6 from end-2026, built from products of future matrices.](images/fig-08-pd-ttc-pit.png)
+![Figure 8: TTC to PiT for P03, from the v1 reference run, with the √(1 − ρ) divisor that was dropped on 18 October 2026. (a) The one-year PD by grade: adverse 2027 lies above TTC and baseline 2027 below it, because with the divisor Z near 0 gave the median year. (b) The lifetime cumulative PD of grade G6 from end-2026, built from products of future matrices.](images/fig-08-pd-ttc-pit.png)
 
 **LGD of the year (LGD-12, D4).**
 
@@ -872,7 +874,7 @@ Run folders are local and never committed; the pre-commit hook refuses them. Eac
 
 ## 7.1 Test architecture
 
-The suite has 99 test functions in three folders. Hypothesis property tests and parametrised cases run many examples per function.
+The suite has 101 test functions in three folders. Hypothesis property tests and parametrised cases run many examples per function.
 
 | Folder | Files | Tests | Marker |
 |---|---|---|---|
@@ -915,7 +917,7 @@ AT-48, AT-51 and AT-52 test the rule each case states. Their numerical expectati
 
 | File | What it proves |
 |---|---|
-| `test_kernels.py` (22) | Z is zero at the means and linear; a missing driver value blocks; reversion weights and path; indices compound; schedule identities; like-for-like replacement; PiT validity and ρ = 0 returning the TTC matrix; PD-03 identities; curves from matrix products; stub PD; LGD bounds; not-prepaid share; EAD bounds and the CCF contract; stage flows conserve the book; stage of rank; floors never release; ECL as a sum of products; charge as stock change; REA floor kernels |
+| `test_kernels.py` (24) | Z is zero at the means and linear; a missing driver value blocks; reversion weights and path; indices compound; schedule identities; like-for-like replacement; PiT validity, Z = 0 and ρ = 0 returning the TTC matrix, and the one-grade closed form of the D column; PD-03 identities; curves from matrix products; stub PD; LGD bounds; not-prepaid share; EAD bounds and the CCF contract; stage flows conserve the book; stage of rank; floors never release; ECL as a sum of products; charge as stock change; REA floor kernels |
 | `test_foundation.py` (6) | O1 files are current; transcription rejects numbers not in the source; calibration hits every stage target; the generator is deterministic and matches the committed set; opening allowances follow the generator formula; the parameter set documents its status |
 | `test_run_frame.py` (7) | Duplicate or missing key blocks; value status distinguishes missing, zero and supplied; run ID and write-once; a sealed run is labelled and read-only; a tampered input blocks; a scenario value without unit blocks; raw files are kept unchanged |
 | `test_reporting.py` (4) | The run log records every step; a blocked run's log names the reason; the Excel report matches the engine; the workbook is byte-reproducible |
@@ -943,7 +945,7 @@ A full run must also seal, and `stress compare` against the previous run must sh
 
 # 8. Reference run results
 
-All figures in this section come from `runs/20261017T2304Z-core-b559d9dd/`. It is a core run of baseline and adverse on input set `514ed0e86e3dc760` with the PROPOSED parameter set. These are synthetic preparation results, not an EBA submission and not a bank forecast.
+All figures in this section come from `runs/20261017T2304Z-core-b559d9dd/`. It is a core run of baseline and adverse on input set `514ed0e86e3dc760` with the PROPOSED parameter set. It predates the owner's decision of 18 October 2026 to drop the √(1 − ρ) divisor of the PD-10 shift (D13); §8.3 gives the main figures after it. These are synthetic preparation results, not an EBA submission and not a bank forecast.
 
 | Fact | Value |
 |---|---|
@@ -989,8 +991,8 @@ All figures in this section come from `runs/20261017T2304Z-core-b559d9dd/`. It i
 
 ## 8.3 Points for the owner's review
 
-- **First-year charge from O4.** O4 values the opening book at TTC, while baseline Z ≈ 0 is the median year, a little below TTC (A1, D13). The engine's own end-2026 view is €238.2m for baseline and €440.0m for adverse, against the frozen €278.6m. Baseline 2027 therefore releases €5.0m, and adverse 2027 charges €343.5m. The starting-point report shows both views.
-- **S3 build-up.** With no cures, sales or write-offs (EXP-02), S3 grows from €364m to €717m in the baseline and to €1,360m in the adverse by end-2029.
+- **First-year charge from O4.** O4 values the opening book at TTC. In the reference run, baseline Z ≈ 0 was the median year, well below TTC, because of the √(1 − ρ) divisor. The engine's own end-2026 view was €238.2m for baseline and €439.9m for adverse, against the frozen €278.6m, so baseline 2027 released €5.0m and adverse 2027 charged €343.5m. The owner dropped the divisor on 18 October 2026 (D13), so Z = 0 now gives back the TTC matrix. On the same input set (run `20261018T2154Z-core-c10c21fd`) the engine's end-2026 view is €267.3m for baseline and €495.0m for adverse. Baseline 2027 now charges €38.9m and adverse 2027 €439.5m. The cumulative 2027–2029 charge is €129.7m in the baseline and €634.9m in the adverse (5.8% of GCA). The rest of the opening gap comes from the baseline Z sitting at or slightly above 0 (0.00 to +0.25); where it is exactly 0.00 (P04, P05, P06_GG in 2027), the engine's S1 valuation equals O4 to the cent. The starting-point report shows both views.
+- **S3 build-up.** With no cures, sales or write-offs (EXP-02), S3 grows from €364m to €717m in the baseline and to €1,360m in the adverse by end-2029 in the reference run; without the divisor, to €846m and €1,601m.
 - **Floors.** S3 floors bind widely in later years. In the adverse 2029 valuation they bind on 28,408 S3 slices and mask €64.0m, which the provisions table reports.
 
 # 9. Development tooling and governance
@@ -1083,23 +1085,23 @@ All fourteen were taken as proposed (A1). The owner signed off D5 on 18 October 
 | D10 | Python 3.12, uv, pytest, ruff, numpy, pandas, scipy; Parquet and YAML; float64 unrounded until output |
 | D11 | Z also drives PD, through the matrix |
 | D12 | Repayment profiles bullet, annuity and linear; the core run is bullet; B[k] is the balance before that date's payment |
-| D13 | One TTC matrix per segment on a shared master scale; one-factor shift with ρ per segment |
+| D13 | One TTC matrix per segment on a shared master scale; one-factor shift with ρ per segment, without the √(1 − ρ) divisor, so Z = 0 gives back the TTC matrix (owner decision, 18 October 2026) |
 | D14 | Prepayment rate driven by Z, applied only to the drawn balance in EAD, with SP[1] = 1 |
 
-## 11.2 Assumptions (A1–A28)
+## 11.2 Assumptions
 
 Every assumption is PROPOSED and awaits the owner's approval, unless its entry records a dated owner decision.
 
 | ID | Topic | Assumption |
 |---|---|---|
-| A1 | D1–D14 | All taken as written, including the √(1−ρ) divisor of D13; D5 signed off by the owner on 18 October 2026 (C8) |
+| A1 | D1–D14 | All taken as written; D5 signed off by the owner on 18 October 2026 (C8); the √(1−ρ) divisor of D13 dropped by the owner on 18 October 2026; D2 and D3 amended for the qualitative SICR triggers (A30) |
 | A2 | Parameter values | Proposed values in `foundation/parameter_set.yaml` (§4.6) |
 | A3 | ParameterRecord key | Cohort is the slice; facility records carry cohort `performing`; PD records are keyed by curve |
 | A4 | run_id | Kept out of stored rows; it lives only in the manifest |
 | A5 | Country in the scenario key | Yes; the §6.2 common paths are copied to all six countries |
 | A6 | SICR horizon | Residual maturity at opening, fixed per facility |
 | A7 | Stub final bucket | Constant hazard per grade |
-| A8 | Opening allowances | TTC matrix itself (not PiT at Z = 0), bullet schedule; LGD-01/04 not built; §8.7 LGD is the segment mean |
+| A8 | Opening allowances | TTC matrix itself, which since 18 October 2026 is also the PiT matrix at Z = 0; bullet schedule; LGD-01/04 not built; §8.7 LGD is the segment mean |
 | A9 | Undrawn of a new S3 cohort | Stays as nominal undrawn; its provision is undrawn flow × CCF × LGD, then floored |
 | A10 | AT-48, AT-51, AT-52 numbers | Left OPEN; their tests prove the rules |
 | A11 | Variants | Defined in the parameter set (§5.14) |
@@ -1120,19 +1122,21 @@ Every assumption is PROPOSED and awaits the owner's approval, unless its entry r
 | A26 | Rounding | CSV to cents and 10 decimals; summary in EUR m to one decimal; Parquet unrounded |
 | A27 | End-2029 S1 with a stub first bucket | Stub applied to each scenario's 2029 PD before interpolation |
 | A28 | Run log and Excel | Log outside the outputs; workbook byte-reproducible without run ID |
+| A29 | Meaning of TTC | The matrix of an average year (Z = 0), not the cycle average (owner, 18 October 2026) |
 
 ## 11.3 Conflicts between documents
 
 | ID | Conflict | Resolution in the build |
 |---|---|---|
 | C1 | Design O4 mentions "the facility's own schedule"; D8 and SYN-PAR-09 say bullet | Bullet; the design sentence should be corrected |
-| C2 | SYN-PAR-09 "TTC matrix (Z = 0)" versus PD-10, where PiT at Z = 0 ≠ TTC | TTC matrix |
+| C2 | SYN-PAR-09 "TTC matrix (Z = 0)" versus PD-10, where PiT at Z = 0 ≠ TTC | TTC matrix; resolved on 18 October 2026, when the divisor was dropped and PiT at Z = 0 became the TTC matrix |
 | C3 | MOD-06 key versus the design's one-value ParameterRecord | Records are wide per key; run_id implied by the folder |
 | C4 | D1 counts up to four S3 cohorts; MIG-03 keeps each origin stage | Up to seven S3 slices |
 | C5 | Design R1 blocks a synthetic scenario labelled official, but scenarios enter only in R2 | R1 blocks regulatory mode; provenance is checked in R4 |
 | C6 | MIG-07 fixes the SICR line; PD-06 warns against full-life PD as remaining-life PD | Both lifetime PDs use the opening horizon; owner to confirm |
 | C7 | `"onFailure": "block"` on the hooks needs a newer CLI | Not added yet; add after the CLI upgrade |
 | C8 | The 2027 draft's ¶124 reverts each S1/S2 parameter linearly after 2029; ECL-10 and D5 revert Z | Z reversion, signed off by the owner (D5); linear reversion would add 1.6% to adverse end-2029 S2 |
+| C9 | PD-10's text prescribes the √(1 − ρ) divisor; the owner dropped it (D13) | Engine and design follow the owner; PD-10's text is the owner's to update |
 
 ## 11.4 Open items
 
@@ -1142,7 +1146,7 @@ v1 is complete and runs end to end in synthetic mode. Until the owner settles th
 |---|---|---|
 | 1 | Parameter values; AT-48, AT-51 and AT-52 oracle values | Proposed values await the owner (A2, A10) |
 | 2 | LGD-01 and LGD-04 | Not built (A12); confirm, or remove them from the requirements |
-| 3 | SYN-PAR-09 opening allowances | Built with the TTC matrix itself (A8, C2); confirm |
+| 3 | SYN-PAR-09 opening allowances | Settled on 18 October 2026: without the √(1 − ρ) divisor the PiT matrix at Z = 0 is the TTC matrix O4 uses; the PD-10 requirement text is the owner's to update |
 | 4 | §8.7 opening performing LGD | Used as each segment's mean TTC LGD (A13); confirm |
 | 5 | `inputs/bank/` | Protected and not in git; delete it, or keep it for future real data (OPS-05) |
 | 6 | Fail-closed hooks | Add `"onFailure": "block"` after the CLI upgrade, then a person runs the protection check (C7) |
