@@ -272,9 +272,9 @@ Recommendation: option 1.
 
 **Goal.** Add three qualitative triggers that move a performing facility from S1 to S2, alongside the relative PD test:
 
-- [ ] **30+ days past due backstop**
-- [ ] **Watchlist**
-- [ ] **Forbearance**
+- [x] **30+ days past due backstop**
+- [x] **Watchlist**
+- [x] **Forbearance**
 
 The input data must carry all three for every facility, as checked inputs that can trigger S2 independently of the grade.
 
@@ -287,10 +287,10 @@ The input data must carry all three for every facility, as checked inputs that c
 
 ### Input data
 
-- [ ] Make `dpd`, `watchlist` and `forborne` required inputs on every facility. R3 rejects a missing value; it never reads it as "no trigger" (the same rule as `poci` today).
-- [ ] Record the source definition and observation date of each flag (§12.2, credit status row).
-- [ ] Put the trigger settings in the parameter set: the DPD threshold (30 days) and which triggers are switched on, per segment if needed.
-- [ ] Change O3 so the flags are no longer just a copy of the stage. Some S2 facilities should be S2 because of a flag alone, with a grade still above the SICR line. The reported opening stage then equals "PD test or any flag". This restates SYN-PAR-08 and gives a new input set.
+- [x] Make `dpd`, `watchlist` and `forborne` required inputs on every facility. R3 rejects a missing value; it never reads it as "no trigger" (the same rule as `poci` today). *(R3 rejects with `MISSING_FLAG`.)*
+- [x] Record the source definition and observation date of each flag (§12.2, credit status row). *(`sicr_triggers.definitions` and `source` in the parameter set; `credit_status_date` on every facility, which R3 checks with `INVALID_CREDIT_STATUS_DATE`.)*
+- [x] Put the trigger settings in the parameter set: the DPD threshold (30 days) and which triggers are switched on, per segment if needed. *(`sicr_triggers`: `enabled`, `dpd_days`, `hold`; global, as no segment needs its own. R3 blocks a missing or incomplete block with `MISSING_PARAMETER`.)*
+- [x] Change O3 so the flags are no longer just a copy of the stage. Some S2 facilities should be S2 because of a flag alone, with a grade still above the SICR line. The reported opening stage then equals "PD test or any flag". This restates SYN-PAR-08 and gives a new input set. *(A quarter of each segment's S2 facilities is S2 by a trigger alone, A30. The draws use their own random stream, so input set `d62d0386f2c5256e` differs from `514ed0e86e3dc760` only in 331 origination grades, 127 flag values and the new `credit_status_date`.)*
 
 ### Things to find out
 
@@ -299,23 +299,55 @@ The input data must carry all three for every facility, as checked inputs that c
 - **Facilities that can never reach S2.** The 930 facilities with no S2 grade (€417.7m, mostly long-dated P01 mortgages) can reach S2 only through these triggers. Check how many of them the new O3 flags.
 - **Reporting.** Whether the stage migration report should split S2 by trigger: PD test, DPD, watchlist or forbearance.
 
+### Findings (18 October 2026, input set `514ed0e86e3dc760`, run `20261018T1959Z-core-36ace84d`)
+
+- **The flags today.**
+  - No S1 facility is flagged.
+  - Of the 1,324 S2 facilities, 432 are 30–89 DPD, 509 on the watchlist and 143 forborne. 833 carry at least one flag. The other 491 (€580.3m of €1,368.6m S2 GCA) are S2 on the PD test alone.
+  - All 331 S3 facilities are 90+ DPD and on the watchlist, and 97 are forborne.
+  - No flag is missing anywhere: `dpd` is an integer and `watchlist` and `forborne` are booleans, with no `__status` column. Making them required inputs therefore rejects nothing in today's set.
+- **Facilities that can never reach S2: 930, €417.7m.** The PD test cannot move them, because k × their lifetime PD at origination is higher than the lifetime PD of any grade. Every one was originated at a weak grade.
+
+  | Segment, product | Facilities | GCA, EUR m | Origination grades |
+  |---|---:|---:|---|
+  | P01 mortgage | 582 | 180.1 | G6, G7 |
+  | P02 consumer loan | 216 | 4.3 | G9, G10 |
+  | P03 revolver and term loan | 105 | 100.5 | G8, G9 |
+  | P04 term loan | 18 | 91.8 | G8 |
+  | P05 revolver and term loan | 9 | 41.0 | G8 |
+
+  By count most are long-dated P01 mortgages (23.8 years on average). By GCA, 57% are SME and corporate loans. The new O3 should flag some of them, so that the triggers have something to do there.
+- **Effect of option (a) with today's flags.**
+  - Every flagged facility is already S2 at the opening. Option (a) therefore stops only their returns to S1.
+  - The PD test sends €47.5m / €53.0m / €56.7m of S2 GCA back to S1 in the baseline (2027 / 2028 / 2029), and €13.8m / €18.0m / €39.3m in the adverse.
+  - The part that belongs to flagged facilities is €27.3m / €50.8m / €70.5m of S1 GCA in the baseline (€8.1m / €13.3m / €21.8m adverse). Valuing it at lifetime instead of 12 months adds €0.43m / €0.53m / €0.49m to provisions in the baseline and €0.25–0.28m in the adverse.
+  - With today's data the triggers are therefore almost neutral. Their real effect depends on the new O3: how many S1-by-grade facilities it flags, and which ones.
+- **Projection and reporting.** Nothing new found. The points above stand: a flag is per facility and a stage per slice, and splitting S2 by trigger is a report choice.
+
+### Built (18–19 October 2026)
+
+- **Facilities that can never reach S2.** The 930 S1 facilities with no S2 grade stay S1: §5.2 fixes the stage counts, and a flag on a reported S1 facility would contradict its stage. The triggers give the route to S2 to the new flag-only facilities: 250 of the 331 (€184.6m) have no S2 grade at all, so a trigger is their only reason for S2.
+- **Opening.** 960 of the 1,324 S2 facilities carry a trigger, 331 as their only reason; no S1 facility carries one. The O4 openings are unchanged, because stage and current grade are.
+
 ### Open decisions (owner)
 
-- [ ] **Agree the departure from the design.** This reverses the last sentence of MIG-07 and design D3. Agree it first, then update the design (D2, D3 and the R3 and R7 text) and the requirements (MIG-07, SYN-PAR-08). `docs/spec/` is written by code only, so the requirements change goes through O1.
-- [ ] **How flags behave over 2027–2029.**
+- [x] **Agree the departure from the design.** This reverses the last sentence of MIG-07 and design D3. Agree it first, then update the design (D2, D3 and the R3 and R7 text) and the requirements (MIG-07, SYN-PAR-08). `docs/spec/` is written by code only, so the requirements change goes through O1. *Agreed by the owner on 18 October 2026. The design is updated (D2, D3, R3, R7); the requirement texts of MIG-07, SYN-PAR-08 and AT-48 are the owner's to change (C11, step below).*
+- [x] **How flags behave over 2027–2029.**
   - (a) Hold each flag at its opening value: a flagged facility stays S2 until it defaults.
   - (b) A flag lapses after a probation period.
   - (c) Project the flags from grade moves. This counts the same deterioration twice and is not recommended.
 
-  Recommendation: (a) for v1.
+  Recommendation: (a) for v1. *Settled by the owner on 18 October 2026: (a).*
 
 ### Steps
 
-- [ ] Settle the decisions above.
-- [ ] Create a branch off `main` for this work.
-- [ ] Input data: change O3, rebuild with `uv run python -m foundation.synth`, and note the new input set hash.
-- [ ] Engine, through `/improve`: tests first (new AT-48 cases for each trigger, R3 rejection of a missing flag, unit tests for the stage rule with flags), then the R3 check and the R7 stage. Show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`.
-- [ ] Update `docs/assumptions.md`, and `README.md` and `docs/runbook.md` wherever the input set hash or results appear.
+- [x] Settle the decisions above.
+- [x] Create a branch off `main` for this work (`todo/sicr-triggers`).
+- [x] Input data: change O3, rebuild with `uv run python -m foundation.synth`, and note the new input set hash. *(`d62d0386f2c5256e`, status PENDING_OWNER_APPROVAL.)*
+- [x] Engine, through `/improve`: tests first (new AT-48 cases for each trigger, R3 rejection of a missing flag, unit tests for the stage rule with flags), then the R3 check and the R7 stage. Show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`. *(AT-48 stays one test: it proves the grade rule on unflagged facilities and the hold on flagged ones. Each trigger alone, a switched-off trigger, and the hold to default are unit tests (`req("MIG-05")`). Missing and undated flags, a flag on S1 and missing settings are controls. `stress compare` from `20261018T2152Z-core-fdcada28`, which reproduces that run, to `20261018T2304Z-core-efb84f95`: S2 GCA +€32m / +€59m / +€82m in baseline 2027 / 2028 / 2029 (+€9m / +€15m / +€25m adverse); cumulative charge +€0.55m baseline (€60.6m → €61.1m), +€0.28m adverse (€496.0m → €496.3m); S3 unchanged.)*
+- [x] Update `docs/assumptions.md`, and `README.md` and `docs/runbook.md` wherever the input set hash or results appear. *(A30, C11; the new hash in `CLAUDE.md`, `README.md`, `docs/runbook.md`, `docs/architecture.md`, `inputs/README.md`, `notebooks/nbtools.py` and notebooks 01–03, which were re-executed; the design, the technical document, and the staging and input-data pages.)*
+- [ ] Owner: amend MIG-07 (its last sentence), SYN-PAR-08 and the AT-48 text as C11 proposes; O1 then retranscribes `docs/spec/` (GOV-03). Approve input set `d62d0386f2c5256e`.
+- [ ] Open, not built: split S2 by trigger (PD test, DPD, watchlist, forbearance) in the stage-migration report.
 
 ## Follow-ups found in the reviews of 18–19 October 2026
 

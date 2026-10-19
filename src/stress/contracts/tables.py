@@ -55,6 +55,7 @@ PORTFOLIO = TableSpec(
         "undrawn", "ccf", "commitment_id", "interest_rate", "rate_type", "residual_maturity",
         "repayment_profile", "regulatory_approach", "regulatory_class", "current_grade",
         "current_rank", "origination_grade", "origination_rank", "ttc_lgd", "sicr_rank",
+        "qualitative_trigger",  # MIG-05, A30: any switched-on trigger at the snapshot
         "opening_allowance_on", "opening_provision_off", "overlay_amount",
     ),
 )

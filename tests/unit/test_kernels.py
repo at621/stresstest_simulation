@@ -232,6 +232,16 @@ def test_stage_of_rank():
     assert stages.tolist() == [1, 1, 2, 3]
 
 
+@pytest.mark.req("MIG-05")
+def test_stage_of_rank_with_a_qualitative_trigger():
+    ranks, line = np.array([1, 3, 4, 11]), np.array([4, 4, 4, 4])
+    flagged = np.array([True, True, False, True])
+    # A flag makes every performing grade S2; D stays S3; without a flag the grade decides.
+    assert stage_of_rank(ranks, line, 11, flagged).tolist() == [2, 2, 2, 3]
+    unflagged = stage_of_rank(ranks, line, 11, np.zeros(4, dtype=bool))
+    assert unflagged.tolist() == stage_of_rank(ranks, line, 11).tolist()
+
+
 @pytest.mark.req("ECL-07")
 @given(st.lists(st.tuples(st.floats(0, 1e6), st.floats(0, 1e6)), min_size=1, max_size=20))
 def test_floor_never_releases(pairs):

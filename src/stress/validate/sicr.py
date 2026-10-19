@@ -1,15 +1,22 @@
-"""The SICR line of each facility under MIG-07.
+"""The SICR line of each facility under MIG-07, and the qualitative triggers of MIG-05.
 
 A performing grade slice is S2 when its lifetime PD is at least k times the lifetime PD at the
 origination grade. Both come from the segment's TTC matrix over the same horizon: the
 facility's residual maturity at the opening date (assumption A6). The line is therefore fixed
 per facility, and only rating moves change stage. A stub final year uses the constant-hazard
 convention per grade (PD-06).
+
+Since the owner decision of 18 October 2026 (A30), a performing facility is also S2 when a
+switched-on qualitative trigger holds (30+ days past due, watchlist, forbearance), whatever its
+grade, and the flag holds it in S2 until it defaults.
 """
 
 import numpy as np
+import pandas as pd
 
 EPS = 1e-9
+TRIGGERS = ("dpd", "watchlist", "forborne")
+HOLD_UNTIL_DEFAULT = "until_default"  # option (a): the flags are not projected (A30)
 
 
 class TtcLifetime:
@@ -53,3 +60,23 @@ def sicr_rank(lifetime: np.ndarray, origination_rank: int, k: float) -> tuple[in
     first = int(np.argmax(s2)) + 1
     contiguous = bool(s2[first - 1:].all())
     return first, contiguous
+
+
+def qualitative_trigger(dpd, watchlist, forborne, settings: dict) -> np.ndarray:
+    """True where any switched-on trigger of the parameter set's ``sicr_triggers`` holds (MIG-05):
+    ``dpd >= dpd_days``, on the watchlist, or forborne. A missing value raises: it is never read as
+    "no trigger" (R3 rejects such a facility before this rule runs)."""
+    if pd.isna(pd.Series(np.asarray(dpd, dtype=object))).any() or \
+            pd.isna(pd.Series(np.asarray(watchlist, dtype=object))).any() or \
+            pd.isna(pd.Series(np.asarray(forborne, dtype=object))).any():
+        raise ValueError("a qualitative SICR flag is missing; it is never read as no trigger")
+    enabled = set(settings["enabled"])
+    days = np.asarray(dpd, dtype=float)
+    out = np.zeros(days.shape, dtype=bool)
+    if "dpd" in enabled:
+        out |= days >= float(settings["dpd_days"])
+    if "watchlist" in enabled:
+        out |= np.asarray(watchlist).astype(bool)
+    if "forborne" in enabled:
+        out |= np.asarray(forborne).astype(bool)
+    return out

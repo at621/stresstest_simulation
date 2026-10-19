@@ -6,7 +6,7 @@ read back from that folder: the notebooks show what the engine wrote and sealed,
 recompute or edit it.
 
     import nbtools as nb
-    run = nb.run_engine("inputs/514ed0e86e3dc760")    # or nb.open_run("latest")
+    run = nb.run_engine("inputs/d62d0386f2c5256e")    # or nb.open_run("latest")
     run.table("drivers")                              # results/drivers.parquet
     run.data("facilities")                            # data/facilities.parquet
     run.report("stage_migration")                     # results/reports/stage_migration.csv

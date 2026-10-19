@@ -88,6 +88,7 @@ FACILITIES = DatasetSpec(
         Column("dpd", "int"),
         Column("watchlist", "bool"),
         Column("forborne", "bool"),
+        Column("credit_status_date", "date", description="observation date of dpd, watchlist, forborne"),
         Column("origination_date", "date"),
         Column("stage_entry_date", "date"),
         Column("default_date", "date", nullable=True),
@@ -188,7 +189,7 @@ SYNTHETIC = "SYNTHETIC"
 
 PARAMETER_SET_TOP_KEYS = (
     "parameter_set_id", "version", "status", "horizon", "master_scale", "segments", "terminal_rule",
-    "conventions", "tolerances", "variants",
+    "conventions", "tolerances", "variants", "sicr_triggers",
 )
 SEGMENT_PARAMETERS = ("z_drivers", "rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v", "ccf")
 

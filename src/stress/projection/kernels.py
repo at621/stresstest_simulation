@@ -43,8 +43,12 @@ def aligned_default_flows(opening: Mapping[str, float], pd: Mapping[str, float])
             "closing_performing": performing, "total": closing_s3 + performing}
 
 
-def stage_of_rank(rank, sicr_rank, default_rank: int):
-    """MIG-07 by grade rank: 3 for D, 2 at or beyond the facility's SICR line, else 1."""
+def stage_of_rank(rank, sicr_rank, default_rank: int, flagged=None):
+    """MIG-07 by grade rank: 3 for D, 2 at or beyond the facility's SICR line, else 1. A facility
+    with a qualitative trigger (MIG-05, A30) is 2 in every performing grade until it defaults."""
     rank = np.asarray(rank)
     sicr_rank = np.asarray(sicr_rank)
-    return np.where(rank >= default_rank, 3, np.where(rank >= sicr_rank, 2, 1))
+    s2 = rank >= sicr_rank
+    if flagged is not None:
+        s2 = s2 | np.asarray(flagged, dtype=bool)
+    return np.where(rank >= default_rank, 3, np.where(s2, 2, 1))

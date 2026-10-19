@@ -89,8 +89,9 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
     np.add.at(gca, (rows, cols), perf_prev["gca"].to_numpy())
     np.add.at(und, (rows, cols), perf_prev["undrawn"].to_numpy())
     sicr = facts.loc[fac_ids, "sicr_rank"].to_numpy()
+    flagged = facts.loc[fac_ids, "qualitative_trigger"].to_numpy(dtype=bool)  # held until default
     grade_rank = np.arange(1, n + 1)[None, :]
-    stage_grid = stage_of_rank(grade_rank, sicr[:, None], n + 1)  # facilities x grades
+    stage_grid = stage_of_rank(grade_rank, sicr[:, None], n + 1, flagged[:, None])  # facilities x grades
     s2 = stage_grid == 2
 
     seg = facts.loc[fac_ids, "segment"].to_numpy()

@@ -190,7 +190,7 @@ The contracts package is the only code that the step packages share. It holds no
 | opening_provisions | `opening_provisions.parquet` | `facility_id` | On-balance allowance, off-balance provision, overlay amount, risk, owner and reason, method, frozen flag |
 | ttc_pd_matrix | `ttc_pd_matrix.parquet` | `segment`, `from_grade`, `to_grade` | One-year transition probability, grade ranks, master-scale PD of the from-grade |
 | scenarios | `scenarios.yaml` | scenario, variable, year (and country) | Scenario set metadata, variables with units and value types, starting values, index definitions, one record per value |
-| parameter_set | `parameter_set.yaml` | `parameter_set_id` | Horizon, master scale, per-segment parameters, terminal rule, conventions, tolerances, variants |
+| parameter_set | `parameter_set.yaml` | `parameter_set_id` | Horizon, master scale, per-segment parameters, terminal rule, conventions, qualitative SICR triggers (`sicr_triggers`), tolerances, variants |
 
 ## 3.3 Tables handed between steps
 
@@ -319,7 +319,7 @@ w(g) ∝ exp(θ × ln PD(g)),   chosen so that   Σ_g w(g) × PD(g) = target PD
 3. **Obligors.** Facilities are grouped into obligors according to the portfolio design (for example P03: 1, 2 or 3 facilities with probabilities 0.5/0.3/0.2). Every facility of an obligor shares its country, sector, grade, stage and default status (SYN-01, A23).
 4. **Facility attributes.**
    - Residual maturity is triangular on the §5.4 range, with the §8.7 reference life as its mode; 3% of facilities have exactly one year left where the range allows.
-   - The origination grade is chosen so that the MIG-07 rule returns the facility's stage, with a relative margin of 1e-6 from the SICR line (SYN-PAR-08).
+   - The origination grade is chosen so that the MIG-07 rule returns the facility's stage, with a relative margin of 1e-6 from the SICR line (SYN-PAR-08). Since the owner decision of 18 October 2026 a quarter of each segment's S2 facilities is S2 by a qualitative trigger alone (A30). They keep their calibrated current grade, take an origination grade that leaves it above the SICR line, and carry 30+ DPD, a watchlist or a forbearance flag; these draws use their own random stream. Every facility carries `credit_status_date`, the observation date of its flags, and no S1 facility carries a trigger.
    - The TTC LGD is drawn from a beta distribution on the §5.4 LGD range with the §8.7 value as its mean (A13).
    - The rate scatters around the §8.7 reference EIR.
    - Product, contractual repayment profile, fixed/floating flag, collateral, LTV and DSCR are set, and accrued interest covers up to three months.
@@ -406,10 +406,11 @@ The **terminal rule** is a linear reversion of adverse Z to baseline 2029 over s
 
 | Input set | Status | Difference |
 |---|---|---|
-| `514ed0e86e3dc760` | Current; used by every run and named in `CLAUDE.md` | Driver moments as in §4.6 |
+| `d62d0386f2c5256e` | Current since 18 October 2026; named in `CLAUDE.md` | As `514ed0e86e3dc760`, plus the qualitative SICR triggers: `sicr_triggers` in the parameter set, `credit_status_date` on every facility, and 331 S2 facilities that are S2 by a trigger alone (their origination grade and, for 127 values, their flags differ). Everything else is byte-identical, the O4 openings included. |
+| `514ed0e86e3dc760` | The v1 set, used by the reference run of §8; superseded | Driver moments as in §4.6 |
 | `32415eb9d5bbcd74` | Superseded first build | Identical except `parameter_set.yaml`, which has tighter driver standard deviations (for example GDP σ = 2%). That gave adverse Z of about −2 and a cumulative adverse charge of 7.6% of GCA, judged implausibly severe (A19). |
 
-Both carry `approval.json` with status `PENDING_OWNER_APPROVAL`.
+All carry `approval.json` with status `PENDING_OWNER_APPROVAL`. Since the input contract gained `credit_status_date` on 18 October 2026, the engine blocks at R2 on `514ed0e86e3dc760` and `32415eb9d5bbcd74`, so `stress rerun` of a run made on them, the reference run of §8 included, blocks too.
 
 # 5. Part 2: the run pipeline (`src/stress/`)
 
@@ -504,7 +505,7 @@ The result is a `LoadedInputs` bundle. No later step reads a file.
 | Opening provision | Duplicate; orphan; currency; amounts missing or negative; a facility without one (`MISSING_OPENING_PROVISION`) |
 | Linked records | A rejected commitment or provision rejects its facility, and a rejected facility rejects its commitment and provision (`LINKED_RECORD_REJECTED`) |
 
-**Grade explains stage (MIG-07, SYN-PAR-08).** For each surviving performing facility, R3 computes the SICR line from the segment's TTC matrix. The horizon is the facility's residual maturity at the opening date (A6), and a stub year uses the constant-hazard convention (`validate/sicr.py`):
+**Grade or trigger explains stage (MIG-07, MIG-05, SYN-PAR-08).** R3 first rejects a facility whose `dpd`, `watchlist` or `forborne` is missing (`MISSING_FLAG`), whose `dpd` is negative (`INVALID_DPD`), or whose `credit_status_date` is missing or later than the snapshot (`INVALID_CREDIT_STATUS_DATE`), and blocks a parameter set without complete `sicr_triggers` (`MISSING_PARAMETER`). For each surviving performing facility, R3 computes the SICR line from the segment's TTC matrix. The facility is S2 when its grade is at or past the line or a switched-on trigger holds (30+ days past due, watchlist, forbearance; A30), and that must be its reported stage (`STAGE_GRADE_CONFLICT`). The trigger is stored on the portfolio as `qualitative_trigger`. The horizon is the facility's residual maturity at the opening date (A6), and a stub year uses the constant-hazard convention (`validate/sicr.py`):
 
 ```text
 PD_life(g, H) = P^n(g, D) + Σ_j  P^n(g, j) × (1 − (1 − PD(j))^d)
@@ -671,10 +672,11 @@ Slices carry fractional amounts (MIG-06). At end-2026 each facility has one slic
 ```text
 stage(g) = 3   if g = D
            2   if PD_life(g) ≥ k × PD_life(g0)       g0 = origination grade
+               or the facility carries a qualitative trigger (A30)
            1   otherwise
 ```
 
-The SICR rank comes from R3 and is fixed per facility, so only rating moves change stage. A slice returns to S1 when its grade improves back over the line, and D never cures.
+The SICR rank comes from R3 and is fixed per facility, so only rating moves change stage. A slice returns to S1 when its grade improves back over the line, unless the facility carries a qualitative trigger: the flags are not projected, so a flagged facility stays S2 in every performing grade until it defaults (owner decision of 18 October 2026). D never cures.
 
 ![Figure 11: The SICR line for P03 (k = 2.5, five-year horizon). Each row is an origination grade; the line moves with it, so each facility has its own S1/S2 blocks.](images/fig-11-sicr-stage-grid.png)
 
@@ -872,13 +874,13 @@ Run folders are local and never committed; the pre-commit hook refuses them. Eac
 
 ## 7.1 Test architecture
 
-The suite has 105 test functions in three folders. Hypothesis property tests and parametrised cases run many examples per function.
+The suite has 121 tests in three folders. Hypothesis property tests and parametrised cases run many examples per function.
 
 | Folder | Files | Tests | Marker |
 |---|---|---|---|
 | `tests/acceptance/` | One file per acceptance case, `test_at_xx.py` | 36 | `@pytest.mark.at("AT-xx")` |
-| `tests/unit/` | `test_kernels.py`, `test_foundation.py`, `test_run_frame.py`, `test_reporting.py`, `test_terminal_s1.py`, `test_part_year_bucket.py` | 45 | `@pytest.mark.req(...)` |
-| `tests/controls/` | `test_input_controls.py`, `test_run_controls.py`, `test_repository_rules.py` | 24 | `@pytest.mark.control(...)` |
+| `tests/unit/` | `test_kernels.py`, `test_foundation.py`, `test_run_frame.py`, `test_reporting.py`, `test_terminal_s1.py`, `test_part_year_bucket.py`, `test_sicr_triggers.py` | 53 | `@pytest.mark.req(...)` |
+| `tests/controls/` | `test_input_controls.py`, `test_run_controls.py`, `test_repository_rules.py` | 32 | `@pytest.mark.control(...)` |
 
 **Traceability rule.** `tests/conftest.py` fails collection if a test has no `at`, `req` or `control` marker. It also fails if a marker names an unknown ID: an AT without an oracle file, a requirement ID absent from the requirements text, or a control that is not a §12.2 control name (or "Repository rules").
 
@@ -915,19 +917,20 @@ AT-48, AT-51 and AT-52 test the rule each case states. Their numerical expectati
 
 | File | What it proves |
 |---|---|
-| `test_kernels.py` (24) | Z is zero at the means and linear; a missing driver value blocks; reversion weights and path; indices compound; schedule identities; like-for-like replacement; PiT validity, Z = 0 and ρ = 0 returning the TTC matrix, and the one-grade closed form of the D column; PD-03 identities; curves from matrix products; stub PD; LGD bounds; not-prepaid share; EAD bounds and the CCF contract; stage flows conserve the book; stage of rank; floors never release; ECL as a sum of products; charge as stock change; REA floor kernels |
-| `test_foundation.py` (6) | O1 files are current; transcription rejects numbers not in the source; calibration hits every stage target; the generator is deterministic and matches the committed set; opening allowances follow the generator formula; the parameter set documents its status |
+| `test_kernels.py` (25) | Z is zero at the means and linear; a missing driver value blocks; reversion weights and path; indices compound; schedule identities; like-for-like replacement; PiT validity, Z = 0 and ρ = 0 returning the TTC matrix, and the one-grade closed form of the D column; PD-03 identities; curves from matrix products; stub PD; LGD bounds; not-prepaid share; EAD bounds and the CCF contract; stage flows conserve the book; stage of rank, with and without a qualitative trigger; floors never release; ECL as a sum of products; charge as stock change; REA floor kernels |
+| `test_foundation.py` (7) | O1 files are current; transcription rejects numbers not in the source; calibration hits every stage target; the reported stage is the PD test or a trigger; the generator is deterministic and matches the committed set; opening allowances follow the generator formula; the parameter set documents its status |
 | `test_run_frame.py` (7) | Duplicate or missing key blocks; value status distinguishes missing, zero and supplied; run ID and write-once; a sealed run is labelled and read-only; a tampered input blocks; a scenario value without unit blocks; raw files are kept unchanged |
 | `test_reporting.py` (4) | The run log records every step; a blocked run's log names the reason; the Excel report matches the engine; the workbook is byte-reproducible |
 | `test_terminal_s1.py` (1) | The run interpolates the 2030 S1 loss rate |
 | `test_part_year_bucket.py` (5) | Curves hold whole years; a part-year bucket takes d × its whole-year marginal PD in S1, S2 and end-2029 S1; the pro-rata kernel never exceeds the constant hazard |
+| `test_sicr_triggers.py` (4) | Each trigger alone makes S2; a switched-off trigger is ignored; a missing flag is never read as no trigger; a flag holds the facility in S2 until default |
 
 ## 7.4 Control tests (§12.2)
 
 | File | Controls |
 |---|---|
-| `test_input_controls.py` | Duplicate facility; currency and accounting scope; unmapped country; grade must explain stage; cash-flow inputs; EAD/CCF contract; a missing flag is never a default; LGD rule |
-| `test_run_controls.py` | Probability range and row sums; D must be absorbing; PD-curve identities block; parameter alignment; S3 bypasses performing PD; missing scenario value blocks; regulatory mode blocks; a synthetic scenario labelled official blocks; static balance; rerun reproduces every output; version-change difference report; missing prepayment rate blocks |
+| `test_input_controls.py` | Duplicate facility; currency and accounting scope; unmapped country; grade must explain stage; credit-status flags are complete, dated, non-negative and explain the stage; trigger settings are required and complete (six defects block in R3); cash-flow inputs; EAD/CCF contract; a missing flag is never a default; LGD rule |
+| `test_run_controls.py` | Probability range and row sums; D must be absorbing; PD-curve identities block; parameter alignment; a PD curve with a missing bucket or an unknown grade blocks the ECL; S3 bypasses performing PD; missing scenario value blocks; regulatory mode blocks; a synthetic scenario labelled official blocks; static balance; rerun reproduces every output; version-change difference report; missing prepayment rate blocks |
 | `test_repository_rules.py` | No imports across parts or between steps; every acceptance case has exactly one test; an unmarked test fails collection |
 
 ## 7.5 Quality gate
@@ -1046,7 +1049,7 @@ git config core.hooksPath tests/githooks
 **A full run.**
 
 ```
-uv run stress run --inputs inputs/514ed0e86e3dc760 --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
 ```
 
 The command prints the run ID, the status and two headline lines. Exit code 0 means sealed SYNTHETIC, and exit code 2 means blocked: the reason is in `manifest.json` under `blocked`. Read `results/reports/stress_report.xlsx` for the results and `run.log` for what each step did, and check that `rejections.parquet` is empty. Then confirm reproducibility:
@@ -1068,13 +1071,13 @@ uv run stress rerun --run runs/<run_id>
 
 ## 11.1 Design decisions (D1–D14)
 
-All fourteen were taken as proposed (A1). The owner signed off D5 on 18 October 2026 (C8).
+All fourteen were taken as proposed (A1). The owner signed off D5 on 18 October 2026 (C8), dropped the √(1 − ρ) divisor of D13, and amended D2 and D3 for the qualitative SICR triggers (A30).
 
 | ID | Decision |
 |---|---|
 | D1 | Project one row per facility and slice: each performing grade, original S3 and each new S3 cohort |
-| D2 | SICR: S2 when lifetime PD ≥ k × lifetime PD at origination, both from the TTC matrix over the same horizon; k per segment |
-| D3 | The generator chooses current and origination grades so the stage rule returns each facility's opening stage; qualitative triggers are not used |
+| D2 | SICR: S2 when lifetime PD ≥ k × lifetime PD at origination, both from the TTC matrix over the same horizon; k per segment; since 18 October 2026 also when a qualitative trigger holds, until default |
+| D3 | The generator chooses current and origination grades so the stage rule returns each facility's opening stage; since 18 October 2026 a quarter of S2 is S2 by a qualitative trigger alone (A30) |
 | D4 | LGD = Φ(Φ⁻¹(LGD_TTC) − w·Z) with a segment-level Z-score |
 | D5 | After 2029, adverse Z reverts linearly to baseline 2029 over 2030–2035; S1 at end-2029 interpolates the loss rate; S2 uses the reverted matrices and LGD (signed off by the owner, 18 October 2026) |
 | D6 | S3: original = max(GCA × LGD, prior); new = flow × LGD, booked once and floored after |
@@ -1122,6 +1125,7 @@ Every assumption is PROPOSED and awaits the owner's approval, unless its entry r
 | A27 | End-2029 S1 with a stub first bucket | d × each scenario's 2029 PD before interpolation |
 | A28 | Run log and Excel | Log outside the outputs; workbook byte-reproducible without run ID |
 | A29 | Meaning of TTC | The matrix of an average year (Z = 0), not the cycle average (owner, 18 October 2026) |
+| A30 | Qualitative SICR triggers | Owner decision (18 October 2026): 30+ DPD, watchlist, forbearance, held until default. Proposed: global settings, replacements keep the flag, observation at the snapshot, 25% of S2 flag-only in O3 |
 
 ## 11.3 Conflicts between documents
 
@@ -1137,6 +1141,7 @@ Every assumption is PROPOSED and awaits the owner's approval, unless its entry r
 | C8 | The 2027 draft's ¶124 reverts each S1/S2 parameter linearly after 2029; ECL-10 and D5 revert Z | Z reversion, signed off by the owner (D5); linear reversion would add 1.6% to adverse end-2029 S2 |
 | C9 | PD-10's text prescribes the √(1 − ρ) divisor; the owner dropped it (D13) | Engine and design follow the owner; PD-10's text is the owner's to update |
 | C10 | PD-06 prescribes the constant hazard for a fractional interval; the owner chose pro rata in the ECL | R8 takes d × the whole-year marginal PD; O4 and the SICR line keep the constant hazard; PD-06's text is the owner's to update |
+| C11 | MIG-07, SYN-PAR-08 and AT-48 leave out the qualitative triggers; the owner added them | Engine, O3 and design follow the owner; the requirement texts are the owner's to update |
 
 ## 11.4 Open items
 
@@ -1150,7 +1155,7 @@ v1 is complete and runs end to end in synthetic mode. Until the owner settles th
 | 4 | §8.7 opening performing LGD | Used as each segment's mean TTC LGD (A13); confirm |
 | 5 | `inputs/bank/` | Protected and not in git; delete it, or keep it for future real data (OPS-05) |
 | 6 | Fail-closed hooks | Add `"onFailure": "block"` after the CLI upgrade, then a person runs the protection check (C7) |
-| 7 | Owner sign-offs | The transcribed spec (GOV-03), the input set `514ed0e86e3dc760` and the first full-run results; Claude Code's reviewer has approved each |
+| 7 | Owner sign-offs | The transcribed spec (GOV-03), the input set `d62d0386f2c5256e` and the full-run results; Claude Code's reviewer has approved each |
 
 # Appendix A. Glossary
 
@@ -1196,7 +1201,7 @@ v1 is complete and runs end to end in synthetic mode. Until the owner settles th
 |---|---|
 | Duplicates and orphans | DUPLICATE_FACILITY, DUPLICATE_OBLIGOR, DUPLICATE_COMMITMENT\*, DUPLICATE_OPENING_PROVISION, ORPHAN_FACILITY, ORPHAN_COMMITMENT, ORPHAN_OPENING_PROVISION, MISSING_OPENING_PROVISION, LINKED_RECORD_REJECTED |
 | Scope | MISSING_CURRENCY, NON_EUR_CURRENCY, MISSING_ACCOUNTING_CATEGORY, NON_AC_ON_BALANCE, OFF_BALANCE_CATEGORY, POCI_NOT_IN_V1, CENTRAL_BANK_NOT_IN_V1 |
-| Classification | UNKNOWN_SEGMENT, UNMAPPED_COUNTRY, UNKNOWN_PRODUCT, INVALID_STAGE, MISSING_FLAG |
+| Classification | UNKNOWN_SEGMENT, UNMAPPED_COUNTRY, UNKNOWN_PRODUCT, INVALID_STAGE, MISSING_FLAG, INVALID_DPD, INVALID_CREDIT_STATUS_DATE |
 | Grades and LGD | MISSING_GRADE, UNKNOWN_GRADE, STAGE_GRADE_CONFLICT, DEFAULT_STAGE_CONFLICT, MISSING_TTC_LGD, TTC_LGD_OUT_OF_RANGE |
 | Cash-flow inputs | MISSING_RATE, INVALID_RATE, INVALID_MATURITY, UNKNOWN_REPAYMENT_PROFILE |
 | Amounts and CCF | NEGATIVE_AMOUNT\*, MISSING_AMOUNT, GCA_COMPONENTS_MISMATCH, LIMIT_BREACH\*, MISSING_CCF\*, CCF_OUT_OF_RANGE\*, CCF_MISMATCH, UNDRAWN_ON_TERM_PRODUCT |

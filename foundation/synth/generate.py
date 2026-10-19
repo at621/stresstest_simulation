@@ -4,7 +4,9 @@ Counts are set exactly (section 5.2). Every GCA margin is hit by raking the faci
 (iterative proportional fitting) over all margins at once: stage and calibration grade
 (SYN-PAR-05), country (5.3), regulatory approach (5.3), NACE section (5.5), the P06
 government/bank split (5.3) and the ten largest connected groups (SYN-04). Grades are chosen so
-the MIG-07 rule returns each facility's opening stage (SYN-PAR-08).
+the MIG-07 rule returns each facility's opening stage (SYN-PAR-08); since the owner decision of
+18 October 2026 a share of S2 is S2 by a qualitative trigger alone (MIG-05, A30), so the reported
+stage is "PD test or any trigger".
 """
 
 from datetime import date, timedelta
@@ -104,6 +106,7 @@ class Generator:
         self.matrices = matrices
         self.snapshot = snapshot
         self.rng = np.random.default_rng(seed)
+        self.flag_rng = np.random.default_rng([seed, cfg.FLAG_STREAM])  # A30 draws only
         self.grades = list(params["master_scale"]["grades"])
         self.n = len(self.grades)
         self._lifetime: dict[tuple[str, int], np.ndarray] = {}
@@ -124,22 +127,58 @@ class Generator:
         years = self.rng.triangular(lo, mode, hi) if hi > lo else lo
         return int(np.clip(round(years * 12), round(lo * 12), round(hi * 12)))
 
-    def origination_rank(self, segment: str, stage: int, rank: int, months: int) -> int | None:
+    def origination_rank(self, segment: str, stage: int, rank: int, months: int,
+                         rng: np.random.Generator | None = None) -> int | None:
+        """An origination grade that puts ``rank`` above the SICR line (stage 1) or on or below it
+        (stage 2)."""
+        rng = rng if rng is not None else self.rng
         k = self.params["segments"][segment]["sicr_k"]
         life = self.life(segment, months)
         if stage == 1:
             options = [h for h in (rank - 1, rank, rank + 1)
                        if 1 <= h <= self.n and life[rank - 1] < k * life[h - 1] * (1 - cfg.SICR_MARGIN)]
             weights = np.array([0.25 if h != rank else 0.5 for h in options])
-            return int(self.rng.choice(options, p=weights / weights.sum()))
+            return int(rng.choice(options, p=weights / weights.sum()))
         options = [h for h in range(1, rank)
                    if life[rank - 1] >= k * life[h - 1] * (1 + cfg.SICR_MARGIN)]
         if not options:
             return None
         options.sort(reverse=True)
-        if len(options) > 1 and self.rng.random() < 0.3:
+        if len(options) > 1 and rng.random() < 0.3:
             return options[1]
         return options[0]
+
+    def _flag_only(self, facilities: list[dict]) -> None:
+        """A30: in each segment, a share of the S2 facilities is S2 by a qualitative trigger alone.
+        They keep their calibrated current grade, take an origination grade that leaves it above
+        the SICR line, and carry at least one trigger (``_ensure_trigger``)."""
+        by_segment: dict[str, list[dict]] = {}
+        for f in facilities:
+            if f["ifrs_stage"] == 2:
+                by_segment.setdefault(f["segment"], []).append(f)
+        for segment in sorted(by_segment):
+            s2 = by_segment[segment]
+            count = round(cfg.FLAG_ONLY_S2_SHARE * len(s2))
+            for i in sorted(self.flag_rng.choice(len(s2), size=count, replace=False)):
+                f = s2[int(i)]
+                f["_g0"] = self.origination_rank(segment, 1, f["_rank"], f["_months"], self.flag_rng)
+                f["_flag_only"] = True
+
+    def _ensure_trigger(self, row: dict) -> None:
+        """A flag-only S2 facility that drew no trigger gets one, from the switched-on triggers."""
+        settings = self.params["sicr_triggers"]
+        enabled = set(settings["enabled"])
+        if (("dpd" in enabled and row["dpd"] >= settings["dpd_days"]) or ("watchlist" in enabled and row["watchlist"])
+                or ("forborne" in enabled and row["forborne"])):
+            return
+        mix = {t: w for t, w in cfg.FLAG_ONLY_TRIGGER_MIX.items() if t in settings["enabled"]}
+        if not mix:
+            raise ValueError("flag-only S2 facilities need at least one switched-on trigger (A30)")
+        pick = str(self.flag_rng.choice(list(mix), p=np.array(list(mix.values())) / sum(mix.values())))
+        if pick == "dpd":
+            row["dpd"] = int(self.flag_rng.integers(settings["dpd_days"], cfg.DEFAULT_DPD))
+        else:
+            row[pick] = True
 
     # --- portfolio ------------------------------------------------------------------------------
 
@@ -336,6 +375,7 @@ class Generator:
             if ob["group_id"] is None:
                 ob["group_id"] = f"GRP-{ob['obligor_id']}"
         self._check_concentration(all_fac)
+        self._flag_only(all_fac)
         facilities = self._facility_table(all_fac)
         obligors = self._obligor_table(all_obl)
         commitments = self._commitments(facilities)
@@ -360,6 +400,10 @@ class Generator:
         rng = self.rng
         rows = []
         snap = self.snapshot
+        sicr_days = int(self.params["sicr_triggers"]["dpd_days"])  # the 30+ DPD backstop
+        if not 2 <= sicr_days < cfg.DEFAULT_DPD:
+            raise ValueError(f"O3 draws past-due days below and above the SICR threshold, so dpd_days must "
+                             f"be 2 to {cfg.DEFAULT_DPD - 1}; it is {sicr_days}")
         for i, f in enumerate(facilities, start=1):
             stage = f["ifrs_stage"]
             portfolio = f["portfolio"]
@@ -381,11 +425,12 @@ class Generator:
                     origination = default_date - timedelta(days=365)
                 stage_entry = default_date
             if stage == 1:
-                dpd = 0 if rng.random() < 0.95 else int(rng.integers(1, 30))
+                dpd = 0 if rng.random() < 0.95 else int(rng.integers(1, sicr_days))
             elif stage == 2:
-                dpd = int(rng.integers(30, 90)) if rng.random() < 0.3 else int(rng.integers(0, 30))
+                dpd = (int(rng.integers(sicr_days, cfg.DEFAULT_DPD)) if rng.random() < 0.3
+                       else int(rng.integers(0, sicr_days)))
             else:
-                dpd = int(rng.integers(90, 361))
+                dpd = int(rng.integers(cfg.DEFAULT_DPD, 361))
             collateral = design["collateral"]
             ltv = dscr = None
             if collateral == "cre":
@@ -396,7 +441,7 @@ class Generator:
             if portfolio == "P04":
                 lo, hi = self.t["risk_profiles"][portfolio]["dscr"]
                 dscr = float(lo + (hi - lo) * rng.beta(4, 1 + 2 * stage))
-            rows.append({
+            row = {
                 "facility_id": f"F{i:05d}", "obligor_id": f["_obligor"]["obligor_id"],
                 "entity_id": cfg.ENTITY, "portfolio": portfolio, "segment": f["segment"],
                 "product": f["product"], "ifrs_stage": stage, "poci": False,
@@ -411,6 +456,7 @@ class Generator:
                 "origination_grade": self.grades[f["_g0"] - 1], "ttc_lgd": f["ttc_lgd"],
                 "dpd": dpd, "watchlist": bool(stage == 3 or (stage == 2 and rng.random() < 0.4)),
                 "forborne": bool(rng.random() < (0.0 if stage == 1 else 0.1 if stage == 2 else 0.3)),
+                "credit_status_date": _iso(snap),
                 "origination_date": _iso(origination), "stage_entry_date": _iso(stage_entry),
                 "default_date": _iso(default_date) if default_date else None,
                 "default_date__status": "supplied" if default_date else "not_applicable",
@@ -419,7 +465,10 @@ class Generator:
                 "ltv": ltv, "ltv__status": "supplied" if ltv is not None else "not_applicable",
                 "dscr": dscr, "dscr__status": "supplied" if dscr is not None else "not_applicable",
                 "snapshot_date": _iso(snap),
-            })
+            }
+            if f.get("_flag_only"):
+                self._ensure_trigger(row)
+            rows.append(row)
         df = pd.DataFrame(rows)
         df["ltv"] = df["ltv"].astype(float)
         df["dscr"] = df["dscr"].astype(float)
