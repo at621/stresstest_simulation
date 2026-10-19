@@ -109,7 +109,7 @@ Settled by the owner on 18 October 2026: all four recommendations confirmed, as 
 
 - ECL-10: end-2029 S1 uses the interpolated 2030 loss rate. ECL-05: interpolating the product PD × LGD is not the same as interpolating PD and LGD separately. AT-06 is the oracle: adverse 6% / 40%, baseline 2% / 30% → 5/6 × 2.4% + 1/6 × 0.6% = 2.1%.
 - ECL-10 calls itself "the project's reading of ECL-03–ECL-05 and SYN-PAR-04". ECL-03 and ECL-04 cite the draft at [S3 ¶55, ¶123–125, Boxes 4–9].
-- Design decision D5 ("Parameters after 2029") already notes that AT-06 pins only the first year and that the S2 choice awaits the owner's sign-off.
+- Design decision D5 ("Parameters after 2029") already notes that AT-06 pins only the first year and that the S2 choice awaits the owner's sign-off. (Signed off on 18 October 2026; see below.)
 - `docs/assumptions.md` A27: with a part-year first bucket, the part-year rule is applied to each scenario's 2029 PD before the blend (see the part-year task above).
 
 ### Things to find out
@@ -119,16 +119,62 @@ Settled by the owner on 18 October 2026: all four recommendations confirmed, as 
 - Whether S1 and S2 using different views of 2030 makes a facility's end-2029 provision jump when it changes stage, and whether that is acceptable.
 - The loan term-structure task above already flags that its recomputed end-2029 12-month ECL will differ from the booked provision for this reason.
 
+### Findings (18 October 2026, run `20261018T1959Z-core-36ace84d`)
+
+**The draft.** The draft note was downloaded from the URL in requirements §15 (S3): "2027 EU-wide stress test – Draft Methodological Note", 11 June 2026, 210 pages. The requirements had not checked it before ("Direct access to the two draft PDFs was unavailable").
+- **End-2029 S1: the engine follows the draft.**
+  - Box 4 (new S1, pp. 52–53) and Box 5 (existing S1, pp. 53–54) write the adverse 2029 provision as `… × (5/6 × PD-12M-S1Adv(2029) × LGD S1Adv(2029) + 1/6 × PD-12M-S1Base(2029) × LGD S1Base(2029))`. That is a blend of loss-rate products, using each scenario's 2029 PD and LGD for the missing 2030 values.
+  - The baseline uses its own 2029 product, "given that PD-12M-S1Base is the same in 2029 and in 2030". That is the engine's rule, with a = 1.
+  - The draft has no numerical example. The AT-06 numbers are the project's own, and correct: 2.1%, against 2.04% if PD and LGD were interpolated separately.
+- **The citations hold.**
+  - ¶55 (p. 28): forward-looking parameters for S1/S2, same-year parameters for S3.
+  - ¶123–125 (pp. 49–51): perfect foresight, flat macro variables for S3 after 2029, the 6-year reversion for S1/S2, and time slices after the horizon.
+  - Boxes 4–9 are the provisioning boxes.
+  - Box 1 (p. 26) restates the 6-year reversion and could be added to the citations. The §15 note that the references are unverified can now be updated by the owner (step below).
+- **S2 after 2029 differs from the draft's wording (D5).**
+  - ¶124 (p. 50): "The path of each of the credit risk parameters for S1 and S2 exposures is assumed to linearly revert to those observed at the end of the baseline scenario over 6 years following the end of the adverse scenario." The parameters are "stage transition probabilities/PDs and the corresponding loss rates across stages", and the paragraph opens "Notwithstanding these assumptions on macroeconomic variables".
+  - ¶125 has the time slices after the horizon follow that path.
+  - The engine instead reverts Z linearly (ECL-10) and derives the matrices and LGD from it. Through Φ that path is not linear in the parameters: the PDs of 2030–2034 come out below the linear path. P03 IT G7: 2030 3.36% vs 3.43%, 2032 2.70% vs 2.83%.
+  - For the end-2029 S1 provision, Boxes 4–5 simplify ¶124 to a blend of loss-rate products (Box 4: "Hence"; Box 5: "For simplification"). The engine follows the boxes for S1 and its own Z reading for S2.
+- **Discounting.** The draft's S1 formulas carry no discount factor. The engine's `× EAD × DF` comes from ECL-08 (DESIGN), not from the draft.
+
+**Size of the effect, adverse (the baseline blend equals the curve).**
+
+| End-2029 S1, EUR m | P01 | P02 | P03 | P04 | P05 | P06_CI | P06_GG | Total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Booked: loss-rate blend | 2.10 | 0.92 | 10.71 | 8.61 | 12.50 | 0.53 | 0.10 | 35.48 |
+| Curve: m[1] and LGD from the reverted 2030 Z | 1.95 | 0.90 | 10.41 | 8.30 | 12.25 | 0.49 | 0.10 | 34.41 |
+| PD and LGD interpolated separately (AT-06's wrong answer) | 2.05 | 0.92 | 10.63 | 8.51 | 12.44 | 0.53 | 0.10 | 35.17 |
+
+- The blend books €1.06m (+3.1%) more than the curve, from +1.9% (P02) to +8.6% (P06_CI). That is 0.14% of the adverse closing provisions (€774.6m).
+- S2 with the draft's linear parameter reversion instead of Z reversion has the matrices `a × M_adv(2029) + (1 − a) × M_base(2029)` and LGD alike after 2029, with EAD and prepayment as now. Adverse S2 would rise by €1.04m (+0.5%) at end-2027, €1.40m (+1.0%) at end-2028 and €1.81m (+1.6%) at end-2029. That is +€1.8m on the cumulative adverse charge, the most in P06_CI (+5.7%) and P01 (+2.8%). This was measured from the sealed run with R6's own `pd_curves` function; nothing in the repository changed.
+
+**Jump at a stage change.**
+- An adverse slice that moves from S1 to S2 at end-2029 goes from the 12-month blend to the lifetime curve: 2.6 times the provision on aggregate (€35.5m → €93.6m for the S1 book).
+- Of that step, the switch between the two views of 2030 is −1.8%. The S2 view of the 2030 bucket is the lower one, so it slightly offsets the step and never adds to it.
+- The baseline has no such switch.
+- The jump is therefore almost entirely 12-month against lifetime, which IFRS 9 intends. The difference in views is small and, if anything, errs low for S2. Adopting the draft's linear reversion for S2 would move its 2030 view toward the S1 blend.
+
+**Loan term-structure task.** Its notebook (`notebooks/04_loan_term_structure.ipynb`, branch `todo/loan-term-structure`) recomputes the blend and checks that it equals the booked value. It shows the curve gap by segment in section 6.
+
+**Recommendation.**
+- Keep the loss-rate blend for end-2029 S1: it is the draft's own formula (Boxes 4–5).
+- For D5's S2 choice, the owner picks one of two:
+  - (i) sign off Z reversion as the project's reading and record the ¶124 wording as a conflict in `docs/assumptions.md`, with the size above (+1.6% of adverse S2);
+  - (ii) follow ¶124 and revert the matrices and LGD linearly after 2029. That departs from "one Z drives matrix, LGD and prepayment" after the horizon, and goes through `/improve` with a design update.
+- With the effect this small, (i) is enough for v1.
+
 ### Open decisions (owner)
 
-- [ ] Keep the loss-rate blend for end-2029 S1, as ECL-10 and AT-06 prescribe, or use the curve as in every other year. Changing it departs from the requirements and the design: it needs the owner's agreement, and AT-06 would change with it.
-- [ ] The S2 choice in design decision D5 (reverted matrices and LGD), still awaiting sign-off.
+- [x] Keep the loss-rate blend for end-2029 S1, as ECL-10 and AT-06 prescribe, or use the curve as in every other year. Changing it departs from the requirements and the design: it needs the owner's agreement, and AT-06 would change with it. Recommendation: keep it (the draft's Boxes 4–5). *Settled by the owner on 18 October 2026: keep the blend.*
+- [x] The S2 choice in design decision D5 (reverted matrices and LGD), still awaiting sign-off. Recommendation: sign off Z reversion and record the ¶124 difference as a conflict (findings above). *Settled by the owner on 18 October 2026: Z reversion signed off; the ¶124 difference is conflict C8 in `docs/assumptions.md`.*
 
 ### Steps
 
-- [ ] Work out the points under "Things to find out" and bring them to the owner. No engine change is needed for this.
-- [ ] Settle the decisions above and record the answers in the design (D5) and, if the method changes, in the requirements.
-- [ ] If the method changes: create a branch off `main`, run it through `/improve`, and show the effect with `stress compare` output.
+- [x] Work out the points under "Things to find out" and bring them to the owner. No engine change is needed for this. (Findings above, 18 October 2026.)
+- [x] Settle the decisions above and record the answers in the design (D5) and, if the method changes, in the requirements. (D5 updated; the method does not change.)
+- [x] If the method changes: create a branch off `main`, run it through `/improve`, and show the effect with `stress compare` output. (Not needed: the method stays.)
+- [ ] Owner: update requirements §15, whose note says the draft's paragraph references are unverified (they were checked on 18 October 2026, C8), and consider adding the draft's Box 1 (p. 26) to the citations of ECL-04 and ECL-10. `docs/spec/` is the owner's to edit; O1 then retranscribes it (GOV-03).
 
 ## Baseline 2027 releases provisions: O4 and the engine measure PD differently
 

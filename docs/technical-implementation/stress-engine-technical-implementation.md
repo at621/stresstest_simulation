@@ -60,14 +60,14 @@ Rating grades decide stages through a significant-increase-in-credit-risk (SICR)
 | Design (code flow) | `docs/stress-engine-code-flow.html` | Leads. Defines steps O1–O4 and R1–R11, the formulas and decisions D1–D14. |
 | Requirements v1.3 | `docs/spec/EBA_2027_Credit_Portfolio_Stress_Test_Requirements.md` | Requirement IDs, synthetic targets, acceptance cases AT-xx, §12.2 controls, §12.3 tolerances |
 | Repository rules | `docs/architecture.md` | Who writes what, code rules, Claude Code setup, open items |
-| Assumptions and conflicts | `docs/assumptions.md` | Assumptions A1–A28 and document conflicts C1–C7 |
+| Assumptions and conflicts | `docs/assumptions.md` | Assumptions (A-numbers) and document conflicts (C-numbers) |
 | Runbook | `docs/runbook.md` | Protection check, running the engine, procedure after changes |
 | Folder rules | `CLAUDE.md`, `src/stress/params/CLAUDE.md`, `src/stress/ecl/CLAUDE.md` | Working rules, including the "apply once" rules for R6 and R8 |
 
 ## 1.5 Conventions in this document
 
 - **Step codes.** O1–O4 are the one-off steps; R1–R11 are the run steps.
-- **References.** Requirement IDs such as PD-03 or ECL-11 refer to the requirements document. Acceptance cases are AT-01 to AT-52, design decisions D1–D14, assumptions A1–A28 and conflicts C1–C7.
+- **References.** Requirement IDs such as PD-03 or ECL-11 refer to the requirements document. Acceptance cases are AT-01 to AT-52, design decisions D1–D14, assumptions A1 onward and conflicts C1 onward.
 - **Units.** Amounts are EUR, and rates and probabilities are decimal fractions. Tables quote EUR millions where marked.
 - **Source of figures.** Numerical examples and charts come from the reference run unless stated otherwise. They are synthetic test outputs, not forecasts.
 
@@ -1067,7 +1067,7 @@ uv run stress rerun --run runs/<run_id>
 
 ## 11.1 Design decisions (D1–D14)
 
-All fourteen were taken as proposed (A1).
+All fourteen were taken as proposed (A1). The owner signed off D5 on 18 October 2026 (C8).
 
 | ID | Decision |
 |---|---|
@@ -1075,7 +1075,7 @@ All fourteen were taken as proposed (A1).
 | D2 | SICR: S2 when lifetime PD ≥ k × lifetime PD at origination, both from the TTC matrix over the same horizon; k per segment |
 | D3 | The generator chooses current and origination grades so the stage rule returns each facility's opening stage; qualitative triggers are not used |
 | D4 | LGD = Φ(Φ⁻¹(LGD_TTC) − w·Z) with a segment-level Z-score |
-| D5 | After 2029, adverse Z reverts linearly to baseline 2029 over 2030–2035; S1 at end-2029 interpolates the loss rate; S2 uses the reverted matrices and LGD |
+| D5 | After 2029, adverse Z reverts linearly to baseline 2029 over 2030–2035; S1 at end-2029 interpolates the loss rate; S2 uses the reverted matrices and LGD (signed off by the owner, 18 October 2026) |
 | D6 | S3: original = max(GCA × LGD, prior); new = flow × LGD, booked once and floored after |
 | D7 | Matured facilities are replaced like for like; GCA does not run off |
 | D8 | Opening allowances calculated in the generator with its own formula, then frozen |
@@ -1088,11 +1088,11 @@ All fourteen were taken as proposed (A1).
 
 ## 11.2 Assumptions (A1–A28)
 
-Every assumption is PROPOSED and awaits the owner's approval.
+Every assumption is PROPOSED and awaits the owner's approval, unless its entry records a dated owner decision.
 
 | ID | Topic | Assumption |
 |---|---|---|
-| A1 | D1–D14 | All taken as written, including D5 and the √(1−ρ) divisor of D13 |
+| A1 | D1–D14 | All taken as written, including the √(1−ρ) divisor of D13; D5 signed off by the owner on 18 October 2026 (C8) |
 | A2 | Parameter values | Proposed values in `foundation/parameter_set.yaml` (§4.6) |
 | A3 | ParameterRecord key | Cohort is the slice; facility records carry cohort `performing`; PD records are keyed by curve |
 | A4 | run_id | Kept out of stored rows; it lives only in the manifest |
@@ -1121,7 +1121,7 @@ Every assumption is PROPOSED and awaits the owner's approval.
 | A27 | End-2029 S1 with a stub first bucket | Stub applied to each scenario's 2029 PD before interpolation |
 | A28 | Run log and Excel | Log outside the outputs; workbook byte-reproducible without run ID |
 
-## 11.3 Conflicts between documents (C1–C7)
+## 11.3 Conflicts between documents
 
 | ID | Conflict | Resolution in the build |
 |---|---|---|
@@ -1132,6 +1132,7 @@ Every assumption is PROPOSED and awaits the owner's approval.
 | C5 | Design R1 blocks a synthetic scenario labelled official, but scenarios enter only in R2 | R1 blocks regulatory mode; provenance is checked in R4 |
 | C6 | MIG-07 fixes the SICR line; PD-06 warns against full-life PD as remaining-life PD | Both lifetime PDs use the opening horizon; owner to confirm |
 | C7 | `"onFailure": "block"` on the hooks needs a newer CLI | Not added yet; add after the CLI upgrade |
+| C8 | The 2027 draft's ¶124 reverts each S1/S2 parameter linearly after 2029; ECL-10 and D5 revert Z | Z reversion, signed off by the owner (D5); linear reversion would add 1.6% to adverse end-2029 S2 |
 
 ## 11.4 Open items
 
