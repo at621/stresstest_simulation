@@ -223,3 +223,12 @@ The input data must carry all three for every facility, as checked inputs that c
 - [ ] Input data: change O3, rebuild with `uv run python -m foundation.synth`, and note the new input set hash.
 - [ ] Engine, through `/improve`: tests first (new AT-48 cases for each trigger, R3 rejection of a missing flag, unit tests for the stage rule with flags), then the R3 check and the R7 stage. Show the effect with `stress compare` output against `20261017T2304Z-core-b559d9dd`.
 - [ ] Update `docs/assumptions.md`, and `README.md` and `docs/runbook.md` wherever the input set hash or results appear.
+
+## Follow-ups found in the reviews of 18–19 October 2026
+
+Small points the `change-reviewer` found outside the changes it reviewed. None blocks a run today.
+
+- [ ] **R6 rebuilds the share not yet prepaid itself.** `facility_parameters` (`src/stress/params/__init__.py:193-194`) computes SP[k] with a pandas `cumprod().shift(1).fillna(1.0)` instead of calling the tested kernel `not_prepaid_share` (`src/stress/params/prepay.py`). The two agree today. But `fillna(1.0)` would read a NaN prepayment rate as "no prepayment", against "missing is never zero". Have R6 call the kernel, or point the property test at R6's own code.
+- [ ] **No range check on CPR_TTC and v.** R3 (`src/stress/validate/__init__.py`, `_check_parameters`) checks only that they are present. D14 requires CPR_TTC in (0, 1) and v ≥ 0. A finite and range check in R3 would also close the extreme inputs behind the float-saturation case of `test_not_prepaid_share`.
+- [ ] **Notebook 02 starts runs directly.** Its `start_run()` calls `stress.cli.execute`, while `notebooks/README.md` says to start runs only with `nb.run_engine`. Either use `nbtools` or note the exception (notebook 02 imports no helper module on purpose).
+- [ ] **Design header.** `docs/stress-engine-code-flow.html` still opens with "Proposal for agreement · 17 October 2026", although D5, D13, D2 and D3 now record owner decisions.
