@@ -26,7 +26,7 @@ from stress.contracts.tables import (
     Parameters,
     YearProvisions,
 )
-from stress.ecl.kernels import floor_per_exposure, interpolated_loss_rate
+from stress.ecl.kernels import floor_per_exposure, interpolated_loss_rate, part_year_pd
 
 STEP = "R8"
 LOG = logging.getLogger("stress.R8")
@@ -80,28 +80,23 @@ def _dense(rows: pd.DataFrame, fac_ids: np.ndarray) -> dict:
     return out
 
 
-def _curve_arrays(curves: pd.DataFrame, grades: tuple[str, ...]):
-    """Full-bucket marginal PDs per (segment, country) as grades x buckets, and stub-bucket
-    marginal PDs as rows of one array, indexed by (segment, country, bucket, fraction)."""
+def _curve_arrays(curves: pd.DataFrame, grades: tuple[str, ...]) -> dict:
+    """Whole-year marginal PDs per (segment, country) as grades x buckets. A curve with a missing
+    grade or bucket blocks: a gap is never read as a zero PD."""
     n = len(grades)
     gindex = {g: j for j, g in enumerate(grades)}
     full = {}
-    whole = curves[curves["fraction"] == 1.0]
-    for (segment, country), cv in whole.groupby(["segment", "country"]):
-        arr = np.zeros((n, int(cv["default_bucket"].max())))
-        arr[cv["cohort"].map(gindex).to_numpy(), cv["default_bucket"].to_numpy() - 1] = cv["m"].to_numpy()
+    for (segment, country), cv in curves.groupby(["segment", "country"]):
+        width = int(cv["default_bucket"].max())
+        rank = cv["cohort"].map(gindex)
+        if rank.isna().any():
+            raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, f"PD curve {segment}/{country} has an unknown grade")
+        if len(cv) != n * width:
+            raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, f"PD curve {segment}/{country} has gaps")
+        arr = np.zeros((n, width))
+        arr[rank.to_numpy(dtype=int), cv["default_bucket"].to_numpy() - 1] = cv["m"].to_numpy()
         full[(segment, country)] = arr
-    stubs = curves[curves["fraction"] < 1.0].copy()
-    if stubs.empty:
-        return full, {}, np.zeros((0, n))
-    stubs["_rank"] = stubs["cohort"].map(gindex)
-    stubs = stubs.sort_values(["segment", "country", "default_bucket", "fraction", "_rank"], kind="mergesort")
-    keys = stubs.iloc[::n][["segment", "country", "default_bucket", "fraction"]]
-    index = {
-        (a, b, int(c), round(float(d), 10)): i
-        for i, (a, b, c, d) in enumerate(keys.itertuples(index=False))
-    }
-    return full, index, stubs["m"].to_numpy().reshape(-1, n)
+    return full
 
 
 def performing_ecl(params: Parameters, portfolio: pd.DataFrame, scenario: str, valuation: int,
@@ -121,35 +116,26 @@ def performing_ecl(params: Parameters, portfolio: pd.DataFrame, scenario: str, v
     size = w_on.shape[1]
     curves = params.pd_curves
     curves = curves[(curves["scenario"] == scenario) & (curves["valuation_year"] == valuation)]
-    full, stub_index, stub_m = _curve_arrays(curves, grades)
+    full = _curve_arrays(curves, grades)
     seg = perf["segment"].to_numpy()
     cty = perf["country"].to_numpy()
     buckets = dense["buckets"]
-    has_stub = dense["last_fraction"] < 1.0
-    whole = np.where(has_stub, buckets - 1, buckets)
+    # Every bucket to maturity takes its whole-year marginal PD; a final bucket of d years takes
+    # d of it, pro rata by the maturity (A7). Whole years have d = 1.
+    cover = (np.arange(size)[None, :] < buckets[:, None]).astype(float)
+    cover[np.arange(len(fac_ids)), buckets - 1] = dense["last_fraction"]
     m = np.zeros((len(fac_ids), n, size))
     for (segment, country) in sorted(set(zip(seg, cty))):
         idx = np.nonzero((seg == segment) & (cty == country))[0]
         if (segment, country) not in full:
             raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, f"no PD curve for {segment}/{country}")
         m_full = full[(segment, country)]
-        if (whole[idx] > m_full.shape[1]).any():
+        if (buckets[idx] > m_full.shape[1]).any():
             raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, f"PD curve too short for {segment}/{country}")
         padded = np.zeros((n, size))
         width = min(size, m_full.shape[1])
         padded[:, :width] = m_full[:, :width]
-        mask = np.arange(size)[None, :] < whole[idx][:, None]
-        m[idx] = padded[None, :, :] * mask[:, None, :]
-    stub_rows = np.nonzero(has_stub)[0]
-    if stub_rows.size:
-        try:
-            codes = np.array([
-                stub_index[(seg[i], cty[i], int(buckets[i]), round(float(dense["last_fraction"][i]), 10))]
-                for i in stub_rows
-            ])
-        except KeyError as exc:
-            raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, f"no stub PD for {exc}") from exc
-        m[stub_rows, :, buckets[stub_rows] - 1] = stub_m[codes]
+        m[idx] = part_year_pd(padded[None, :, :], cover[idx][:, None, :])
     on12 = m[:, :, 0] * w_on[:, :1]
     off12 = m[:, :, 0] * w_off[:, :1]
     return PerformingEcl(fac_ids, grades, m, w_on, w_off, on12, off12), dense
@@ -176,7 +162,7 @@ def terminal_s1(params: Parameters, z: pd.DataFrame, portfolio: pd.DataFrame, sc
     def loss_rate(s: str) -> tuple[np.ndarray, np.ndarray]:
         curves = params.pd_curves
         one_year = curves[(curves["scenario"] == s) & (curves["valuation_year"] == valuation - 1)
-                          & (curves["default_bucket"] == 1) & (curves["fraction"] == 1.0)]
+                          & (curves["default_bucket"] == 1)]
         lgd = params.lgd_of_year
         lgd = lgd[(lgd["scenario"] == s) & (lgd["year"] == valuation)].set_index("facility_id")["lgd"]
         if one_year.empty or lgd.empty:
@@ -188,9 +174,10 @@ def terminal_s1(params: Parameters, z: pd.DataFrame, portfolio: pd.DataFrame, sc
             pd_grid[i] = [table.get((segment, country, g), np.nan) for g in grades]
         if np.isnan(pd_grid).any():
             raise BlockingError(STEP, Block.MISSING_TERMINAL_INPUT, f"{s} {valuation} PD missing")
-        # A first bucket shorter than a year applies the constant-hazard stub to each PD.
+        # A first bucket shorter than a year takes the part of each PD that the maturity covers,
+        # as in every other bucket (A7, A27).
         frac = np.where(dense["buckets"] == 1, dense["last_fraction"], 1.0)
-        pd_grid = 1.0 - (1.0 - pd_grid) ** frac[:, None]
+        pd_grid = part_year_pd(pd_grid, frac[:, None])
         lgd_vec = lgd.reindex(fac_ids).to_numpy()
         if np.isnan(lgd_vec).any():
             raise BlockingError(STEP, Block.MISSING_TERMINAL_INPUT, f"{s} {valuation} LGD missing")

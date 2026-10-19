@@ -850,7 +850,7 @@ footer p { margin: 0; max-width: 84ch; }
             <tr><td class="col">master_scale</td><td>grades and their one-year TTC PD</td><td>G1–G10 and D; see <a href="#ttc_pd_matrix">ttc_pd_matrix</a></td></tr>
             <tr><td class="col">segments</td><td>per-segment Z drivers and parameters</td><td>7 segments, table below</td></tr>
             <tr><td class="col">terminal_rule</td><td>what happens after 2029</td><td>adverse reverts linearly to baseline over 6 years; baseline stays flat</td></tr>
-            <tr><td class="col">conventions</td><td>methodological choices</td><td>SICR horizon = remaining life at opening; constant-hazard stub PD; calendar-year-end default buckets; opening allowance from the TTC matrix with a bullet schedule</td></tr>
+            <tr><td class="col">conventions</td><td>methodological choices</td><td>SICR horizon = remaining life at opening; constant-hazard stub PD for O4 and the SICR line (the engine's ECL takes a part-year pro rata since 18 October 2026); calendar-year-end default buckets; opening allowance from the TTC matrix with a bullet schedule</td></tr>
             <tr><td class="col">tolerances</td><td>limits for the checks</td><td>counts exact; probabilities and rates 1e-10; amounts €0.01; aggregates max(€1, 1e-8 relative)</td></tr>
             <tr><td class="col">variants</td><td>run variants</td><td><code>core</code> bullet, fixed CCF · <code>annuity</code> · <code>linear</code> for amortising products · <code>utilisation</code> CCF 75% for P03 and P05 (AT-35)</td></tr>
           </tbody>

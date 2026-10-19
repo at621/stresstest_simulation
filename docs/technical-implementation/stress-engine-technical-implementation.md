@@ -203,7 +203,7 @@ The contracts package is the only code that the step packages share. It holds no
 | `indices` | scenario, country, variable, year | R4 | Annual change and compounded property index |
 | `cf_schedule` | facility, valuation year, period | R5 | Period end, bucket year, fraction, t, opening balance, interest, principal, closing balance, discount factor, profile, generation, remaining maturity |
 | `pit_matrices` | segment, country, scenario, year, from, to | R6 | PiT transition probability and the Z that produced it |
-| `pd_curves` | segment, country, scenario, valuation year, cohort (grade), bucket, fraction, basis | R6 | q, m, S, F per bucket |
+| `pd_curves` | segment, country, scenario, valuation year, cohort (grade), bucket, basis | R6 | q, m, S, F per whole-year bucket |
 | `parameters` | facility, scenario, valuation year, cohort, bucket, basis | R6 | ParameterRecord: Z, LGD, prepayment rate, not-prepaid share, balance, DF, undrawn, CCF, EAD drawn, undrawn and total |
 | `lgd_of_year` | facility, scenario, year | R6 | LGD of each projection year and the effective CCF |
 | `slices` | scenario, year, facility, slice | R7 then R8 | Projection state: stage, grade, cohort data, GCA, undrawn, allowances, replacement generation |
@@ -400,7 +400,7 @@ All values are PROPOSED by Claude Code as working assumptions (A2) and await the
 | CRE price change | 2.0% | 10.0% |
 | Reference rate level | 2.5% | 1.5% |
 
-The **terminal rule** is a linear reversion of adverse Z to baseline 2029 over six years, with baseline flat, and Z extended to 2060. The **conventions** record the readings of open owner inputs: SICR horizon fixed at opening (A6), constant-hazard stub PD (A7), calendar-year-end buckets, the new-S3 undrawn treatment (A9), and the opening allowances on the TTC matrix with a bullet schedule (A8). The **variants** are listed in §5.14.
+The **terminal rule** is a linear reversion of adverse Z to baseline 2029 over six years, with baseline flat, and Z extended to 2060. The **conventions** record the readings of open owner inputs: SICR horizon fixed at opening (A6), constant-hazard stub PD for O4 and the R3 SICR line (A7; R8 takes a part-year pro rata), calendar-year-end buckets, the new-S3 undrawn treatment (A9), and the opening allowances on the TTC matrix with a bullet schedule (A8). The **variants** are listed in §5.14.
 
 ## 4.7 Input sets in the repository
 
@@ -615,13 +615,9 @@ This allows for rating migration on the way to default, under the scenario's own
 - F + S = 1;
 - the marginal PDs sum to F.
 
-A **stub final bucket** of fraction d uses the grade distribution P[n] at the start of the stub and the constant-hazard PD of each grade (A7):
+Curves hold **whole years only**, up to the longest maturity in each segment and country. A final bucket shorter than a year has its whole-year row here, and R8 takes the part of it that the maturity covers (A7, §5.9). Until 18 October 2026, R6 also built a part-year row per grade with the constant hazard `Σ_j P[n](g, j) × (1 − (1 − PD(j))^d)`. The owner then decided to capture the part-year by the maturity in the ECL instead.
 
-```text
-m_g[stub] = Σ_j  P[n](g, j) × (1 − (1 − PD(j))^d)
-```
-
-The reference run stores 252,720 PD-curve records. They are keyed by curve rather than by facility (A3), because every facility of a segment, country and grade shares one curve.
+A run now stores 38,000 PD-curve records. The reference run of §8 stored 252,720, of which 214,720 were part-year rows. They are keyed by curve rather than by facility (A3), because every facility of a segment, country and grade shares one curve.
 
 ![Figure 8: TTC to PiT for P03, from the v1 reference run, with the √(1 − ρ) divisor that was dropped on 18 October 2026. (a) The one-year PD by grade: adverse 2027 lies above TTC and baseline 2027 below it, because with the divisor Z near 0 gave the median year. (b) The lifetime cumulative PD of grade G6 from end-2026, built from products of future matrices.](images/fig-08-pd-ttc-pit.png)
 
@@ -654,8 +650,7 @@ Prepayment is applied once, in EAD, and never in the default survival. The undra
 **Other blocks.** These conditions block in R6:
 
 - a Z missing for any bucket year a facility needs (`MISSING_TERMINAL_INPUT`, AT-41);
-- a PD curve that fails PD-03;
-- a stub PD out of bounds.
+- a PD curve that fails PD-03.
 
 ## 5.8 R7: project the year (`projection/`)
 
@@ -698,7 +693,10 @@ ECL_12m(f, g)  = m_g[1] × EAD_f[1] × LGD_f[1] × DF_f[1]
 ECL_life(f, g) = Σ (k = 1 … K_f)  m_g[k] × EAD_f[k] × LGD_f[k] × DF_f[k]
 
 K_f = the facility's number of buckets to maturity, from R5
+m_g[K_f] → d × m_g[K_f] when the final bucket covers only d years
 ```
+
+The PD curves hold whole years. A final bucket of d years takes d × its whole-year marginal PD, pro rata by the maturity (A7, owner decision of 18 October 2026). A curve with a missing grade or bucket blocks (`PARAMETER_ALIGNMENT`).
 
 The drawn part of EAD goes to the on-balance allowance and the undrawn part to the off-balance provision (EAD-08, AT-34). A slice's provision is the facility's per-grade ECL multiplied by the slice's share of the facility's GCA (on-balance) or undrawn (off-balance). S1 slices take the 12-month value and S2 slices the lifetime value to maturity.
 
@@ -708,7 +706,7 @@ The drawn part of EAD goes to the on-balance allowance and the undrawn part to t
 LR_2030 = a × PD_s(2029) × LGD_s(2029) + (1 − a) × PD_baseline(2029) × LGD_baseline(2029)
 ```
 
-Here a = 5/6 for adverse and 1 for baseline. PD and LGD are not interpolated separately. A first bucket shorter than a year applies the stub to each PD first (A27), and a missing 2030 or baseline input blocks (AT-41).
+Here a = 5/6 for adverse and 1 for baseline. PD and LGD are not interpolated separately. A first bucket shorter than a year takes d × each PD first (A27), and a missing 2030 or baseline input blocks (AT-41).
 
 **S3 (ECL-11, D6, A9, A14).**
 
@@ -874,13 +872,13 @@ Run folders are local and never committed; the pre-commit hook refuses them. Eac
 
 ## 7.1 Test architecture
 
-The suite has 101 test functions in three folders. Hypothesis property tests and parametrised cases run many examples per function.
+The suite has 105 test functions in three folders. Hypothesis property tests and parametrised cases run many examples per function.
 
 | Folder | Files | Tests | Marker |
 |---|---|---|---|
 | `tests/acceptance/` | One file per acceptance case, `test_at_xx.py` | 36 | `@pytest.mark.at("AT-xx")` |
-| `tests/unit/` | `test_kernels.py`, `test_foundation.py`, `test_run_frame.py`, `test_reporting.py`, `test_terminal_s1.py` | 40 | `@pytest.mark.req(...)` |
-| `tests/controls/` | `test_input_controls.py`, `test_run_controls.py`, `test_repository_rules.py` | 23 | `@pytest.mark.control(...)` |
+| `tests/unit/` | `test_kernels.py`, `test_foundation.py`, `test_run_frame.py`, `test_reporting.py`, `test_terminal_s1.py`, `test_part_year_bucket.py` | 45 | `@pytest.mark.req(...)` |
+| `tests/controls/` | `test_input_controls.py`, `test_run_controls.py`, `test_repository_rules.py` | 24 | `@pytest.mark.control(...)` |
 
 **Traceability rule.** `tests/conftest.py` fails collection if a test has no `at`, `req` or `control` marker. It also fails if a marker names an unknown ID: an AT without an oracle file, a requirement ID absent from the requirements text, or a control that is not a §12.2 control name (or "Repository rules").
 
@@ -922,6 +920,7 @@ AT-48, AT-51 and AT-52 test the rule each case states. Their numerical expectati
 | `test_run_frame.py` (7) | Duplicate or missing key blocks; value status distinguishes missing, zero and supplied; run ID and write-once; a sealed run is labelled and read-only; a tampered input blocks; a scenario value without unit blocks; raw files are kept unchanged |
 | `test_reporting.py` (4) | The run log records every step; a blocked run's log names the reason; the Excel report matches the engine; the workbook is byte-reproducible |
 | `test_terminal_s1.py` (1) | The run interpolates the 2030 S1 loss rate |
+| `test_part_year_bucket.py` (5) | Curves hold whole years; a part-year bucket takes d × its whole-year marginal PD in S1, S2 and end-2029 S1; the pro-rata kernel never exceeds the constant hazard |
 
 ## 7.4 Control tests (§12.2)
 
@@ -1100,7 +1099,7 @@ Every assumption is PROPOSED and awaits the owner's approval, unless its entry r
 | A4 | run_id | Kept out of stored rows; it lives only in the manifest |
 | A5 | Country in the scenario key | Yes; the §6.2 common paths are copied to all six countries |
 | A6 | SICR horizon | Residual maturity at opening, fixed per facility |
-| A7 | Stub final bucket | Constant hazard per grade |
+| A7 | Stub final bucket | Pro rata in R8, d × the whole-year marginal PD; curves hold whole years (owner, 18 October 2026). O4 and the SICR line keep the constant hazard |
 | A8 | Opening allowances | TTC matrix itself, which since 18 October 2026 is also the PiT matrix at Z = 0; bullet schedule; LGD-01/04 not built; §8.7 LGD is the segment mean |
 | A9 | Undrawn of a new S3 cohort | Stays as nominal undrawn; its provision is undrawn flow × CCF × LGD, then floored |
 | A10 | AT-48, AT-51, AT-52 numbers | Left OPEN; their tests prove the rules |
@@ -1120,7 +1119,7 @@ Every assumption is PROPOSED and awaits the owner's approval, unless its entry r
 | A24 | Overlays | None in v1 (explicit zero); carried unchanged |
 | A25 | CCF source | Commitment CCF must equal the parameter set's segment CCF |
 | A26 | Rounding | CSV to cents and 10 decimals; summary in EUR m to one decimal; Parquet unrounded |
-| A27 | End-2029 S1 with a stub first bucket | Stub applied to each scenario's 2029 PD before interpolation |
+| A27 | End-2029 S1 with a stub first bucket | d × each scenario's 2029 PD before interpolation |
 | A28 | Run log and Excel | Log outside the outputs; workbook byte-reproducible without run ID |
 | A29 | Meaning of TTC | The matrix of an average year (Z = 0), not the cycle average (owner, 18 October 2026) |
 
@@ -1137,6 +1136,7 @@ Every assumption is PROPOSED and awaits the owner's approval, unless its entry r
 | C7 | `"onFailure": "block"` on the hooks needs a newer CLI | Not added yet; add after the CLI upgrade |
 | C8 | The 2027 draft's ¶124 reverts each S1/S2 parameter linearly after 2029; ECL-10 and D5 revert Z | Z reversion, signed off by the owner (D5); linear reversion would add 1.6% to adverse end-2029 S2 |
 | C9 | PD-10's text prescribes the √(1 − ρ) divisor; the owner dropped it (D13) | Engine and design follow the owner; PD-10's text is the owner's to update |
+| C10 | PD-06 prescribes the constant hazard for a fractional interval; the owner chose pro rata in the ECL | R8 takes d × the whole-year marginal PD; O4 and the SICR line keep the constant hazard; PD-06's text is the owner's to update |
 
 ## 11.4 Open items
 

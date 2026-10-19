@@ -7,6 +7,8 @@ import pytest
 
 from stress.cli import main
 from stress.contracts.errors import Block, BlockingError
+from stress.contracts.tables import ROUTE_PERFORMING, ROUTE_S3_ORIGINAL, Parameters
+from stress.ecl import performing_ecl
 from stress.lineage import compare_outputs
 from stress.params.matrix import check_matrix, pit_matrix
 from stress.params.pd import check_curve, curve_from_conditional
@@ -53,6 +55,48 @@ def test_pd_curve_identities_block():
     with pytest.raises(BlockingError) as err:
         check_curve(broken, tol, "R6", "decreasing")
     assert err.value.code == Block.PD_IDENTITY
+
+
+@pytest.mark.control("PD curve identities and completeness")
+def test_missing_curve_bucket_blocks_the_ecl(core_run, full_tables):
+    # R8 never reads a missing whole-year PD as zero, the one behind a part-year bucket included.
+    ctx, _ = core_run
+    curves = builders.result(ctx, "pd_curves.parquet")
+    facility = builders.result(ctx, "parameters.parquet")
+    params = Parameters(pit=builders.result(ctx, "pit_matrices.parquet"), pd_curves=curves,
+                        facility=facility, lgd_of_year=builders.result(ctx, "lgd_of_year.parquet"))
+    fac = full_tables["facilities"].merge(full_tables["obligors"][["obligor_id", "country"]], on="obligor_id")
+    portfolio = fac.assign(route=np.where(fac["ifrs_stage"] < 3, ROUTE_PERFORMING, ROUTE_S3_ORIGINAL))
+    grades = tuple(full_tables["parameter_set"]["master_scale"]["grades"])
+    scenario = "baseline"
+    year = int(full_tables["parameter_set"]["horizon"]["snapshot_year"])
+    performing_ecl(params, portfolio, scenario, year, grades)  # the intact tables price
+    part = facility[(facility["scenario"] == scenario) & (facility["valuation_year"] == year)
+                    & (facility["fraction"] < 1.0) & (facility["default_bucket"] > 2)].iloc[0]
+    where = portfolio.set_index("facility_id").loc[part["facility_id"]]
+    curve = ((curves["segment"] == where["segment"]) & (curves["country"] == where["country"])
+             & (curves["scenario"] == scenario) & (curves["valuation_year"] == year))
+    last = int(curves.loc[curve, "default_bucket"].max())
+    gaps = {
+        "a middle bucket of one grade": (curve & (curves["cohort"] == grades[0])
+                                         & (curves["default_bucket"] == 2), "has gaps"),
+        "the whole year behind a part-year bucket": (curve & (curves["cohort"] == grades[0])
+                                                     & (curves["default_bucket"] == int(part["default_bucket"])),
+                                                     "has gaps"),
+        "the last bucket of every grade": (curve & (curves["default_bucket"] == last), "too short"),
+    }
+    for what, (drop, reason) in gaps.items():
+        broken = Parameters(pit=params.pit, pd_curves=curves[~drop], facility=facility,
+                            lgd_of_year=params.lgd_of_year)
+        with pytest.raises(BlockingError) as err:
+            performing_ecl(broken, portfolio, scenario, year, grades)
+        assert err.value.code == Block.PARAMETER_ALIGNMENT and reason in str(err.value), what
+    unknown = curves.copy()
+    unknown.loc[curve & (unknown["cohort"] == grades[0]), "cohort"] = "not a grade"
+    broken = Parameters(pit=params.pit, pd_curves=unknown, facility=facility, lgd_of_year=params.lgd_of_year)
+    with pytest.raises(BlockingError) as err:
+        performing_ecl(broken, portfolio, scenario, year, grades)
+    assert err.value.code == Block.PARAMETER_ALIGNMENT and "unknown grade" in str(err.value)
 
 
 @pytest.mark.control("Parameter alignment")

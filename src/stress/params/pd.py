@@ -1,8 +1,9 @@
 """PD curves from products of future PiT matrices; PD-03 identities (PD-11).
 
 ``F[k] = (e_g x M(y+1) x ... x M(y+k))[D]``, ``m[k] = F[k] - F[k-1]``, ``S[k] = 1 - F[k]``,
-``q[k] = m[k] / S[k-1]``. Conditional PDs are never summed. A stub final bucket of fraction d
-uses the constant-hazard convention per grade, ``1 - (1 - PD)^d`` (PD-06).
+``q[k] = m[k] / S[k-1]``. Conditional PDs are never summed. The curves hold whole years; R8
+takes a part-year bucket pro rata (A7). ``stub_pd`` keeps the constant-hazard convention
+``1 - (1 - PD)^d`` (PD-06) for the uses outside the ECL.
 """
 
 from collections.abc import Sequence

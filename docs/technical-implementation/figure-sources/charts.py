@@ -179,8 +179,9 @@ def pd_ttc_pit(res: Path, m_ttc: np.ndarray, grades: list[str], seg: str) -> Non
     gi = grades.index(grade)
     curves = pd.read_parquet(res / "pd_curves.parquet",
                              filters=[("segment", "==", seg), ("country", "==", "NL"),
-                                      ("valuation_year", "==", 2026), ("cohort", "==", grade),
-                                      ("fraction", "==", 1.0)])
+                                      ("valuation_year", "==", 2026), ("cohort", "==", grade)])
+    if "fraction" in curves.columns:  # runs before 18 October 2026 also held part-year rows
+        curves = curves[curves["fraction"] == 1.0]
     k = np.arange(1, 9)
     f_ttc = np.array([np.linalg.matrix_power(m_ttc, n)[gi, -1] for n in k])
     b.plot(k, f_ttc * 100, color=TTC_INK, label="TTC matrix powers", zorder=3)
