@@ -38,27 +38,32 @@ All the inputs exist already. The task joins tables and recomputes ECL; it adds 
 
 ### Open decisions (owner)
 
-- [ ] **Valuation dates.** The 2026 snapshot only, or every date from 2026 to 2029? From 2027 on, a loan can sit in several grades, so we'd need one row per slice or a GCA-weighted blend. Recommendation: 2026 first, with per-slice rows if later dates are wanted.
-- [ ] **S3 loans.** Include them in the summary with stage 3 and their allowance, or leave them out? Recommendation: include them in the summary, but not in the term structure.
-- [ ] **One-off or permanent.** A notebook that reads a sealed run, with no engine change. Or a new output of every run, which goes through `/improve` with tests, gate, compare and `change-reviewer`. Recommendation: the notebook first.
-- [ ] **Format and location** of the export (CSV, Parquet, Excel). Never write into `runs/`, `inputs/` or a new root folder.
+Settled by the owner on 18 October 2026: all four recommendations confirmed, as used on branch `todo/loan-term-structure`.
+
+- [x] **Valuation dates.** The 2026 snapshot only, or every date from 2026 to 2029? From 2027 on, a loan can sit in several grades, so we'd need one row per slice or a GCA-weighted blend. Recommendation: 2026 first, with per-slice rows if later dates are wanted. *Used: the export holds 2026 (`EXPORT_YEARS = [2026]`). The tables are built per slice, so adding a later year to `EXPORT_YEARS` gives one row per slice. The controls always cover 2026–2029.*
+- [x] **S3 loans.** Include them in the summary with stage 3 and their allowance, or leave them out? Recommendation: include them in the summary, but not in the term structure. *Used as recommended.*
+- [x] **One-off or permanent.** A notebook that reads a sealed run, with no engine change. Or a new output of every run, which goes through `/improve` with tests, gate, compare and `change-reviewer`. Recommendation: the notebook first. *Used: notebook.*
+- [x] **Format and location** of the export (CSV, Parquet, Excel). Never write into `runs/`, `inputs/` or a new root folder. *Used: both tables as Parquet (unrounded, every column) and the loan summary also as CSV, in `notebooks/output/<run_id>/`, which git ignores.*
 
 ### Steps
 
-- [ ] Settle the open decisions above.
-- [ ] Create a branch off `main` for this work.
-- [ ] Notebook `notebooks/02_loan_term_structure.ipynb`: open a sealed run with `nb.open_run(...)` and read the tables through `run.table(...)` and `run.data(...)`.
-- [ ] Build the term-structure table: parameters joined to the PD curves by segment, country, scenario, valuation date, grade, bucket and fraction, plus the rate and maturity.
-- [ ] Build the loan summary: stage, 12-month and lifetime ECL (on and off balance), 12-month PD (m[1]), lifetime PD (F at maturity), LGD and DF of bucket 1, remaining maturity, rate, and the booked provision.
-- [ ] Controls, each recomputed from the run's own tables (no hand-typed expected values):
-  - [ ] S1 loans, 2026–2028: the recomputed 12-month ECL equals `raw_on` / `raw_off` in `provisions.parquet`.
-  - [ ] S2 loans: the recomputed lifetime ECL equals `raw_on` / `raw_off`.
-  - [ ] The bucket terms summed by segment, stage and bucket equal `ecl_buckets.parquet`.
-  - [ ] On every PD curve, `F + S = 1` and F never decreases.
-  - [ ] Every rate is consistent with its DF: `DF = (1 + r)^-t`.
-- [ ] Export the two tables.
-- [ ] Add the notebook to the table in `notebooks/README.md`.
-- [ ] `uv run ruff check`. Clear the notebook outputs before committing.
+- [x] Settle the open decisions above (confirmed by the owner, 18 October 2026).
+- [x] Create a branch off `main` for this work.
+- [x] Notebook `notebooks/04_loan_term_structure.ipynb` (02 was already taken): open a sealed run with `nb.open_run(...)` and read the tables through `run.table(...)` and `run.data(...)`.
+- [x] Build the term-structure table: parameters joined to the PD curves by segment, country, scenario, valuation date, grade, bucket and fraction, plus the rate and maturity.
+- [x] Build the loan summary: stage, 12-month and lifetime ECL (on and off balance), 12-month PD (m[1]), lifetime PD (F at maturity), LGD and DF of bucket 1, remaining maturity, rate, and the booked provision.
+- [x] Controls, each recomputed from the run's own tables (no hand-typed expected values). All pass on run `20261018T1959Z-core-36ace84d`, both scenarios, every valuation date:
+  - [x] S1 loans, 2026–2028: the recomputed 12-month ECL equals `raw_on` / `raw_off` in `provisions.parquet`.
+  - [x] S2 loans: the recomputed lifetime ECL equals `raw_on` / `raw_off`.
+  - [x] The bucket terms summed by segment, stage and bucket equal `ecl_buckets.parquet`.
+  - [x] On every PD curve, `F + S = 1` and F never decreases.
+  - [x] Every rate is consistent with its DF: `DF = (1 + r)^-t`.
+  - [x] Added: every performing slice's stage follows from the SICR line, rebuilt by hand from the TTC matrix (MIG-07).
+  - [x] Added: end-2029 S1 equals the loss-rate blend recomputed from `pd_curves`, `lgd_of_year` and the terminal weights in `drivers`, both scenarios; in the baseline it also equals the curve.
+  - [x] Added: one event basis per scenario and valuation date, the same in `parameters` and `pd_curves`.
+- [x] Export the two tables.
+- [x] Add the notebook to the table in `notebooks/README.md`.
+- [x] `uv run ruff check`. Clear the notebook outputs before committing.
 - [ ] If it becomes permanent: run it through `/improve`, then update `README.md` and `docs/runbook.md`.
 
 ## Part-year PD bucket: build it in the curves or in ECL?
