@@ -1,5 +1,43 @@
 # TODO
 
+## Status, 19 October 2026 (tag `v1.1.0`)
+
+The owner settled all five items below on 18 October 2026. Each was built on its own branch, approved by `change-reviewer` and merged into `main`. What is left is the owner's: the unticked steps listed under "Still open".
+
+| Item | Owner decision | Branch | Effect on results |
+|---|---|---|---|
+| Loan-level ECL and term-structure table | All four recommendations | `todo/loan-term-structure` | None: notebook 04 reads a sealed run |
+| Part-year PD bucket | Captured by maturity in R8, pro rata: `d × m[n+1]` | `todo/part-year-pd` | Cumulative charge −€0.14m baseline, −€0.34m adverse |
+| End-2029 Stage 1 | Keep the blend; D5 signed off | `todo/end-2029-s1` | None: documents only |
+| Baseline 2027 releases provisions | Option 1: drop the √(1−ρ) divisor | `todo/first-year-release` | Cumulative charge €60.6m → €129.7m baseline, €496.0m → €634.9m adverse |
+| Qualitative SICR triggers | Use them; hold each flag until default (a) | `todo/sicr-triggers` | Cumulative charge +€0.55m baseline, +€0.28m adverse; new input set `d62d0386f2c5256e` |
+
+One more branch was merged: `fix/prepayment-property-test`. It is a test-only fix for a Hypothesis counterexample (float saturation) in `test_not_prepaid_share`.
+
+**Combined effect on `main`.** The gate passes (121 tests, import rules, ruff). Run `20261019T0511Z-core-05ddae55` (code `0.1.0+907bb050acb9`, input set `d62d0386f2c5256e`) compared with `20261018T2152Z-core-fdcada28` (v1.0.2, input set `514ed0e86e3dc760`), EUR m:
+
+| Scenario | Cumulative charge 2027–2029 | Charge 2027 | Closing provisions 2029 | S3 GCA 2029 |
+|---|---:|---:|---:|---:|
+| baseline | 60.6 → 130.4 | −5.0 → 39.6 | 339.2 → 409.0 | 716.5 → 845.9 |
+| adverse | 496.0 → 635.0 | 343.5 → 439.8 | 774.6 → 913.6 | 1,360.4 → 1,601.0 |
+
+The baseline no longer releases provisions in 2027. Most of the change comes from dropping the divisor.
+
+**Still open (owner).** Each one is an unticked step in its item below:
+
+- Requirement texts. `docs/spec/` is written only by O1, which retranscribes once the owner has amended the source and signs it off (GOV-03):
+  - PD-10 (C9);
+  - PD-06 and a note to PD-02 (C10);
+  - MIG-07's last sentence, SYN-PAR-08 and AT-48 (C11);
+  - the requirements §15 note on the draft's paragraph references (C8).
+- Approve input set `d62d0386f2c5256e`, which is PENDING_OWNER_APPROVAL.
+- Decide the five settings in A30 that Claude Code proposed and the owner has not approved.
+- Not built yet:
+  - split S2 by trigger in the stage-migration report;
+  - rename `stub_pd: constant_hazard_by_grade` at the next input-set rebuild;
+  - make notebook 04 a permanent output, if wanted;
+  - the review follow-ups at the end of this file.
+
 ## Loan-level ECL and term-structure table
 
 **Goal.** Two tables for every loan, built from a sealed run:
