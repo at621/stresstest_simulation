@@ -1,4 +1,4 @@
-"""AT-28: stub PD under the constant-hazard convention (PD-06)."""
+"""AT-28, kernel-only (R8 takes a part year pro rata, by owner decision A7): stub PD (PD-06)."""
 
 import pytest
 

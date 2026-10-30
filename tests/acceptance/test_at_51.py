@@ -9,11 +9,12 @@ import pytest
 
 from stress.cashflows import PROFILE_CODES, schedules
 from stress.cashflows.kernels import annuity_payment, contractual_schedule, drawn_measure
-from tests.support import oracle, tolerance
+from tests import builders
+from tests.support import assert_close, oracle, tolerance
 
 
 @pytest.mark.at("AT-51")
-def test_schedule_profiles(full_tables):
+def test_schedule_profiles(full_tables, mini, tmp_path):
     case = oracle("AT-51")
     assert case["status"] == "PARTLY_OPEN"
     tol = tolerance("amount")["abs"]
@@ -45,3 +46,18 @@ def test_schedule_profiles(full_tables):
             v = schedules(np.array([d]), np.array([r]), np.array([m]), np.array([PROFILE_CODES[profile]]))
             n = int(v[-1][0])
             assert np.allclose(v[2][0, :n], s.opening_balance) and np.allclose(v[4][0, :n], s.principal)
+    # The same schedules through a sealed run: each profile has its variant, core for bullet.
+    inputs = builders.write(mini, tmp_path / "in")
+    facts = mini["facilities"].set_index("facility_id")
+    for profile, variant in zip(case["input"]["profiles"], ("core", "annuity", "linear")):
+        ctx, _ = builders.run(inputs, tmp_path / variant, variant=variant)
+        schedule = builders.result(ctx, "cf_schedule.parquet")
+        first = schedule[(schedule["valuation_year"] == schedule["valuation_year"].min())
+                         & (schedule["profile"] == profile)]
+        assert (first["fraction"] < 1).any(), "a stub final period"
+        for fid, rows in first.groupby("facility_id"):
+            f = facts.loc[fid]
+            s = contractual_schedule(f["gca"], f["interest_rate"], f["residual_maturity"], profile)
+            rows = rows.sort_values("period")
+            for column in ("fraction", "opening_balance", "principal", "closing_balance"):
+                assert_close(list(rows[column]), list(getattr(s, column)), case["tolerance"], f"{fid} {column}")

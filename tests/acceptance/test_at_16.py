@@ -3,11 +3,12 @@
 import pytest
 
 from stress.scenario.kernels import compound_index
+from tests import builders
 from tests.support import assert_close, oracle, spec_yaml, within
 
 
 @pytest.mark.at("AT-16")
-def test_terminal_index_compounds():
+def test_terminal_index_compounds(core_run):
     case = oracle("AT-16")
     i = case["input"]
     levels = compound_index(i["annual_changes"], i["initial_index"])
@@ -24,3 +25,18 @@ def test_terminal_index_compounds():
         got = compound_index([path[y] / 100 for y in sorted(path)], start)
         for level, year in zip(got, sorted(path)):
             assert_close(level, expected[index_var][year], case["tolerance"], f"{index_var} {year}")
+    # The same levels through the run: R4 writes every country's index to indices.parquet.
+    ctx, _ = core_run
+    run = builders.result(ctx, "indices.parquet")
+    run = run[run["scenario"] == "adverse"]
+    for index_var, levels in expected.items():
+        for year, level in levels.items():
+            rows = run[(run["variable"] == index_var) & (run["year"] == year)]
+            assert len(rows) == len(scenarios["countries"])
+            for value in rows["index"]:
+                assert_close(value, level, case["tolerance"], f"run {index_var} {year}")
+    residential = run[run["variable"] == scenarios["index_of"]["residential_price_change"]]
+    for _, rows in residential.groupby("country"):
+        rows = rows.sort_values("year")
+        assert_close(list(rows["annual_change"]), i["annual_changes"], case["tolerance"], "run changes")
+        assert_close(rows["index"].iloc[-1], case["expected"]["terminal_index"], case["tolerance"], "run index")

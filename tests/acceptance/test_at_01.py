@@ -1,4 +1,4 @@
-"""AT-01: the synthetic input set hits the section 5 portfolio targets."""
+"""AT-01, no run (the case is about what O2-O4 build): the input set hits the section 5 targets."""
 
 import pytest
 

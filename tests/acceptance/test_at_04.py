@@ -2,12 +2,14 @@
 
 import pytest
 
+from stress.contracts.tables import METHOD_S3_NEW_BOOKING, METHOD_S3_NEW_FLOOR, new_s3_slice
 from stress.ecl.kernels import floor_per_exposure, s3_new_booking
+from tests import builders
 from tests.support import assert_close, oracle
 
 
 @pytest.mark.at("AT-04")
-def test_new_cohort_booked_once():
+def test_new_cohort_booked_once(reference_runs):
     case = oracle("AT-04")
     i = case["input"]
     booked = s3_new_booking([i["flow"]], [i["lgd"]])
@@ -15,3 +17,20 @@ def test_new_cohort_booked_once():
     # The next year re-measures the same cohort and floors it; it does not add a second booking.
     next_year, _ = floor_per_exposure(s3_new_booking([i["flow"]], [i["lgd"]]), booked)
     assert_close(next_year[0], case["expected"]["allowance"], case["tolerance"], "after a year")
+    # The same case through the whole pipeline: R7 opens the cohort, R8 books it and re-measures it.
+    ctx, _ = reference_runs["core"]
+    fid = reference_runs["ids"]["AT-04"]
+    prov = builders.result(ctx, "provisions.parquet")
+    year = int(prov["year"].min()) + 1
+    cohort = new_s3_slice(year, 1)
+    slices = builders.result(ctx, "slices.parquet")
+    for value in slices[(slices["facility_id"] == fid) & (slices["slice"] == cohort)]["gca"]:
+        assert_close(value, i["flow"], case["tolerance"], "run flow")
+    mine = prov[(prov["facility_id"] == fid) & (prov["slice"] == cohort)]
+    assert set(mine["scenario"]) == {"baseline", "adverse"}
+    for _, rows in mine.groupby("scenario"):
+        assert (rows["method"] == METHOD_S3_NEW_BOOKING).sum() == case["expected"]["bookings"]
+        assert rows.loc[rows["method"] == METHOD_S3_NEW_BOOKING, "year"].iloc[0] == year
+        assert (rows["method"] == METHOD_S3_NEW_FLOOR).sum() == len(rows) - case["expected"]["bookings"] > 0
+        for value in rows["allowance_on"]:
+            assert_close(value, case["expected"]["allowance"], case["tolerance"], "run allowance")

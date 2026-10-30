@@ -44,11 +44,9 @@ def mini_tables(full_tables):
 
 @pytest.fixture(scope="session")
 def reference_runs(full_tables, tmp_path_factory):
-    """The AT-34/AT-35/AT-42 reference facilities, run in the core and utilisation variants."""
-    from tests.support import oracle
-
-    tables, ids = builders.reference_set(builders.mini(full_tables, per_cell=3),
-                                         oracle("AT-34"), oracle("AT-42"))
+    """The reference facilities of ``builders.reference_set``, run in the core and utilisation
+    variants."""
+    tables, ids = builders.reference_set(builders.mini(full_tables, per_cell=3))
     inputs = builders.write(tables, tmp_path_factory.mktemp("reference_inputs"))
     runs = tmp_path_factory.mktemp("reference_runs")
     out = {"ids": ids, "inputs": inputs, "runs_dir": runs}

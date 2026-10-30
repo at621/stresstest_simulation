@@ -1,4 +1,4 @@
-"""AT-36: a permitted drawdown transfer is not counted again as undrawn (EAD-06)."""
+"""AT-36, kernel-only (the static book has no drawdown transfers): no double count (EAD-06)."""
 
 import pytest
 
