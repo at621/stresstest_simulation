@@ -11,3 +11,4 @@
 - The drawn part goes to the on-balance allowance and the undrawn part to the off-balance provision, never both (EAD-08).
 - Keep raw and constrained values, and report what a binding floor masks (ECL-09).
 - Stage comes from the grade slice in R7. Don't recompute it here.
+- Authorised selectable reading: `s2_treatment=held` keeps the allowance of what stayed in S2 from the second projected year (C14, `hold_s2`). `raw_on` and `raw_off` still hold the lifetime ECL, so the bucket check compares against raw. The default reprices S2 every year-end.

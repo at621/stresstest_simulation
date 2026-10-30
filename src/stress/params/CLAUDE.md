@@ -13,4 +13,5 @@
 - Buckets after 2029 use the reverted Z (ECL-10). A missing terminal bucket blocks; it is never zero.
 - Build baseline parameters before adverse, because adverse reverts toward baseline 2029.
 - Authorised preparation alternative (30 October 2026): `terminal_treatment=parameters` linearly blends terminal matrix probabilities and LGD endpoints; prepayment remains Z-driven. R8 bypasses its default terminal product interpolation for this option. Standalone benchmark/recovery/challenge diagnostics never overwrite core ParameterRecords. See the design preparation addendum and implementation register.
+- Authorised selectable reading: `horizon_runoff=replaced` sets prepayment to zero in buckets up to 2029 and R5 keeps every facility alive to end-2029 (¶125, C15). The default is contractual run-off in every bucket.
 - Every value is a ParameterRecord under the MOD-06 key. A duplicate or missing key blocks.

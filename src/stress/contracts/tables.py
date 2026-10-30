@@ -188,6 +188,7 @@ PROVISIONS = TableSpec(
 METHOD_S1 = "s1_12m"
 METHOD_S1_TERMINAL = "s1_terminal_interpolated"
 METHOD_S2 = "s2_lifetime"
+METHOD_S2_HELD = "s2_held"
 METHOD_S3_ORIGINAL = "s3_original_floor"
 METHOD_S3_NEW_BOOKING = "s3_new_booking"
 METHOD_S3_NEW_FLOOR = "s3_new_floor"
@@ -243,6 +244,7 @@ class YearProjection:
     slices: pd.DataFrame  # SLICES before provisions
     stage_flows: pd.DataFrame  # STAGE_FLOWS
     grade_flows: pd.DataFrame  # GRADE_FLOWS
+    s2_stayers: pd.DataFrame | None = None  # facility_id, grade and what stayed in S2 with its allowance
 
 
 @dataclass

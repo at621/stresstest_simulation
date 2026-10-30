@@ -34,7 +34,19 @@ from stress.capital.assessment import capital_bridge
 from stress.capital.npe import npe_backstop
 from stress.contracts.errors import BlockingError
 from stress.contracts.preparation import ANALYSES
-from stress.contracts.run import MODE_SYNTHETIC, MODES, REPORTS_DIR, RESULTS_DIR, RUN_LOG, RunConfig
+from stress.contracts.run import (
+    HORIZON_RUNOFFS,
+    MODE_SYNTHETIC,
+    MODES,
+    REPORTS_DIR,
+    RESULTS_DIR,
+    RUN_LOG,
+    RUNOFF_CONTRACTUAL,
+    S2_HELD,
+    S2_REPRICED,
+    S2_TREATMENTS,
+    RunConfig,
+)
 from stress.contracts.tables import (
     CHARGES,
     DRIVER_CONTRIBUTIONS,
@@ -133,6 +145,7 @@ def pipeline(ctx) -> dict:
         "reference": "EBA draft 2026-06-11", "status": "SYNTHETIC_PREPARATION",
         "terminal_treatment": ctx.config.terminal_treatment,
         "pd_anchor": "Z=0 average year; not unconditional cycle average",
+        "s2_treatment": ctx.config.s2_treatment, "horizon_runoff": ctx.config.horizon_runoff,
         "sicr_horizon": "opening remaining life", "qualitative_flags": "held until default",
         "opening_stub": "constant hazard", "projected_ecl_stub": "pro rata",
     }
@@ -154,7 +167,7 @@ def pipeline(ctx) -> dict:
         lineage.write_table(ctx, INDICES.filename, drivers.indices)
 
     with step("R5", f"variant {ctx.variant}"):
-        schedule = cashflows.build_schedules(routed.portfolio, ps, ctx.variant)
+        schedule = cashflows.build_schedules(routed.portfolio, ps, ctx.variant, ctx.config.horizon_runoff)
         lineage.write_table(ctx, SCHEDULE.filename, schedule)
 
     with step("R6", "baseline first: adverse reverts toward it"):
@@ -169,6 +182,7 @@ def pipeline(ctx) -> dict:
     years = [int(y) for y in ps["horizon"]["projection_years"]]
     last = int(ps["terminal_rule"]["last_scenario_year"])
     generations = schedule.drop_duplicates(["facility_id", "valuation_year"])
+    held = ctx.config.s2_treatment == S2_HELD
     out = {name: [] for name in ("slices", "stage_flows", "grade_flows", "provisions", "ecl_buckets", "charges")}
     for name in parameters.scenario_order(ctx.scenarios):
         state = projection.opening_slices(routed.portfolio, routed.grades, start, name)
@@ -183,10 +197,12 @@ def pipeline(ctx) -> dict:
             gen = generations[generations["valuation_year"] == year].set_index("facility_id")["generation"]
             with step("R7", f"{name} {year}"):
                 moved = projection.project_year(state, pit, routed.portfolio, routed.grades, year,
-                                                name, gen, tol)
+                                                name, gen, tol, track_s2=held)
             with step("R8", f"{name} {year}"):
+                # The first year books the scenario with perfect foresight; only then does S2 hold.
                 provided = ecl.year_end_provisions(moved.slices, params, drivers.z, routed.portfolio,
-                                                   name, year, routed.grades, last)
+                                                   name, year, routed.grades, last,
+                                                   s2_stayers=moved.s2_stayers if year > years[0] else None)
             with step("R9", f"{name} {year}"):
                 charges = accounting.stock_to_flow(state, provided.slices, routed.portfolio, name, year, tol)
             for key, table in (("slices", provided.slices), ("stage_flows", moved.stage_flows),
@@ -302,7 +318,7 @@ def cmd_run(args) -> int:
         inputs=Path(args.inputs).as_posix(),
         scenarios=tuple(s.strip() for s in args.scenarios.split(",") if s.strip()),
         variant=args.variant, mode=args.mode, terminal_treatment=args.terminal_treatment,
-        analysis=args.analysis,
+        analysis=args.analysis, s2_treatment=args.s2_treatment, horizon_runoff=args.horizon_runoff,
     )
     try:
         ctx, manifest = execute(config, Path(args.runs_dir))
@@ -332,7 +348,9 @@ def cmd_rerun(args) -> int:
     cfg = first["config"]
     config = RunConfig(inputs=(run_dir / "data").as_posix(), scenarios=tuple(cfg["scenarios"]),
                        variant=cfg["variant"], mode=cfg.get("mode", MODE_SYNTHETIC),
-                       terminal_treatment=cfg.get("terminal_treatment", "z"))
+                       terminal_treatment=cfg.get("terminal_treatment", "z"),
+                       s2_treatment=cfg.get("s2_treatment", S2_REPRICED),
+                       horizon_runoff=cfg.get("horizon_runoff", RUNOFF_CONTRACTUAL))
     if cfg.get("analysis"):
         config.analysis = str(run_dir / "data" / "analysis.yaml")
     runs_dir = Path(args.runs_dir) if args.runs_dir else run_dir.parent
@@ -374,6 +392,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--variant", default="core", help="core, annuity, linear or utilisation")
     run.add_argument("--terminal-treatment", choices=("z", "parameters"), default="z",
                      help="synthetic Z reversion or June-2026 draft parameter reversion")
+    run.add_argument("--s2-treatment", choices=S2_TREATMENTS, default=S2_REPRICED,
+                     help="repriced each year-end (default) or held once booked, the draft's paragraph 125")
+    run.add_argument("--horizon-runoff", choices=HORIZON_RUNOFFS, default=RUNOFF_CONTRACTUAL,
+                     help="contractual run-off in every lifetime bucket (default), or replaced inside the horizon")
     run.add_argument("--analysis", help="optional versioned synthetic analysis YAML, captured at R2")
     run.add_argument("--mode", default=MODE_SYNTHETIC, choices=MODES,
                      help="synthetic (default); regulatory blocks in v1")

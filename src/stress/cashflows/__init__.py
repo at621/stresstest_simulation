@@ -21,6 +21,7 @@ import pandas as pd
 
 from stress.cashflows.kernels import EPS
 from stress.contracts.errors import Block, BlockingError
+from stress.contracts.run import RUNOFF_CONTRACTUAL, RUNOFF_REPLACED
 from stress.contracts.tables import ROUTE_PERFORMING, SCHEDULE
 
 STEP = "R5"
@@ -111,12 +112,15 @@ def _period_end(valuation_year: int, t: np.ndarray) -> list[str]:
     ]
 
 
-def build_schedules(portfolio: pd.DataFrame, parameter_set: dict, variant: str) -> pd.DataFrame:
-    """R5: cf_schedule rows for every performing facility and valuation year-end."""
+def build_schedules(portfolio: pd.DataFrame, parameter_set: dict, variant: str,
+                    horizon_runoff: str = RUNOFF_CONTRACTUAL) -> pd.DataFrame:
+    """R5: cf_schedule rows for every performing facility and valuation year-end. With
+    ``horizon_runoff`` replaced, no facility matures inside the horizon (paragraph 125, C15)."""
     perf = portfolio[portfolio["route"] == ROUTE_PERFORMING].reset_index(drop=True)
     horizon = parameter_set["horizon"]
     start = int(horizon["snapshot_year"])
     valuations = [start] + [int(y) for y in horizon["projection_years"]]
+    last = int(parameter_set["terminal_rule"]["last_scenario_year"])
     profiles = variant_profiles(perf, parameter_set["variants"][variant])
     codes = profiles.map(PROFILE_CODES).to_numpy()
     # D: the drawn measure with accrued interest counted exactly once (EAD-02, AT-37).
@@ -127,6 +131,8 @@ def build_schedules(portfolio: pd.DataFrame, parameter_set: dict, variant: str) 
     frames = []
     for valuation in valuations:
         rest, generation = remaining(original, valuation - start)
+        if horizon_runoff == RUNOFF_REPLACED:
+            rest = np.maximum(rest, last - valuation) if valuation < last else rest
         fraction, t, opening, interest, principal, closing, periods = schedules(drawn, rate, rest, codes)
         size = fraction.shape[1]
         rows, cols = np.nonzero(np.arange(size)[None, :] < periods[:, None])

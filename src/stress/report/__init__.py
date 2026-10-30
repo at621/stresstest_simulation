@@ -17,7 +17,7 @@ import pandas as pd
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
 from stress.contracts.preparation import ANALYSIS_RATES
-from stress.contracts.run import ADVERSE, RunContext
+from stress.contracts.run import ADVERSE, RUNOFF_CONTRACTUAL, S2_REPRICED, RunContext
 from stress.contracts.tables import Drivers, Parameters, RoutedPortfolio
 from stress.report import comparison
 from stress.report.assessment import (
@@ -255,6 +255,16 @@ def summary_lines(ctx: RunContext, impairment_tab: pd.DataFrame, books: pd.DataF
     return lines
 
 
+def _method_lines(ctx: RunContext) -> list[str]:
+    """A selected reading of the draft is named in the headline: such a run is not the default."""
+    config = ctx.config
+    chosen = [f"{name} {value}" for name, value, default in (
+        ("S2 treatment", config.s2_treatment, S2_REPRICED),
+        ("horizon run-off", config.horizon_runoff, RUNOFF_CONTRACTUAL),
+    ) if value != default]
+    return [f"**Selected method, not the design's default:** {'; '.join(chosen)}.", ""] if chosen else []
+
+
 def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFrame, books: pd.DataFrame,
                   migration: pd.DataFrame, start: pd.DataFrame, rejections: pd.DataFrame,
                   loaded: LoadedInputs) -> None:
@@ -267,6 +277,7 @@ def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFram
          f"{ctx.input_set_hash[:16]}; variant {ctx.variant}; code {ctx.code_version}. "
          "Amounts in EUR millions, rounded here only."),
         "",
+        *_method_lines(ctx),
         "## Headline",
         "",
         *[f"- {line}" for line in lines],
@@ -326,11 +337,11 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     imp, by_stage = impairment(results, port, tol)
     perf_prov = results["provisions"][results["provisions"]["stage"] < 3]
     bucket_sum = results["ecl_buckets"].groupby(["scenario", "valuation_year"])[["ecl_on", "ecl_off"]].sum()
-    prov_sum = perf_prov.groupby(["scenario", "year"])[["allowance_on", "provision_off"]].sum()
+    prov_sum = perf_prov.groupby(["scenario", "year"])[["raw_on", "raw_off"]].sum()  # raw: held S2 has no buckets
     prov_sum.index.names = bucket_sum.index.names
     joined = bucket_sum.join(prov_sum, how="inner")
-    _require(_close(joined["ecl_on"], joined["allowance_on"], tol), "ECL by bucket against provisions")
-    _require(_close(joined["ecl_off"], joined["provision_off"], tol), "off-balance ECL by bucket")
+    _require(_close(joined["ecl_on"], joined["raw_on"], tol), "ECL by bucket against provisions")
+    _require(_close(joined["ecl_off"], joined["raw_off"], tol), "off-balance ECL by bucket")
 
     _write(ctx, "starting_point_reconciliation.csv", start)
     _write(ctx, "stage_migration.csv", migration)
@@ -366,7 +377,7 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         extra["plausibility"] = plausibility_sheet(loaded.analysis["plausibility"], imp, by_stage, loaded,
                                                    drivers.indices, years)
     extra.update(results.get("analyses", {}))
-    extra["readiness"] = readiness(loaded, ctx.config.terminal_treatment)
+    extra["readiness"] = readiness(loaded, ctx.config)
     if "template_mapping" in loaded.analysis:
         extra["mapped_cells"] = mapped_cells(loaded.analysis["template_mapping"], extra)
     for name, table in extra.items():

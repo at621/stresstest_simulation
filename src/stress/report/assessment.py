@@ -183,13 +183,15 @@ def plausibility_sheet(spec: dict, impairment: pd.DataFrame, by_stage: pd.DataFr
     return pd.DataFrame(out)
 
 
-def readiness(loaded, terminal_treatment: str) -> pd.DataFrame:
+def readiness(loaded, config) -> pd.DataFrame:
     rows = [
         ("input_approval", loaded.approval.get("status", "MISSING"), "Owner attestation recorded, not inferred"),
         ("methodology", "DRAFT", "June 2026 draft; final package reconciliation required"),
         ("scenario", "SYNTHETIC", "Official scenario required for production"),
         ("parameters", str(loaded.parameter_set.get("status", "MISSING")), "Bank model validation required"),
-        ("terminal_treatment", terminal_treatment, "Z default or parameter-linear sensitivity"),
+        ("terminal_treatment", config.terminal_treatment, "Z default or parameter-linear sensitivity"),
+        ("s2_treatment", config.s2_treatment, "Repriced default or held reading of paragraph 125 (C14)"),
+        ("horizon_runoff", config.horizon_runoff, "Contractual default or replaced inside the horizon (C15)"),
         ("numerical_oracles", "OPEN", "Owner AT-48, AT-51 and AT-52 sign-off remains open"),
         ("submission", "BLOCKED", "Synthetic analyses do not enable regulatory mode"),
     ]

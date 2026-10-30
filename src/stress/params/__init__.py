@@ -13,7 +13,7 @@ import pandas  # not "pd": the submodule stress.params.pd would shadow it
 from stress import __version__
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import DEFAULT_GRADE, LoadedInputs
-from stress.contracts.run import BASELINE, RunContext
+from stress.contracts.run import BASELINE, RUNOFF_CONTRACTUAL, RUNOFF_REPLACED, RunContext
 from stress.contracts.tables import (
     BASIS_ACCOUNTING,
     COHORT_PERFORMING,
@@ -151,7 +151,8 @@ def pd_curves(book: PitBook, schedule: pandas.DataFrame, perf: pandas.DataFrame,
 
 def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: pandas.DataFrame,
                         ps: dict, variant: dict, scenarios: list[str],
-                        terminal_treatment: str = "z") -> pandas.DataFrame:
+                        terminal_treatment: str = "z",
+                        horizon_runoff: str = RUNOFF_CONTRACTUAL) -> pandas.DataFrame:
     """LGD, prepayment and EAD per facility, scenario, valuation date and default bucket."""
     segments = ps["segments"]
     attrs = perf[["facility_id", "segment", "country", "ttc_lgd", "undrawn"]].copy()
@@ -188,6 +189,9 @@ def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: p
         rows["prepayment_rate"] = prepayment_rate(cpr_ttc.to_numpy(), cpr_v.to_numpy(), rows["z"].to_numpy())
         if not np.isfinite(rows["prepayment_rate"]).all():
             raise BlockingError(STEP, Block.MISSING_PARAMETER, "non-finite prepayment rate")
+        if horizon_runoff == RUNOFF_REPLACED:  # paragraph 125: run-off only after the horizon (C15)
+            inside = rows["bucket_year"] <= ps["terminal_rule"]["last_scenario_year"]
+            rows["prepayment_rate"] = rows["prepayment_rate"].where(~inside, 0.0)
         rows = rows.sort_values(["facility_id", "valuation_year", "period"], kind="mergesort")
         keys = [rows["facility_id"], rows["valuation_year"]]
         kept = (1.0 - rows["prepayment_rate"]).groupby(keys).cumprod()
@@ -268,7 +272,7 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
     curves = store.finalise_pd_curves(pd_curves(book, schedule, perf, scenarios, grades, tol), version)
     facility = store.finalise_parameters(
         facility_parameters(schedule, perf, drivers.z, ps, ps["variants"][ctx.variant], scenarios,
-                            ctx.config.terminal_treatment), version)
+                            ctx.config.terminal_treatment, ctx.config.horizon_runoff), version)
     lgd = lgd_of_year(routed.portfolio, drivers.z, ps, scenarios, ps["variants"][ctx.variant])
     LOG.info("PiT matrices: %d distinct shifts; every row sums to 1 within %g and PD rises with the grade",
              len(book._cache), tol)

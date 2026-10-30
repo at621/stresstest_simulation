@@ -13,6 +13,14 @@ STATUS_BLOCKED = "BLOCKED"
 BASELINE = "baseline"
 ADVERSE = "adverse"
 
+# Selectable readings of the draft. The first of each pair is the design's default (C14, C15).
+S2_REPRICED = "repriced"
+S2_HELD = "held"
+S2_TREATMENTS = (S2_REPRICED, S2_HELD)
+RUNOFF_CONTRACTUAL = "contractual"
+RUNOFF_REPLACED = "replaced"
+HORIZON_RUNOFFS = (RUNOFF_CONTRACTUAL, RUNOFF_REPLACED)
+
 RUN_CONFIG = "config.yaml"
 RUN_MANIFEST = "manifest.json"
 RUN_LOG = "run.log"  # timed step log; outside results/, so it never enters the output hashes
@@ -32,6 +40,8 @@ class RunConfig:
     mode: str = MODE_SYNTHETIC
     terminal_treatment: str = "z"
     analysis: str | None = None
+    s2_treatment: str = S2_REPRICED
+    horizon_runoff: str = RUNOFF_CONTRACTUAL
 
     def as_dict(self) -> dict:
         return {
@@ -41,6 +51,8 @@ class RunConfig:
             "mode": self.mode,
             "terminal_treatment": self.terminal_treatment,
             "analysis": self.analysis,
+            "s2_treatment": self.s2_treatment,
+            "horizon_runoff": self.horizon_runoff,
         }
 
 

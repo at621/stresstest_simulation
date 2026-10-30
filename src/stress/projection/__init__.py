@@ -66,11 +66,12 @@ def _matrix(pit: pd.DataFrame, grades: list[str]) -> dict[tuple[str, str], np.nd
 
 def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFrame,
                  grades: tuple[str, ...], year: int, scenario: str, generation: pd.Series,
-                 tol: dict) -> YearProjection:
+                 tol: dict, track_s2: bool = False) -> YearProjection:
     """Move every performing grade slice one year with the scenario's PiT matrix M(year).
 
     ``pit`` holds that scenario and year only. ``generation`` maps facility_id to its
-    replacement generation at this year-end (from R5's schedule).
+    replacement generation at this year-end (from R5's schedule). ``track_s2`` also moves the S2
+    allowances through the matrix, for R8's held reading of S2 (C14).
     """
     labels = list(grades) + [DEFAULT_GRADE]
     n = len(grades)
@@ -88,6 +89,11 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
     und = np.zeros((len(fac_ids), n))
     np.add.at(gca, (rows, cols), perf_prev["gca"].to_numpy())
     np.add.at(und, (rows, cols), perf_prev["undrawn"].to_numpy())
+    allowance = np.zeros((len(fac_ids), n))
+    provision = np.zeros((len(fac_ids), n))
+    if track_s2:
+        np.add.at(allowance, (rows, cols), perf_prev["allowance_on"].to_numpy())
+        np.add.at(provision, (rows, cols), perf_prev["provision_off"].to_numpy())
     sicr = facts.loc[fac_ids, "sicr_rank"].to_numpy()
     flagged = facts.loc[fac_ids, "qualitative_trigger"].to_numpy(dtype=bool)  # held until default
     grade_rank = np.arange(1, n + 1)[None, :]
@@ -100,6 +106,7 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
     new_und = np.zeros_like(und)
     default_gca = np.zeros_like(gca)
     default_und = np.zeros_like(und)
+    stayed = {name: np.zeros_like(gca) for name in ("stayed_gca", "stayed_undrawn", "stayed_on", "stayed_off")}
     flows = []
     grade_flow_frames = []
     for key in sorted(set(zip(seg, cty))):
@@ -114,6 +121,10 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
         default_und[idx] = u * m[:n, n]
         # Stage flows: sums of matrix cells grouped by each facility's SICR line (MIG-08).
         to_s2 = s2[idx]
+        if track_s2:
+            for name, source in (("stayed_gca", g), ("stayed_undrawn", u), ("stayed_on", allowance[idx]),
+                                 ("stayed_off", provision[idx])):
+                stayed[name][idx] = ((source * to_s2) @ m[:n, :n]) * to_s2
         for origin, mask in ((1, ~to_s2), (2, to_s2)):
             src_g = g * mask
             src_u = u * mask
@@ -183,11 +194,17 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
     grade_flows = pd.concat(grade_flow_frames, ignore_index=True)
     grade_flows["scenario"] = scenario
     grade_flows["year"] = year
+    s2_stayers = None
+    if track_s2:
+        r_s2, c_s2 = np.nonzero((stayed["stayed_gca"] > 0) | (stayed["stayed_undrawn"] > 0))
+        s2_stayers = pd.DataFrame({"facility_id": fac_ids[r_s2], "grade": np.array(grades)[c_s2],
+                                   **{name: values[r_s2, c_s2] for name, values in stayed.items()}})
     return YearProjection(
         slices=SLICES.check(slices, STEP).sort_values(["facility_id", "slice"], kind="mergesort")
         .reset_index(drop=True),
         stage_flows=STAGE_FLOWS.check(stage_flows, STEP),
         grade_flows=GRADE_FLOWS.check(grade_flows, STEP),
+        s2_stayers=s2_stayers,
     )
 
 

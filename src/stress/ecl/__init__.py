@@ -16,6 +16,7 @@ from stress.contracts.tables import (
     METHOD_S1,
     METHOD_S1_TERMINAL,
     METHOD_S2,
+    METHOD_S2_HELD,
     METHOD_S3_NEW_BOOKING,
     METHOD_S3_NEW_FLOOR,
     METHOD_S3_ORIGINAL,
@@ -219,11 +220,28 @@ def terminal_s1(params: Parameters, z: pd.DataFrame, portfolio: pd.DataFrame, sc
     return on, off
 
 
+def hold_s2(perf: pd.DataFrame, stayers: pd.DataFrame) -> None:
+    """The held reading of paragraphs 76, 123 and 125 (C14, ECL-06): the part of an S2 slice that
+    was already S2 keeps the allowance it carried, and only the new S1-to-S2 inflow takes this
+    year's lifetime ECL. A facility replaced this year is valued afresh. raw_on and raw_off keep
+    the lifetime ECL, so R10 can still tie the buckets and the difference stays visible."""
+    held = (perf["stage"] == 2) & ~perf["replaced"].astype(bool)
+    rows = perf[["facility_id", "grade"]].merge(stayers, on=["facility_id", "grade"], how="left").fillna(0.0)
+    rows.index = perf.index
+    for column, raw, exposure, stay, carried in (("allowance_on", "raw_on", "gca", "stayed_gca", "stayed_on"),
+                                                 ("provision_off", "raw_off", "undrawn", "stayed_undrawn", "stayed_off")):
+        share = (rows[stay] / perf[exposure]).where(perf[exposure] > 0, 0.0).clip(0.0, 1.0)
+        perf[column] = (rows[carried] + (1.0 - share) * perf[raw]).where(held, perf[raw])
+    perf.loc[held, "method"] = METHOD_S2_HELD
+
+
 def year_end_provisions(slices: pd.DataFrame, params: Parameters, z: pd.DataFrame,
                         portfolio: pd.DataFrame, scenario: str, year: int, grades: tuple[str, ...],
-                        last_scenario_year: int, opening: bool = False) -> YearProvisions:
+                        last_scenario_year: int, opening: bool = False,
+                        s2_stayers: pd.DataFrame | None = None) -> YearProvisions:
     """Provisions for every slice at the year-end ``year``. With ``opening`` the year is the
-    snapshot and the result is a diagnostic: S3 keeps its frozen opening allowance."""
+    snapshot and the result is a diagnostic: S3 keeps its frozen opening allowance. ``s2_stayers``
+    selects the held reading of S2 for this year."""
     facts = portfolio.set_index("facility_id")
     ecl, dense = performing_ecl(params, portfolio, scenario, year, grades)
     terminal = (not opening) and year == last_scenario_year and params.terminal_treatment == "z"
@@ -249,6 +267,8 @@ def year_end_provisions(slices: pd.DataFrame, params: Parameters, z: pd.DataFram
     perf["allowance_on"] = on
     perf["provision_off"] = off
     perf["method"] = np.where(s1, METHOD_S1_TERMINAL if terminal else METHOD_S1, METHOD_S2)
+    if s2_stayers is not None:
+        hold_s2(perf, s2_stayers)
 
     s3 = slices[slices["stage"] == 3].copy()
     if opening:
@@ -286,7 +306,7 @@ def year_end_provisions(slices: pd.DataFrame, params: Parameters, z: pd.DataFram
     out = pd.concat([perf, s3], ignore_index=True)
     out["masked_on"] = out["allowance_on"] - out["raw_on"]
     out["masked_off"] = out["provision_off"] - out["raw_off"]
-    out["floor_binding"] = (out["masked_on"] > FLOOR_EPS) | (out["masked_off"] > FLOOR_EPS)
+    out["floor_binding"] = (out["stage"] == 3) & ((out["masked_on"] > FLOOR_EPS) | (out["masked_off"] > FLOOR_EPS))
     provisions = PROVISIONS.check(out, STEP).sort_values(list(PROVISIONS.key), kind="mergesort")
     new_slices = SLICES.check(out, STEP).sort_values(list(SLICES.key), kind="mergesort")
     buckets = ecl_buckets(ecl, perf, i, g, share_on, share_off, s1, terminal, on12, off12,
