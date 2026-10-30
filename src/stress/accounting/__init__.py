@@ -19,12 +19,13 @@ RELEASE_EPS = 1e-9  # EUR
 
 
 def stock_to_flow(opening: pd.DataFrame, closing: pd.DataFrame, portfolio: pd.DataFrame,
-                  scenario: str, year: int) -> pd.DataFrame:
+                  scenario: str, year: int, tol: dict) -> pd.DataFrame:
     """Charges per facility from the slices at the previous and this year-end.
 
     The only movement in the bridge is the charge: no write-offs, transfers or sales are
     permitted in the static projection, FX is zero (EUR only) and the opening overlays are
-    carried unchanged, so no overlay is counted twice (ACC-02, ACC-04).
+    carried unchanged, so no overlay is counted twice (ACC-02, ACC-04). ``tol`` is the
+    section 12.3 reconciliation tolerance.
     """
     no_release(opening, closing, year)
     before = opening.groupby("facility_id")[["allowance_on", "provision_off"]].sum()
@@ -47,9 +48,11 @@ def stock_to_flow(opening: pd.DataFrame, closing: pd.DataFrame, portfolio: pd.Da
     LOG.info("%s %d: charge EUR %.1fm on-balance, %.1fm off-balance; FX movement zero; "
              "no S3 slice released provision", scenario, year, out["charge_on"].sum() / 1_000_000,
              out["charge_off"].sum() / 1_000_000)
+    # The charge is closing minus opening, so float rounding alone can leave a residual: above
+    # EUR 8.4m adjacent floats are wider than RELEASE_EPS. A real break exceeds the tolerance.
     bridge = (out["opening_on"] + out["charge_on"] + out["fx_movement"] + out["other_movement"]
               - out["closing_on"])
-    if (bridge.abs() > RELEASE_EPS).any():
+    if (bridge.abs() > np.maximum(tol["abs"], tol["rel"] * out["closing_on"].abs())).any():
         raise BlockingError(STEP, Block.NOT_PERMITTED_MOVEMENT, "allowance bridge does not close")
     return CHARGES.check(out, STEP).sort_values(list(CHARGES.key)).reset_index(drop=True)
 

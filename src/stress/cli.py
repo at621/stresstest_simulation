@@ -186,7 +186,7 @@ def pipeline(ctx) -> dict:
                 provided = ecl.year_end_provisions(moved.slices, params, drivers.z, routed.portfolio,
                                                    name, year, routed.grades, last)
             with step("R9", f"{name} {year}"):
-                charges = accounting.stock_to_flow(state, provided.slices, routed.portfolio, name, year)
+                charges = accounting.stock_to_flow(state, provided.slices, routed.portfolio, name, year, tol)
             for key, table in (("slices", provided.slices), ("stage_flows", moved.stage_flows),
                                ("grade_flows", moved.grade_flows), ("provisions", provided.provisions),
                                ("ecl_buckets", provided.ecl_buckets), ("charges", charges)):
