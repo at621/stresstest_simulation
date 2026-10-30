@@ -17,7 +17,7 @@ import pandas as pd
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
 from stress.contracts.preparation import ANALYSIS_RATES
-from stress.contracts.run import ADVERSE, RUNOFF_CONTRACTUAL, S2_REPRICED, RunContext
+from stress.contracts.run import ADVERSE, LGD_ANNUAL, RUNOFF_CONTRACTUAL, S2_REPRICED, RunContext
 from stress.contracts.tables import Drivers, Parameters, RoutedPortfolio
 from stress.report import comparison
 from stress.report.assessment import (
@@ -261,6 +261,7 @@ def _method_lines(ctx: RunContext) -> list[str]:
     chosen = [f"{name} {value}" for name, value, default in (
         ("S2 treatment", config.s2_treatment, S2_REPRICED),
         ("horizon run-off", config.horizon_runoff, RUNOFF_CONTRACTUAL),
+        ("LGD path", config.lgd_path, LGD_ANNUAL),
     ) if value != default]
     return [f"**Selected method, not the design's default:** {'; '.join(chosen)}.", ""] if chosen else []
 

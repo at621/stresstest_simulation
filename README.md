@@ -112,8 +112,8 @@ Optional preparation analyses use the June 2026 EBA draft and explicit synthetic
 The [runnable example](docs/examples/README.md) covers benchmark selection, recovery LGD,
 capital, separate climate, reporting mappings and reverse-loss diagnostics. Add
 `--terminal-treatment parameters` for a separate linear-parameter reversion sensitivity.
-`--s2-treatment held` and `--horizon-runoff replaced` select the draft's reading of ¶125 instead of
-the design's default (see [conflicts C14 and C15](docs/assumptions.md)).
+`--s2-treatment held`, `--horizon-runoff replaced` and `--lgd-path trough` select the draft's reading
+instead of the design's default (see [conflicts C14 to C16](docs/assumptions.md)).
 These features do not enable regulatory submissions; the readiness report records the open gates.
 
 ```

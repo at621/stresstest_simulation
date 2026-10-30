@@ -13,13 +13,16 @@ STATUS_BLOCKED = "BLOCKED"
 BASELINE = "baseline"
 ADVERSE = "adverse"
 
-# Selectable readings of the draft. The first of each pair is the design's default (C14, C15).
+# Selectable readings of the draft. The first of each pair is the design's default (C14-C16).
 S2_REPRICED = "repriced"
 S2_HELD = "held"
 S2_TREATMENTS = (S2_REPRICED, S2_HELD)
 RUNOFF_CONTRACTUAL = "contractual"
 RUNOFF_REPLACED = "replaced"
 HORIZON_RUNOFFS = (RUNOFF_CONTRACTUAL, RUNOFF_REPLACED)
+LGD_ANNUAL = "annual"
+LGD_TROUGH = "trough"
+LGD_PATHS = (LGD_ANNUAL, LGD_TROUGH)
 
 RUN_CONFIG = "config.yaml"
 RUN_MANIFEST = "manifest.json"
@@ -42,6 +45,7 @@ class RunConfig:
     analysis: str | None = None
     s2_treatment: str = S2_REPRICED
     horizon_runoff: str = RUNOFF_CONTRACTUAL
+    lgd_path: str = LGD_ANNUAL
 
     def as_dict(self) -> dict:
         return {
@@ -53,6 +57,7 @@ class RunConfig:
             "analysis": self.analysis,
             "s2_treatment": self.s2_treatment,
             "horizon_runoff": self.horizon_runoff,
+            "lgd_path": self.lgd_path,
         }
 
 

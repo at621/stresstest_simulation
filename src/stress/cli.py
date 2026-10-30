@@ -36,6 +36,8 @@ from stress.contracts.errors import BlockingError
 from stress.contracts.preparation import ANALYSES
 from stress.contracts.run import (
     HORIZON_RUNOFFS,
+    LGD_ANNUAL,
+    LGD_PATHS,
     MODE_SYNTHETIC,
     MODES,
     REPORTS_DIR,
@@ -146,6 +148,7 @@ def pipeline(ctx) -> dict:
         "terminal_treatment": ctx.config.terminal_treatment,
         "pd_anchor": "Z=0 average year; not unconditional cycle average",
         "s2_treatment": ctx.config.s2_treatment, "horizon_runoff": ctx.config.horizon_runoff,
+        "lgd_path": ctx.config.lgd_path,
         "sicr_horizon": "opening remaining life", "qualitative_flags": "held until default",
         "opening_stub": "constant hazard", "projected_ecl_stub": "pro rata",
     }
@@ -319,6 +322,7 @@ def cmd_run(args) -> int:
         scenarios=tuple(s.strip() for s in args.scenarios.split(",") if s.strip()),
         variant=args.variant, mode=args.mode, terminal_treatment=args.terminal_treatment,
         analysis=args.analysis, s2_treatment=args.s2_treatment, horizon_runoff=args.horizon_runoff,
+        lgd_path=args.lgd_path,
     )
     try:
         ctx, manifest = execute(config, Path(args.runs_dir))
@@ -350,7 +354,8 @@ def cmd_rerun(args) -> int:
                        variant=cfg["variant"], mode=cfg.get("mode", MODE_SYNTHETIC),
                        terminal_treatment=cfg.get("terminal_treatment", "z"),
                        s2_treatment=cfg.get("s2_treatment", S2_REPRICED),
-                       horizon_runoff=cfg.get("horizon_runoff", RUNOFF_CONTRACTUAL))
+                       horizon_runoff=cfg.get("horizon_runoff", RUNOFF_CONTRACTUAL),
+                       lgd_path=cfg.get("lgd_path", LGD_ANNUAL))
     if cfg.get("analysis"):
         config.analysis = str(run_dir / "data" / "analysis.yaml")
     runs_dir = Path(args.runs_dir) if args.runs_dir else run_dir.parent
@@ -396,6 +401,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="repriced each year-end (default) or held once booked, the draft's paragraph 125")
     run.add_argument("--horizon-runoff", choices=HORIZON_RUNOFFS, default=RUNOFF_CONTRACTUAL,
                      help="contractual run-off in every lifetime bucket (default), or replaced inside the horizon")
+    run.add_argument("--lgd-path", choices=LGD_PATHS, default=LGD_ANNUAL,
+                     help="LGD from each year's Z (default), or from the path's worst Z for property-secured books")
     run.add_argument("--analysis", help="optional versioned synthetic analysis YAML, captured at R2")
     run.add_argument("--mode", default=MODE_SYNTHETIC, choices=MODES,
                      help="synthetic (default); regulatory blocks in v1")

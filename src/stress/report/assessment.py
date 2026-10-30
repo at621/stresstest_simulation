@@ -192,6 +192,7 @@ def readiness(loaded, config) -> pd.DataFrame:
         ("terminal_treatment", config.terminal_treatment, "Z default or parameter-linear sensitivity"),
         ("s2_treatment", config.s2_treatment, "Repriced default or held reading of paragraph 125 (C14)"),
         ("horizon_runoff", config.horizon_runoff, "Contractual default or replaced inside the horizon (C15)"),
+        ("lgd_path", config.lgd_path, "Annual default or worst-Z reading for property-secured books (C16)"),
         ("numerical_oracles", "OPEN", "Owner AT-48, AT-51 and AT-52 sign-off remains open"),
         ("submission", "BLOCKED", "Synthetic analyses do not enable regulatory mode"),
     ]

@@ -13,7 +13,13 @@ import pandas  # not "pd": the submodule stress.params.pd would shadow it
 from stress import __version__
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import DEFAULT_GRADE, LoadedInputs
-from stress.contracts.run import BASELINE, RUNOFF_CONTRACTUAL, RUNOFF_REPLACED, RunContext
+from stress.contracts.run import (
+    BASELINE,
+    LGD_TROUGH,
+    RUNOFF_CONTRACTUAL,
+    RUNOFF_REPLACED,
+    RunContext,
+)
 from stress.contracts.tables import (
     BASIS_ACCOUNTING,
     COHORT_PERFORMING,
@@ -149,12 +155,33 @@ def pd_curves(book: PitBook, schedule: pandas.DataFrame, perf: pandas.DataFrame,
     return out
 
 
+def lgd_drivers(z: pandas.DataFrame, ps: dict, segments: set[str]) -> pandas.DataFrame:
+    """The Z of LGD under the trough reading (C16). Paragraphs 123 and 130 put the cumulative price
+    fall into the first year, but Z follows annual changes and improves while prices still fall. So
+    an adverse default year of a property-secured book takes the worst Z of the path, and later
+    years revert from it. PD and prepayment keep their own Z, and baseline prices do not fall."""
+    first = int(ps["horizon"]["projection_years"][0])
+    last = int(ps["terminal_rule"]["last_scenario_year"])
+    stressed = (z["scenario"] != BASELINE) & z["segment"].isin(segments)
+    within = stressed & z["year"].between(first, last)
+    worst = z[within].groupby(["segment", "country", "scenario"])["z"].min().rename("worst")
+    end = z[(z["scenario"] == BASELINE) & (z["year"] == last)].set_index(["segment", "country"])["z"].rename("end")
+    rows = z.join(worst, on=["segment", "country", "scenario"]).join(end, on=["segment", "country"])
+    reverted = rows["adverse_weight"] * rows["worst"] + (1.0 - rows["adverse_weight"]) * rows["end"]
+    out = z.copy()
+    out["z"] = rows["z"].where(~stressed, rows["worst"].where(within, reverted))
+    return out
+
+
 def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: pandas.DataFrame,
                         ps: dict, variant: dict, scenarios: list[str],
                         terminal_treatment: str = "z",
-                        horizon_runoff: str = RUNOFF_CONTRACTUAL) -> pandas.DataFrame:
-    """LGD, prepayment and EAD per facility, scenario, valuation date and default bucket."""
+                        horizon_runoff: str = RUNOFF_CONTRACTUAL,
+                        lgd_z: pandas.DataFrame | None = None) -> pandas.DataFrame:
+    """LGD, prepayment and EAD per facility, scenario, valuation date and default bucket. ``lgd_z``
+    replaces the Z of LGD only, for the trough reading (C16)."""
     segments = ps["segments"]
+    lgd_z = z if lgd_z is None else lgd_z
     attrs = perf[["facility_id", "segment", "country", "ttc_lgd", "undrawn"]].copy()
     attrs["ccf"] = effective_ccf(perf, variant)
     check_ccf(attrs["ccf"].astype(float).to_numpy(), attrs["undrawn"].to_numpy())
@@ -169,14 +196,17 @@ def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: p
             gap = rows.loc[rows["z"].isna()].iloc[0]
             raise BlockingError(STEP, Block.MISSING_TERMINAL_INPUT,
                                 f"no Z for {gap['segment']}/{gap['country']}/{scenario}/{gap['bucket_year']}")
+        own = lgd_z.loc[lgd_z["scenario"] == scenario, ["segment", "country", "year", "z"]].rename(
+            columns={"z": "z_lgd"})
+        rows = rows.merge(own, on=["segment", "country", "year"], how="left")
         w = rows["segment"].map(lambda s: segments[s]["lgd_w"]).astype(float)
         cpr_ttc = rows["segment"].map(lambda s: segments[s]["cpr_ttc"]).astype(float)
         cpr_v = rows["segment"].map(lambda s: segments[s]["cpr_v"]).astype(float)
-        rows["lgd"] = lgd_from_z(rows["ttc_lgd"].to_numpy(), w.to_numpy(), rows["z"].to_numpy())
+        rows["lgd"] = lgd_from_z(rows["ttc_lgd"].to_numpy(), w.to_numpy(), rows["z_lgd"].to_numpy())
         if terminal_treatment == "parameters" and scenario != BASELINE:
             rule = ps["terminal_rule"]
             last = rule["last_scenario_year"]
-            endpoints = z.loc[z["year"].eq(last)].set_index(["segment", "country", "scenario"])["z"]
+            endpoints = lgd_z.loc[lgd_z["year"].eq(last)].set_index(["segment", "country", "scenario"])["z"]
             index = pandas.MultiIndex.from_frame(rows[["segment", "country"]])
             za = endpoints.xs(scenario, level="scenario").reindex(index).to_numpy()
             zb = endpoints.xs(BASELINE, level="scenario").reindex(index).to_numpy()
@@ -266,14 +296,18 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
     for segment, country in keys:
         for scenario in scenarios:
             require_years(lookup, segment, country, scenario, range(first, int(schedule["bucket_year"].max()) + 1))
+    lgd_z = drivers.z
+    if ctx.config.lgd_path == LGD_TROUGH:
+        facilities = loaded.facilities.data
+        lgd_z = lgd_drivers(drivers.z, ps, set(facilities.loc[facilities["ltv"].notna(), "segment"]))
     version = store.source_version(ps, __version__)
     pit = pit_table(book, [(s, c, sc) for s, c in keys for sc in scenarios],
                     range(first, last_reported + 1), grades)
     curves = store.finalise_pd_curves(pd_curves(book, schedule, perf, scenarios, grades, tol), version)
     facility = store.finalise_parameters(
         facility_parameters(schedule, perf, drivers.z, ps, ps["variants"][ctx.variant], scenarios,
-                            ctx.config.terminal_treatment, ctx.config.horizon_runoff), version)
-    lgd = lgd_of_year(routed.portfolio, drivers.z, ps, scenarios, ps["variants"][ctx.variant])
+                            ctx.config.terminal_treatment, ctx.config.horizon_runoff, lgd_z), version)
+    lgd = lgd_of_year(routed.portfolio, lgd_z, ps, scenarios, ps["variants"][ctx.variant])
     LOG.info("PiT matrices: %d distinct shifts; every row sums to 1 within %g and PD rises with the grade",
              len(book._cache), tol)
     LOG.info("PD curves: %s records; PD-03 identities hold on every curve", f"{len(curves):,}")

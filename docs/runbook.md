@@ -71,9 +71,9 @@ Baseline stays flat. End-2029 S1 uses the resulting 2030 PD and LGD, while the d
 the existing product-loss-rate interpolation. Prepayment retains its Z convention. Compare
 the two sealed runs to quantify the sensitivity; do not mix them into one reported scenario.
 
-`--s2-treatment held` and `--horizon-runoff replaced` are selectable readings of the draft's ¶125
-(C14, C15). The defaults stay the design's. A run with either is named in its `summary.md`, its
-manifest and `analysis_readiness.csv`. Compare it with a default run; do not report it as the core run.
+`--s2-treatment held`, `--horizon-runoff replaced` and `--lgd-path trough` are selectable readings
+of the draft (C14–C16). The defaults stay the design's. A run with any of them is named in its
+`summary.md`, its manifest and `analysis_readiness.csv`. Compare it with a default run; do not report it as the core run.
 
 `stress report`, `compare` and `rerun` reject tampered sealed artifacts. Strict rerun first
 checks source contents and Python/package versions, then reads the verified saved `data/`

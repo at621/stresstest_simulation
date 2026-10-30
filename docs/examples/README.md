@@ -22,8 +22,8 @@ uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse 
 uv run stress compare --base runs/<default_run> --new runs/<parameter_run>
 ```
 
-The readings of ¶125 are separate sensitivities in the same way: add `--s2-treatment held` or
-`--horizon-runoff replaced`, then compare with a default run.
+The readings of ¶123 and ¶125 are separate sensitivities in the same way: add
+`--s2-treatment held`, `--horizon-runoff replaced` or `--lgd-path trough`, then compare with a default run.
 
 Results are `results/analysis_*.parquet` and `results/reports/analysis_*.csv`. Every run also
 reports readiness, country/NACE/stage totals, group concentrations, SICR flag attribution,
