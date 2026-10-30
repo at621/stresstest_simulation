@@ -11,6 +11,7 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 | **How staging works** | [docs/staging/stress-engine-staging.html](docs/staging/stress-engine-staging.html) |
 | **How PD curves are built** | [docs/pd-curves/pd-curve-flow.html](docs/pd-curves/pd-curve-flow.html) |
 | **Operating the engine** | [docs/runbook.md](docs/runbook.md) |
+| **Traceability matrix** | [docs/traceability/traceability-matrix.md](docs/traceability/traceability-matrix.md), regenerated with `uv run python -m tests.traceability` |
 
 **Status:** v1 is complete and runs end to end, in synthetic mode only; regulatory mode blocks the run. From here on, work goes into improvements, each on its own branch (see [Making changes](#making-changes)).
 

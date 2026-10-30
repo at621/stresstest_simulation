@@ -56,6 +56,7 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 
 - **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about three minutes), and blocks the stop until they pass.
 - **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks and refuses protected paths and run folders.
+- **Traceability:** after changing a test marker, an ID named in code or `docs/traceability/requirement-status.yaml`, run `uv run python -m tests.traceability` to regenerate [the matrix](traceability/traceability-matrix.md) and [the source register](source-register/source-register.md); a control test fails until they are current, and `--check` compares without writing.
 
 ### Draft preparation and replay
 

@@ -13,6 +13,7 @@ v1 is complete and working. The work now is improving it, not building it: every
 | Code and repository rules; open items awaiting the owner | `docs/architecture.md` (§2 and §6) |
 | Assumptions taken and conflicts between documents | `docs/assumptions.md` |
 | Running, rerunning and rebuilding inputs | `docs/runbook.md` |
+| Each requirement's status, tests and code; the source register | `docs/traceability/traceability-matrix.md`, `docs/source-register/source-register.md`; regenerate with `uv run python -m tests.traceability` |
 | Rules for one step | the `CLAUDE.md` in that step's folder, where there is one |
 | Items to fix or settle in the future, each with its open decisions and steps | `TODO.md` at the root |
 

@@ -1,0 +1,11 @@
+# Hand-kept input to tests/traceability.py: local approval dates for the source register (GOV-01).
+#
+# Empty, because the repository records no local approval of any source. Add a date only when the
+# project owner has approved the source, then run `uv run python -m tests.traceability`.
+# The key is a source, for every row of it, or one register row.
+#
+#   approvals:
+#     S3: 2027-01-31
+#     S3 ¶124: 2027-02-15
+
+approvals: {}

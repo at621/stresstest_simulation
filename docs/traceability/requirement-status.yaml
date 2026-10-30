@@ -1,0 +1,596 @@
+# Hand-kept input to tests/traceability.py. Read docs/traceability/traceability-matrix.md instead;
+# after a change here run `uv run python -m tests.traceability`.
+#
+# The generator derives `tested` and `built` from links. This file holds what it cannot derive.
+# An entry with no `status` keeps the derived status and qualifies it. An entry with a `status`
+# overrides the derived one, and the links stay visible in the matrix.
+#
+#   status       deferred or process. Never tested or built: those are derived.
+#   reason       required. For a gap nobody has decided: exactly "unmet: no decision recorded".
+#   note         more detail, shown after the reason.
+#   decided_in   required for deferred, unless unmet: the design's "Handled elsewhere or later"
+#                list, an A or C number, or architecture §6.
+#   evidence     required for process: paths in the repository. Each must exist.
+#   code         links the scan cannot see, because the code does not name the ID. Each gives a
+#                path and a text that must be in that file, so a stale link fails the generator.
+#   tests        as code, for a test: path under tests/ and test name. Must exist.
+#   acceptance   as code, for an acceptance case. Must have a test.
+
+requirements:
+
+  # --- Regulatory alignment -----------------------------------------------------------------------
+
+  REG-03:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      Its required evidence is a scope bridge, and none exists. The input contract keeps the
+      accounting category and the regulatory approach as separate fields, but no report bridges
+      the two perimeters, and the starting-point report holds no regulatory exposure.
+
+  REG-06:
+    reason: >-
+      The test covers the optional parameter-linear reversion. The default reverts Z instead of
+      the parameters, which the owner signed off as D5 (C8). Perfect-foresight behaviour is open
+      under ECL-06.
+    decided_in: [C8]
+
+  REG-08:
+    status: deferred
+    reason: >-
+      Not built for regulatory use. REG-08 cites the same paragraphs as MOD-03 and MOD-04, and the
+      design defers both to regulatory mode.
+    note: >-
+      A synthetic selector exists as a diagnostic (see MOD-03). It feeds no core parameter, and
+      regulatory mode stays blocked.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  REG-09:
+    reason: >-
+      Not named in code or tests, so linked by hand. It is the rule of CAP-03. It runs only in the
+      synthetic capital bridge, on supplied risk weights.
+    acceptance: [AT-10]
+    tests: [unit/test_preparation_bridges.py::test_capital_bridge_floors_and_explicit_missing_inputs]
+    code:
+      - {path: src/stress/capital/__init__.py, contains: "def methodological_floor"}
+
+  REG-13:
+    reason: >-
+      Not named in code, so linked by hand. Each run writes totals by country, NACE code and
+      version, and stage, and blocks if they lose exposure. No test reads that table. Prescribed
+      country and sector selection is deferred (RPT-02 to RPT-04), and the synthetic labels are
+      NACE Rev. 2, not the Rev. 2.1 of the draft's core reporting (requirements §2.2).
+    code:
+      - {path: src/stress/report/assessment.py, contains: "def portfolio_diagnostics"}
+
+  REG-14:
+    reason: >-
+      Not named in code or tests, so linked by hand. Commitments are a separate input table, and
+      EAD, provisions and charges keep on- and off-balance parts apart. AT-34 and AT-44 run the
+      pipeline.
+    acceptance: [AT-34, AT-44]
+    code:
+      - {path: src/stress/contracts/inputs.py, contains: "COMMITMENTS = DatasetSpec"}
+      - {path: src/stress/ecl/__init__.py, contains: "provision_off"}
+
+  # --- Source precedence ----------------------------------------------------------------------------
+
+  GOV-01:
+    status: process
+    reason: >-
+      Met by the source register, generated from the citations in the requirements. No source has
+      a local approval date yet, so every row reads "not approved".
+    evidence: [docs/source-register/source-register.md]
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  GOV-02:
+    status: process
+    reason: >-
+      A conflict between documents is listed in the C table of the assumptions and goes to the
+      owner, and the GOV-03 template asks for it. No final package has been processed yet.
+    evidence: [docs/assumptions.md, docs/source-register/gov-03-impact-assessment-template.md]
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  GOV-03:
+    status: process
+    reason: >-
+      The test that names GOV-03 proves only that the O1 files are current, which is not evidence
+      of an impact assessment. Met by the template and the runbook's steps after a requirements
+      change. C9, C10 and C11 carry impact sections for owner decisions; no source change has been
+      assessed yet.
+    evidence: [docs/source-register/gov-03-impact-assessment-template.md, docs/runbook.md]
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  GOV-04:
+    status: deferred
+    reason: >-
+      Named in code, but the confirmations can only be made once a final package exists, and the
+      review of 30 October 2026 found none.
+    note: >-
+      The code enforces the last sentence only: regulatory mode blocks at R1, so a synthetic value
+      cannot fill an official parameter.
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  # --- Scope ------------------------------------------------------------------------------------------
+
+  SCP-01:
+    reason: >-
+      Not named in code or tests, so linked by hand. The six books, with P06 split into general
+      governments and credit institutions, are generated, and AT-01 checks their targets.
+    acceptance: [AT-01]
+    code:
+      - {path: foundation/synth/config.py, contains: "P06_SECTOR"}
+      - {path: src/stress/contracts/inputs.py, contains: "PRODUCTS = ("}
+
+  SCP-03:
+    reason: >-
+      Not named in code, so linked by hand. R3 rejects POCI and central-bank records, and the input
+      contract has no securitisation or derivative product. No test covers those rejections, and
+      there is no interface for REA inputs from a CCR workstream.
+    code:
+      - {path: src/stress/validate/__init__.py, contains: "POCI_NOT_IN_V1"}
+
+  SCP-04:
+    status: deferred
+    reason: The design defers credit REA, regulatory expected loss and the capital bridge.
+    note: >-
+      Each run gives the charges. The optional synthetic bridge turns supplied risk weights into
+      credit REA and takes the IRB shortfall and NPL deduction as inputs. Regulatory expected loss
+      is not calculated.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  SCP-05:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      No capital output carries the label "credit-only sensitivity". The capital table has a
+      `basis` column reading SYNTHETIC_EXTERNAL_RISK_WEIGHTS, and the example package sets the
+      non-credit inputs to zero. The challenge analysis does require a named loss limit, and no
+      EBA pass or fail threshold exists in the code.
+
+  # --- Data -------------------------------------------------------------------------------------------
+
+  DAT-01:
+    reason: >-
+      Facility, obligor and group IDs are kept. The input contract has no collateral ID:
+      `collateral_id` exists only in the optional recovery analysis.
+
+  DAT-05:
+    status: deferred
+    reason: >-
+      No such history exists: the book is a synthetic 2026 snapshot, which the requirement says
+      does not replace this evidence.
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  DAT-06:
+    status: deferred
+    reason: The synthetic design supplies no historical periods, and no template is approved yet.
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  DAT-07:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      The starting-point report reconciles the book to the input set's control totals and checks
+      EUR and AC. It holds no regulatory exposure and no reconciliation to accounting or regulatory
+      reporting.
+
+  # --- Synthetic portfolios ---------------------------------------------------------------------------
+
+  SYN-01:
+    reason: >-
+      Not named in code, so linked by hand. Facilities of one obligor share its country, sector,
+      grade, stage and default status (A23). No test names it.
+    code:
+      - {path: foundation/synth/generate.py, contains: "def _obligor"}
+
+  SYN-02:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      The generator makes LTV rise and DSCR fall with stage, so the fields are coherent at the
+      opening. No calculation reads LTV, DSCR or the rate type (A12 keeps them as data), so none
+      raises stress sensitivity. LTV is reported under the scenario's prices (A31), and the
+      selectable LGD reading uses it only to find the property-secured books (C16).
+
+  SYN-03:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      The data holds such cases, for example S2 facilities below 30 days past due, but no field
+      records a reason for an exception.
+
+  SYN-04:
+    reason: >-
+      AT-01 checks the top-group shares in its body, not its docstring, so it is linked by hand.
+    acceptance: [AT-01]
+
+  # --- Scenarios --------------------------------------------------------------------------------------
+
+  SCN-03:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      Named in code only inside a range. Country GDP, unemployment, property prices and the
+      reference rate drive Z. Sector GDP/GVA and inflation do not: Z has no sector dimension, and
+      the review leaves that to the owner (finding 11).
+
+  # --- Exposure and stage migration -------------------------------------------------------------------
+
+  MIG-05:
+    reason: >-
+      The owner decided to use the three triggers, held until default. The five settings in A30
+      were proposed by Claude Code and are not owner-approved.
+
+  MIG-07:
+    reason: >-
+      The engine departs from the last sentence by owner decision: a qualitative trigger also makes
+      a facility S2 (A30, C11). The text is the owner's to amend.
+
+  # --- Models -----------------------------------------------------------------------------------------
+
+  MOD-01:
+    status: deferred
+    reason: >-
+      No estimated model exists. The TTC matrices and the Z shift are a synthetic preparation
+      method (PD-04), so there is no estimation sample or out-of-time validation to specify.
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  MOD-02:
+    reason: >-
+      Only accounting parameters exist, each keyed by `basis`, so there is no regulatory parameter
+      to keep apart yet. AT-38 stays kernel-only: the capital bridge computes regulatory EAD
+      inline, not through `regulatory_bridge`.
+
+  MOD-03:
+    reason: >-
+      Built as a synthetic selector on supplied bundles, with the 10% pivot test and the whole-pivot
+      fallback. Its choices are not substituted into core parameters, and regulatory mode stays
+      blocked.
+    decided_in: [design preparation addendum]
+
+  MOD-04:
+    status: deferred
+    reason: >-
+      The core routes P06 governments through a TTC matrix like any other segment and uses no
+      prescribed ECB parameter. The design defers this to regulatory mode.
+    note: >-
+      The synthetic selector has sovereign and central-bank routes, but no test exercises them. A
+      missing sovereign benchmark blocks, so the fallback justification is not supported.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  MOD-05:
+    reason: >-
+      The parameter store has the fields, but in v1 every value is raw = final, with adjustment 0
+      and constraint "none" (C3). No benchmark or expert contribution exists to report. The S3
+      floor is kept separately in R8.
+    decided_in: [C3]
+
+  # --- PD ---------------------------------------------------------------------------------------------
+
+  PD-02:
+    reason: >-
+      The part-year interval has no curve record of its own: it is rebuilt as `pd_curves.m` times
+      `parameters.fraction` (C10). A note to PD-02 is with the owner.
+
+  PD-04:
+    reason: >-
+      Named in code only inside a range. Only the preparation alternative exists, the matrices and
+      Z shift of PD-09 to PD-11. No production model exists, so the model-specification part is
+      not met.
+
+  PD-06:
+    reason: >-
+      The ECL takes a part-year pro rata by owner decision (A7, C10). The constant hazard in the
+      text stays in the R3 SICR line, O4 and the `stub_pd` kernel, which AT-28 tests. The text is
+      the owner's to amend.
+
+  PD-07:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      Named in code only inside a range. No regulatory PD, parameter regime or floor is stored
+      anywhere: the engine writes accounting parameters only. Regulatory mode blocks at R1.
+
+  PD-08:
+    status: deferred
+    reason: >-
+      Backtesting needs historical cohorts and validation thresholds, and neither exists.
+    note: >-
+      The first sentence is built: R6 checks every curve, and the linked controls test it.
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+    tests:
+      - controls/test_run_controls.py::test_pd_curve_identities_block
+      - controls/test_run_controls.py::test_missing_curve_bucket_blocks_the_ecl
+
+  PD-10:
+    reason: >-
+      The engine drops the √(1−ρ) divisor that the text prescribes, by owner decision of
+      18 October 2026 (D13, A29, C9). The tests prove the engine's formula. The text is the
+      owner's to amend.
+    decided_in: [A29]
+
+  # --- LGD --------------------------------------------------------------------------------------------
+
+  LGD-01:
+    status: deferred
+    reason: >-
+      Not built in the core: LGD-12 uses no collateral or recovery data (A12). The owner has yet to
+      confirm that it stays for later.
+    note: >-
+      The test that names it covers the optional recovery diagnostic, which takes one supplied
+      recovery date and does not replace LGD-12.
+    decided_in: [A12, architecture §6 item 2]
+
+  LGD-04:
+    status: deferred
+    reason: >-
+      Not built in the core (A12). The owner has yet to confirm that it stays for later.
+    note: >-
+      The test that names it checks one recovery case and the collateral allocation, not longer
+      recovery periods or higher costs as sensitivities.
+    decided_in: [A12, architecture §6 item 2]
+
+  LGD-10:
+    reason: >-
+      Named in code only inside a range. Every synthetic segment uses LGD-12, as the last sentence
+      asks. The parameter set has no field declaring the method per segment.
+
+  LGD-11:
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      Named in code only inside a range. No regulatory or downturn LGD exists, and no test runs
+      the one-at-a-time challenges. A12 covers LGD-01 and LGD-04, not this requirement.
+
+  LGD-12:
+    reason: >-
+      Built as written, and the default. `--lgd-path trough` is the selectable reading of the
+      draft's ¶121–123 for property-secured books. The owner settles which stands.
+    decided_in: [C16]
+
+  # --- EAD --------------------------------------------------------------------------------------------
+
+  EAD-03:
+    reason: >-
+      `guarantee` is only a product label: the generator creates none, and the separate guarantee
+      model is not built.
+
+  EAD-06:
+    reason: >-
+      AT-35 runs the utilisation variant through the pipeline. AT-36 stays kernel-only: the static
+      book has no drawdown transfers, so nothing calls `permitted_transfer`.
+
+  EAD-07:
+    reason: >-
+      AT-38 stays kernel-only. The optional capital analysis calculates regulatory EAD from
+      supplied CCFs, without the step-by-step bridge.
+
+  # --- ECL --------------------------------------------------------------------------------------------
+
+  ECL-04:
+    reason: >-
+      Named in code only inside a range, so linked by hand. ECL-10 is the project's reading of this
+      requirement. The default reverts Z (C8), and the parameter-linear method is a sensitivity.
+    acceptance: [AT-52]
+    tests:
+      - unit/test_kernels.py::test_reversion_weights_and_path
+      - unit/test_terminal_reversion.py::test_parameter_reversion_is_linear_in_transition_probabilities
+    decided_in: [C8]
+
+  ECL-06:
+    reason: >-
+      The default still reprices S2 at each year-end, which is what this requirement warns against.
+      `--s2-treatment held` builds the reading of ¶76, ¶123 and ¶125, and that is what the tests
+      prove. Box 7 allows a yearly rate, so the owner settles which stands.
+    decided_in: [C14]
+
+  ECL-07:
+    reason: >-
+      The per-exposure rule is tested. Whether the floor uses the first-year estimate, as ECL-07
+      and Box 9 say, or each year's LGD, as ECL-11 says, is open (C13).
+
+  ECL-09:
+    reason: >-
+      Bucket-level ECL reconciles to the raw performing provisions, and raw and constrained values
+      are kept. Under the held reading of S2 the two differ by the held amount (C14).
+
+  ECL-10:
+    reason: >-
+      Reverts Z, not the parameters, as the owner signed off in D5 (C8). `--terminal-treatment
+      parameters` runs the linear reading as a separate sensitivity.
+
+  ECL-11:
+    reason: >-
+      Uses each year's LGD, while ECL-07 and Box 9 use the first-year estimate. C13 proposes that
+      the owner aligns the text.
+
+  # --- Accounting -------------------------------------------------------------------------------------
+
+  ACC-03:
+    reason: >-
+      On- and off-balance stocks are kept apart. The conversion factors the draft prescribes are
+      not implemented: runs use the single 50% test CCF of SYN-PAR-07 (review finding 9).
+
+  ACC-04:
+    reason: >-
+      The v1 data has no overlays, and R9 carries opening overlays unchanged (A24). Tracking by
+      scenario and year is not built.
+    decided_in: [A24]
+
+  # --- Mandatory synthetic configuration --------------------------------------------------------------
+
+  SYN-PAR-06:
+    reason: >-
+      The parameter set exists and R3 checks its domains. Its values are PROPOSED and await the
+      owner.
+    decided_in: [A2, architecture §6 item 1]
+
+  SYN-PAR-08:
+    reason: >-
+      The text says MIG-07 returns each opening stage, but since A30 a share of S2 is S2 by a
+      trigger alone. The text is the owner's to amend (C11).
+
+  # --- Capital ----------------------------------------------------------------------------------------
+
+  CAP-01:
+    status: deferred
+    reason: >-
+      Risk-weight calculation is not built. The synthetic bridge multiplies regulatory EAD by
+      supplied risk weights and states that it is not a CRR risk-weight calculator.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  CAP-02:
+    status: deferred
+    reason: >-
+      Supplied risk weights can differ by grade, year and scenario, so migration reaches REA only
+      through that input. Stressed collateral eligibility and regulatory expected loss are not
+      built.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  CAP-03:
+    reason: >-
+      Proved on the kernel and in the synthetic bridge, on supplied risk weights. It is not a
+      credit-REA calculation (see CAP-01).
+
+  CAP-04:
+    reason: >-
+      The comparison is proved with a supplied floor factor. The example's factor is an
+      illustration, not a prescribed 2027 value (docs/implementation-status.md).
+
+  CAP-05:
+    status: deferred
+    reason: An open confirmation against the final package, and no final package exists yet.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  CAP-06:
+    status: deferred
+    reason: >-
+      Reconciliation to the regulatory provision basis and expected loss is not built. The IRB
+      shortfall enters the bridge as a supplied change.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  CAP-07:
+    reason: >-
+      Not named in code or tests, so linked by hand. The synthetic bridge shows charges, tax,
+      shortfall and NPL deductions, other profit or loss, distributions, and numerator and
+      denominator changes, all from supplied inputs. It has no transitional and fully loaded views.
+    decided_in: [design preparation addendum]
+    tests: [unit/test_preparation_bridges.py::test_capital_bridge_floors_and_explicit_missing_inputs]
+    code:
+      - {path: src/stress/capital/assessment.py, contains: "def capital_bridge"}
+
+  CAP-08:
+    status: deferred
+    reason: >-
+      Named in code only as the value-status module. The capital table does not say whether a ratio
+      is a full exercise result or a limited credit sensitivity (see SCP-05).
+    note: The last sentence is met in the bridge, which blocks on a missing input.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  CAP-09:
+    reason: >-
+      Reported from a supplied calendar beside the capital bridge, which keeps its supplied
+      deduction. Apart from footnote 75 the example's factors are illustrations, and the capital
+      team's approval is outstanding.
+    decided_in: [A33]
+
+  # --- Reporting --------------------------------------------------------------------------------------
+
+  RPT-01:
+    reason: >-
+      Full detail is kept. There is no reportable subset, because materiality selection is deferred
+      (RPT-02 to RPT-04).
+
+  RPT-02:
+    status: deferred
+    reason: Reports cover all six countries, and no selection rule is built.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  RPT-03:
+    status: deferred
+    reason: No country selection is built for any template.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  RPT-04:
+    status: deferred
+    reason: No materiality subset or excluded-small-sectors bridge is built.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  # --- Validation -------------------------------------------------------------------------------------
+
+  VAL-01:
+    status: deferred
+    reason: The design defers sensitivity reporting.
+    note: >-
+      Today there are the utilisation and repayment variants, a one-year severity diagnostic and
+      the terminal sensitivity, but not the listed shocks one by one.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  VAL-02:
+    status: deferred
+    reason: >-
+      The design defers sensitivity reporting. The test that names VAL-02 checks the reverse-stress
+      search on a simple function, which is not evidence for this requirement.
+    decided_in: ['design "Handled elsewhere or later": After v1']
+
+  VAL-03:
+    reason: >-
+      Not named in code, so linked by hand. Each run writes shares, HHI contribution and rank by
+      connected group, and a stand-alone obligor is its own group. No test reads that table.
+    code:
+      - {path: src/stress/report/assessment.py, contains: "hhi_contribution"}
+
+  VAL-04:
+    status: deferred
+    reason: >-
+      No independent model challenge has taken place. `change-reviewer` approvals are code reviews,
+      and the owner's sign-offs of the v1 build are open.
+    decided_in:
+      - 'design "Handled elsewhere or later": Met by people and process'
+      - architecture §6 item 7
+
+  # --- Operations -------------------------------------------------------------------------------------
+
+  OPS-02:
+    status: process
+    reason: >-
+      Changes go through a read-only reviewer and the owner. Input sets are named by hash and runs
+      are write-once, so a change after approval is a new version. The owner's sign-offs of the v1
+      build are open (architecture §6 item 7).
+    evidence: [docs/architecture.md, .claude/agents/change-reviewer.md]
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  OPS-03:
+    status: process
+    reason: >-
+      Each run folder keeps its configuration, a copy of the inputs, the results and the log,
+      write-once. Run folders stay local: the bank's retention store and period do not exist yet.
+    evidence: [runs/README.md]
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  OPS-05:
+    status: process
+    reason: >-
+      No real data exists. `inputs/bank/` is protected for when it arrives, and the synthetic book
+      uses generated identifiers.
+    evidence: [docs/architecture.md, .claude/hooks/guard_paths.py]
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  OPS-06:
+    status: deferred
+    reason: Needs the bank's actual portfolio size and delivery calendar, and neither exists.
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
+
+  OPS-08:
+    status: deferred
+    reason: No override register or procedure exists. The v1 data has no overlays (A24).
+    decided_in: ['design "Handled elsewhere or later": Met by people and process', A24]
+
+  OPS-09:
+    status: process
+    reason: >-
+      `TODO.md` holds open items and decisions, and architecture §6 lists those waiting on the
+      owner. With the C table that is three places, so it is not yet a single log.
+    evidence: [TODO.md, docs/architecture.md]
+    decided_in: ['design "Handled elsewhere or later": Met by people and process']
