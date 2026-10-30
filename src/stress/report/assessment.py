@@ -6,6 +6,11 @@ import pandas as pd
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
 
+# Paragraph 69: lending for house purchase follows residential prices, CRE loans follow CRE prices,
+# residential rental included (A31).
+COLLATERAL_INDEX = {"residential_property": "residential_price_index", "residential_rental": "cre_price_index",
+                    "office": "cre_price_index", "retail": "cre_price_index", "industrial": "cre_price_index"}
+
 
 def mapped_cells(spec: dict, tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     required(spec, ("version", "cells"), "template mapping")
@@ -66,6 +71,58 @@ def portfolio_diagnostics(portfolio: pd.DataFrame, obligors: pd.DataFrame,
                             + attributed.watchlist.astype(str) + ";forborne=" + attributed.forborne.astype(str))
     attribution = attributed.groupby(["scenario", "year", "trigger", "flags"])[measures].sum().reset_index()
     return {"dimensions": dimensions, "concentration": concentration, "sicr_attribution": attribution}
+
+
+def _with_total(frame: pd.DataFrame, keys: list[str], measures: list[str]) -> pd.DataFrame:
+    """Sums per stage plus one row per key labelled stage "all"; ratios come from these sums."""
+    stages = frame.groupby([*keys, "stage"], dropna=False)[measures].sum().reset_index()
+    total = frame.groupby(keys, dropna=False)[measures].sum().reset_index().assign(stage="all")
+    out = pd.concat([stages.astype({"stage": object}), total], ignore_index=True)
+    return out.sort_values(keys, kind="mergesort").reset_index(drop=True)
+
+
+def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.DataFrame,
+                 indices: pd.DataFrame) -> pd.DataFrame:
+    """Paragraph 69 and A31: GCA over collateral value, the value following the scenario's price
+    index from the snapshot. GCA is static, so a loan's LTV is its opening LTV over that index."""
+    secured = facilities.loc[facilities["ltv"].notna() & facilities["facility_id"].isin(portfolio["facility_id"]),
+                             ["facility_id", "ltv", "collateral_type"]].copy()
+    secured["variable"] = secured["collateral_type"].map(COLLATERAL_INDEX)
+    if secured["variable"].isna().any():
+        raise BlockingError("report", "MISSING_INPUT", "no price index for a collateral type")
+    growth = indices.sort_values(["scenario", "country", "variable", "year"]).copy()
+    growth["growth"] = (1.0 + growth["annual_change"]).groupby(
+        [growth["scenario"], growth["country"], growth["variable"]]).cumprod()
+    book = slices[["scenario", "year", "facility_id", "stage", "gca"]].merge(
+        secured, on="facility_id", validate="many_to_one").merge(
+        portfolio[["facility_id", "portfolio", "country"]], on="facility_id", validate="many_to_one").merge(
+        growth[["scenario", "country", "variable", "year", "growth"]],
+        on=["scenario", "country", "variable", "year"], how="left", validate="many_to_one")
+    book["growth"] = book["growth"].where(book["year"] >= indices["year"].min(), 1.0)  # the snapshot
+    if book["growth"].isna().any():
+        raise BlockingError("report", "MISSING_INPUT", "no price index for a projected year")
+    level = book["ltv"] / book["growth"]
+    book["ltv_numerator"] = book["gca"] * level
+    book["gca_above_100"] = book["gca"].where(level > 1.0, 0.0)
+    out = _with_total(book, ["scenario", "year", "portfolio"], ["gca", "ltv_numerator", "gca_above_100"])
+    out["average_ltv"] = (out["ltv_numerator"] / out["gca"]).where(out["gca"] > 0)
+    out["share_above_100"] = (out["gca_above_100"] / out["gca"]).where(out["gca"] > 0)
+    return out
+
+
+def average_maturity(portfolio: pd.DataFrame, slices: pd.DataFrame, schedule: pd.DataFrame) -> pd.DataFrame:
+    """Paragraph 70: performing exposure-weighted residual maturity, the maturity R5 gave R8."""
+    rest = schedule.drop_duplicates(["facility_id", "valuation_year"])[
+        ["facility_id", "valuation_year", "remaining_maturity"]]
+    book = slices.loc[slices["stage"].lt(3), ["scenario", "year", "facility_id", "stage", "gca"]].merge(
+        rest, left_on=["facility_id", "year"], right_on=["facility_id", "valuation_year"], how="left",
+        validate="many_to_one").merge(portfolio[["facility_id", "portfolio"]], on="facility_id")
+    if book["remaining_maturity"].isna().any():
+        raise BlockingError("report", "MISSING_INPUT", "no residual maturity for a performing slice")
+    book["maturity_numerator"] = book["gca"] * book["remaining_maturity"]
+    out = _with_total(book, ["scenario", "year", "portfolio"], ["gca", "maturity_numerator"])
+    out["average_maturity"] = (out["maturity_numerator"] / out["gca"]).where(out["gca"] > 0)
+    return out
 
 
 def readiness(loaded, terminal_treatment: str) -> pd.DataFrame:

@@ -20,7 +20,13 @@ from stress.contracts.preparation import ANALYSIS_RATES
 from stress.contracts.run import RunContext
 from stress.contracts.tables import Drivers, Parameters, RoutedPortfolio
 from stress.report import comparison
-from stress.report.assessment import mapped_cells, portfolio_diagnostics, readiness
+from stress.report.assessment import (
+    average_maturity,
+    mapped_cells,
+    portfolio_diagnostics,
+    readiness,
+    stressed_ltv,
+)
 from stress.report.excel import write_workbook
 
 STEP = "R10"
@@ -350,6 +356,8 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "rejections": routed.rejections,
     })
     extra = portfolio_diagnostics(port, loaded.obligors.data, loaded.facilities.data, results["slices"])
+    extra["ltv"] = stressed_ltv(port, loaded.facilities.data, results["slices"], drivers.indices)
+    extra["maturity"] = average_maturity(port, results["slices"], schedule)
     extra.update(results.get("analyses", {}))
     extra["readiness"] = readiness(loaded, ctx.config.terminal_treatment)
     if "template_mapping" in loaded.analysis:

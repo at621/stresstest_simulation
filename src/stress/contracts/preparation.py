@@ -17,6 +17,7 @@ ANALYSES = {
     "climate": spec("climate", "facility_id channel scenario year", "nace_code energy_bucket geolocation flood_category model_version gca reference_provision shock_provision incremental_before_insurance insurance_recovery incremental_after_insurance incremental_charge_after_insurance basis"),
     "sensitivity": spec("sensitivity", "severity", "loss z basis"),
     "reverse_stress": spec("reverse_stress", "limit_name", "status severity loss loss_limit_eur basis"),
+    "loss_weighted_lgd": spec("loss_weighted_lgd", "scenario valuation_year portfolio stage", "numerator denominator loss_weighted_lgd"),
 }
 
 ANALYSIS_RATES = {
@@ -31,4 +32,7 @@ ANALYSIS_RATES = {
     "reverse_stress": ("severity",),
     "concentration": ("gca_share", "hhi_contribution"),
     "mapped_cells": ("value",),
+    "ltv": ("average_ltv", "share_above_100"),
+    "maturity": ("average_maturity",),
+    "loss_weighted_lgd": ("loss_weighted_lgd",),
 }

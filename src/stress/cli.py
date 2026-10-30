@@ -56,6 +56,7 @@ from stress.params.assessment import (
     benchmark_selection,
     calibration_diagnostics,
     challenge_analysis,
+    default_weighted_lgd,
     recovery_lgd,
 )
 from stress.validate.sicr import remaining_horizon_diagnostic
@@ -204,7 +205,7 @@ def pipeline(ctx) -> dict:
                       ("provisions", PROVISIONS), ("ecl_buckets", ECL_BUCKETS), ("charges", CHARGES)):
         lineage.write_table(ctx, spec.filename, results[key])
 
-    analyses = preparation_analyses(loaded, routed, schedule, results)
+    analyses = preparation_analyses(loaded, routed, schedule, results, params)
     for name, table in analyses.items():
         spec = ANALYSES[name]
         analyses[name] = _sorted(spec.check(table, "analysis"), spec)
@@ -214,13 +215,15 @@ def pipeline(ctx) -> dict:
         return report.build_reports(ctx, loaded, routed, drivers, schedule, params, results)
 
 
-def preparation_analyses(loaded, routed, schedule, results) -> dict:
+def preparation_analyses(loaded, routed, schedule, results, params) -> dict:
     """Wire independent diagnostics and explicitly supplied synthetic model outputs."""
     ps, spec = loaded.parameter_set, loaded.analysis
     matrices, _ = parameters.ttc_arrays(loaded.ttc_pd_matrix)
     tables = {
         "calibration": calibration_diagnostics(ps),
         "sicr_horizon": remaining_horizon_diagnostic(routed.portfolio, schedule, matrices, ps["segments"]),
+        "loss_weighted_lgd": default_weighted_lgd(results["slices"], params.facility, params.pd_curves,
+                                                  routed.portfolio),
     }
     if "benchmarks" in spec:
         tables["benchmark_selection"] = benchmark_selection(spec["benchmarks"])

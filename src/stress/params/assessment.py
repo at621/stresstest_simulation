@@ -10,12 +10,40 @@ from scipy.special import ndtr, ndtri
 
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
-from stress.params.lgd import lgd_from_z
+from stress.params.lgd import lgd_from_z, loss_weighted_lgd
 
 FAMILIES = {
     "pd_tr": ("tr11", "tr12", "tr13", "tr21", "tr22", "tr23"),
     "lgd_lr": ("lr11", "lr12", "lr13", "lr21", "lr22", "lr23"),
 }
+
+
+def default_weighted_lgd(slices: pd.DataFrame, facility: pd.DataFrame, curves: pd.DataFrame,
+                         portfolio: pd.DataFrame) -> pd.DataFrame:
+    """RPT-06: ``sum(m EAD LGD) / sum(m EAD)`` for default bucket 1 over each year-end's performing
+    slices, by book and stage. A part-year bucket takes the part of m its maturity covers (A7)."""
+    first = facility.loc[facility["default_bucket"].eq(1), ["facility_id", "scenario", "valuation_year", "fraction",
+                                                            "ead_drawn", "ead_undrawn", "lgd"]]
+    one_year = curves.loc[curves["default_bucket"].eq(1), ["segment", "country", "scenario", "valuation_year",
+                                                           "cohort", "m"]]
+    facts = portfolio[["facility_id", "portfolio", "segment", "country", "gca", "undrawn"]].rename(
+        columns={"gca": "facility_gca", "undrawn": "facility_undrawn"})
+    rows = slices.loc[slices["stage"].lt(3), ["scenario", "year", "facility_id", "stage", "grade", "gca", "undrawn"]]
+    rows = rows.rename(columns={"year": "valuation_year"}).merge(facts, on="facility_id", validate="many_to_one")
+    rows = rows.merge(first, on=["facility_id", "scenario", "valuation_year"], validate="many_to_one").merge(
+        one_year, left_on=["segment", "country", "scenario", "valuation_year", "grade"],
+        right_on=["segment", "country", "scenario", "valuation_year", "cohort"], validate="many_to_one")
+    share_on = (rows["gca"] / rows["facility_gca"]).where(rows["facility_gca"] > 0, 0.0)
+    share_off = (rows["undrawn"] / rows["facility_undrawn"]).where(rows["facility_undrawn"] > 0, 0.0)
+    rows["slice_ead"] = rows["ead_drawn"] * share_on + rows["ead_undrawn"] * share_off
+    rows["slice_m"] = rows["m"] * rows["fraction"]
+    out = []
+    for key, part in rows.groupby(["scenario", "valuation_year", "portfolio", "stage"]):
+        numerator, denominator, value = loss_weighted_lgd(part["slice_m"], part["slice_ead"], part["lgd"])
+        out.append(dict(zip(("scenario", "valuation_year", "portfolio", "stage"), key)) | {
+            "numerator": numerator, "denominator": denominator,
+            "loss_weighted_lgd": np.nan if value is None else value})
+    return pd.DataFrame(out)
 
 
 def benchmark_selection(rows: list[dict]) -> pd.DataFrame:
