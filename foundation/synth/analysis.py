@@ -87,6 +87,14 @@ def build(input_dir: Path) -> dict:
             "template_mapping": {"version": "illustrative-layout-1", "cells": [
                 {"sheet": "DEMO_CREDIT", "row": "total", "column": f"gca_{s}_{y}", "table": "dimensions",
                  "measure": "gca", "filters": {"scenario": s, "year": y}} for s in scenarios for y in years]},
+            # Unsecured 35% in the third year is footnote 75 of the draft and 2019-2026 is paragraph 563.
+            # Every other factor is an illustration: replace them from Article 47c before any use.
+            "npe_backstop": {"version": "illustrative-calendar-1", "scope_from": "2019-04-26",
+                             "scope_to": "2026-12-31",
+                             "source": "unsecured year 3 from draft footnote 75; other factors illustrative",
+                             "calendar": [{"from_year": 1, "unsecured": 0., "secured": 0.},
+                                          {"from_year": 3, "unsecured": .35, "secured": 0.},
+                                          {"from_year": 4, "unsecured": 1., "secured": .25}]},
             "challenge": {"severity_grid": [0., 1., 2., 3., 4.], "loss_limit_eur": float(f.gca.sum()*.05),
                           "lower": 0., "upper": 6., "limit_name": "illustrative one-year loss budget"}}
 

@@ -1,6 +1,20 @@
 """Keys and required values for optional preparation tables handed between pipeline steps."""
 
+import pandas as pd
+
 from stress.contracts.tables import TableSpec
+
+# Paragraph 69: lending for house purchase follows residential prices, CRE loans follow CRE prices,
+# residential rental included (A31).
+COLLATERAL_INDEX = {"residential_property": "residential_price_index", "residential_rental": "cre_price_index",
+                    "office": "cre_price_index", "retail": "cre_price_index", "industrial": "cre_price_index"}
+
+
+def price_growth(indices: pd.DataFrame) -> pd.DataFrame:
+    """The scenario's price indices as growth since the snapshot."""
+    out = indices.sort_values(["scenario", "country", "variable", "year"]).copy()
+    out["growth"] = (1.0 + out["annual_change"]).groupby([out["scenario"], out["country"], out["variable"]]).cumprod()
+    return out
 
 
 def spec(name, keys, columns):
@@ -18,6 +32,7 @@ ANALYSES = {
     "sensitivity": spec("sensitivity", "severity", "loss z basis"),
     "reverse_stress": spec("reverse_stress", "limit_name", "status severity loss loss_limit_eur basis"),
     "loss_weighted_lgd": spec("loss_weighted_lgd", "scenario valuation_year portfolio stage", "numerator denominator loss_weighted_lgd"),
+    "npe_backstop": spec("npe_backstop", "scenario year portfolio", "gca_in_scope unsecured_part secured_part minimum_coverage provisions capped_provisions insufficient_coverage insufficient_coverage_change calendar_version basis"),
 }
 
 ANALYSIS_RATES = {

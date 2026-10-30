@@ -31,6 +31,7 @@ from stress import (
 )
 from stress import params as parameters
 from stress.capital.assessment import capital_bridge
+from stress.capital.npe import npe_backstop
 from stress.contracts.errors import BlockingError
 from stress.contracts.preparation import ANALYSES
 from stress.contracts.run import MODE_SYNTHETIC, MODES, REPORTS_DIR, RESULTS_DIR, RUN_LOG, RunConfig
@@ -205,7 +206,7 @@ def pipeline(ctx) -> dict:
                       ("provisions", PROVISIONS), ("ecl_buckets", ECL_BUCKETS), ("charges", CHARGES)):
         lineage.write_table(ctx, spec.filename, results[key])
 
-    analyses = preparation_analyses(loaded, routed, schedule, results, params)
+    analyses = preparation_analyses(loaded, routed, schedule, results, params, drivers)
     for name, table in analyses.items():
         spec = ANALYSES[name]
         analyses[name] = _sorted(spec.check(table, "analysis"), spec)
@@ -215,7 +216,7 @@ def pipeline(ctx) -> dict:
         return report.build_reports(ctx, loaded, routed, drivers, schedule, params, results)
 
 
-def preparation_analyses(loaded, routed, schedule, results, params) -> dict:
+def preparation_analyses(loaded, routed, schedule, results, params, drivers) -> dict:
     """Wire independent diagnostics and explicitly supplied synthetic model outputs."""
     ps, spec = loaded.parameter_set, loaded.analysis
     matrices, _ = parameters.ttc_arrays(loaded.ttc_pd_matrix)
@@ -232,6 +233,9 @@ def preparation_analyses(loaded, routed, schedule, results, params) -> dict:
     if "capital" in spec:
         tables["capital"], tables["regulatory_exposure"] = capital_bridge(
             spec["capital"], results["slices"], routed.portfolio, results["charges"])
+    if "npe_backstop" in spec:
+        tables["npe_backstop"] = npe_backstop(spec["npe_backstop"], results["slices"], routed.portfolio,
+                                              loaded.facilities.data, drivers.indices)
     if "climate" in spec:
         tables["climate"] = climate_assessment(spec["climate"], routed.portfolio)
     if "challenge" in spec:

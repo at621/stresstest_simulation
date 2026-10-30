@@ -5,11 +5,7 @@ import pandas as pd
 
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
-
-# Paragraph 69: lending for house purchase follows residential prices, CRE loans follow CRE prices,
-# residential rental included (A31).
-COLLATERAL_INDEX = {"residential_property": "residential_price_index", "residential_rental": "cre_price_index",
-                    "office": "cre_price_index", "retail": "cre_price_index", "industrial": "cre_price_index"}
+from stress.contracts.preparation import COLLATERAL_INDEX, price_growth
 
 
 def mapped_cells(spec: dict, tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -90,9 +86,7 @@ def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.D
     secured["variable"] = secured["collateral_type"].map(COLLATERAL_INDEX)
     if secured["variable"].isna().any():
         raise BlockingError("report", "MISSING_INPUT", "no price index for a collateral type")
-    growth = indices.sort_values(["scenario", "country", "variable", "year"]).copy()
-    growth["growth"] = (1.0 + growth["annual_change"]).groupby(
-        [growth["scenario"], growth["country"], growth["variable"]]).cumprod()
+    growth = price_growth(indices)
     book = slices[["scenario", "year", "facility_id", "stage", "gca"]].merge(
         secured, on="facility_id", validate="many_to_one").merge(
         portfolio[["facility_id", "portfolio", "country"]], on="facility_id", validate="many_to_one").merge(
@@ -135,7 +129,8 @@ def readiness(loaded, terminal_treatment: str) -> pd.DataFrame:
         ("numerical_oracles", "OPEN", "Owner AT-48, AT-51 and AT-52 sign-off remains open"),
         ("submission", "BLOCKED", "Synthetic analyses do not enable regulatory mode"),
     ]
-    for name in ("benchmarks", "recoveries", "capital", "climate", "template_mapping", "challenge"):
+    for name in ("benchmarks", "recoveries", "capital", "climate", "template_mapping", "challenge",
+                 "npe_backstop"):
         rows.append((name, "SYNTHETIC_PROVIDED" if name in loaded.analysis else "NOT_PROVIDED",
                      "Independent validation and approved source package required"))
     return pd.DataFrame(rows, columns=["gate", "state", "evidence"])

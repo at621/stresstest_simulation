@@ -30,6 +30,11 @@ CSV_CR_SCEN provisions (`analysis_template_replica.csv`) beside the engine's sto
 mapping writes a long cell table with source/measure/version and matching row counts; it is
 not an official EBA workbook. Missing matches and duplicate destinations block.
 
+The `npe_backstop` section holds an illustrative calendar: only the unsecured 35% in the third
+year comes from the draft (footnote 75). Replace the other factors from Article 47c before use.
+`analysis_npe_backstop.csv` reports the calculated shortfall; the capital bridge keeps its
+supplied `npl_deduction_change`, so the two can be compared.
+
 The package is bound to its input-set hash, loaded only at R2, copied into `data/analysis.yaml`
 and hashed in the run manifest. An unchanged-source rerun uses those sealed copies even if
 the original input folder and YAML no longer exist. Restore the recorded source and Python/
