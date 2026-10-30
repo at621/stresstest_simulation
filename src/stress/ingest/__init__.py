@@ -360,7 +360,8 @@ def read_analysis(ctx: RunContext) -> dict:
         raw = path.read_bytes()
         doc = yaml.safe_load(raw)
         allowed = {"schema_version", "input_set_hash", "status", "source", "version", "benchmarks", "recoveries",
-                   "capital", "climate", "template_mapping", "challenge", "npe_backstop"}
+                   "capital", "climate", "template_mapping", "challenge", "npe_backstop",
+                   "plausibility"}
         if not isinstance(doc, dict) or doc.get("schema_version") != 1 or set(doc) - allowed:
             raise ValueError("analysis must use schema_version 1 and known sections")
         if doc.get("status") != "SYNTHETIC" or not doc.get("source") or not doc.get("version"):
@@ -371,7 +372,7 @@ def read_analysis(ctx: RunContext) -> dict:
             if section in doc and (not isinstance(doc[section], list) or not doc[section]
                                    or not all(isinstance(row, dict) for row in doc[section])):
                 raise ValueError(f"{section} must be a nonempty list of mappings")
-        for section in ("capital", "template_mapping", "challenge", "npe_backstop"):
+        for section in ("capital", "template_mapping", "challenge", "npe_backstop", "plausibility"):
             if section in doc and (not isinstance(doc[section], dict) or not doc[section]):
                 raise ValueError(f"{section} must be a nonempty mapping")
         (ctx.data_dir / "analysis.yaml").write_bytes(raw)

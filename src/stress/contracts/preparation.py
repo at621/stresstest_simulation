@@ -47,6 +47,7 @@ ANALYSIS_RATES = {
     "reverse_stress": ("severity",),
     "concentration": ("gca_share", "hhi_contribution"),
     "mapped_cells": ("value",),
+    "plausibility": ("engine", "published", "multiple"),
     "ltv": ("average_ltv", "share_above_100"),
     "maturity": ("average_maturity",),
     "template_replica": ("tr12", "tr21", "pd12m_s1", "pd12m_s2", "lgd_s1", "lgd_s2", "lrlt_s2", "loss_rate_s1_next",

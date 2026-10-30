@@ -12,6 +12,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+BENCHMARKS = Path(__file__).resolve().parents[2] / "docs" / "benchmarks" / "eba-2025-published.yaml"
+
 
 def build(input_dir: Path) -> dict:
     manifest = json.loads((input_dir / "manifest.json").read_text(encoding="utf-8"))
@@ -95,6 +97,7 @@ def build(input_dir: Path) -> dict:
                              "calendar": [{"from_year": 1, "unsecured": 0., "secured": 0.},
                                           {"from_year": 3, "unsecured": .35, "secured": 0.},
                                           {"from_year": 4, "unsecured": 1., "secured": .25}]},
+            "plausibility": yaml.safe_load(BENCHMARKS.read_text(encoding="utf-8")),
             "challenge": {"severity_grid": [0., 1., 2., 3., 4.], "loss_limit_eur": float(f.gca.sum()*.05),
                           "lower": 0., "upper": 6., "limit_name": "illustrative one-year loss budget"}}
 

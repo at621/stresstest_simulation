@@ -35,6 +35,10 @@ year comes from the draft (footnote 75). Replace the other factors from Article 
 `analysis_npe_backstop.csv` reports the calculated shortfall; the capital bridge keeps its
 supplied `npl_deduction_change`, so the two can be compared.
 
+The `plausibility` section copies [docs/benchmarks/](../benchmarks/README.md), published results
+of the 2025 exercise and not invented values. `analysis_plausibility.csv` sets the adverse result
+beside them. The comparison is not like for like and judges nothing.
+
 The package is bound to its input-set hash, loaded only at R2, copied into `data/analysis.yaml`
 and hashed in the run manifest. An unchanged-source rerun uses those sealed copies even if
 the original input folder and YAML no longer exist. Restore the recorded source and Python/

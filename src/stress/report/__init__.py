@@ -17,12 +17,13 @@ import pandas as pd
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
 from stress.contracts.preparation import ANALYSIS_RATES
-from stress.contracts.run import RunContext
+from stress.contracts.run import ADVERSE, RunContext
 from stress.contracts.tables import Drivers, Parameters, RoutedPortfolio
 from stress.report import comparison
 from stress.report.assessment import (
     average_maturity,
     mapped_cells,
+    plausibility_sheet,
     portfolio_diagnostics,
     readiness,
     stressed_ltv,
@@ -361,6 +362,9 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     extra["maturity"] = average_maturity(port, results["slices"], schedule)
     extra["template_replica"] = template_replica(results["slices"], results["stage_flows"], params.lgd_of_year,
                                                  drivers.z, port, years, tol)
+    if "plausibility" in loaded.analysis and ADVERSE in ctx.scenarios:
+        extra["plausibility"] = plausibility_sheet(loaded.analysis["plausibility"], imp, by_stage, loaded,
+                                                   drivers.indices, years)
     extra.update(results.get("analyses", {}))
     extra["readiness"] = readiness(loaded, ctx.config.terminal_treatment)
     if "template_mapping" in loaded.analysis:

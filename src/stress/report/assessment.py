@@ -5,7 +5,9 @@ import pandas as pd
 
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
+from stress.contracts.inputs import SCENARIO_UNITS
 from stress.contracts.preparation import COLLATERAL_INDEX, price_growth
+from stress.contracts.run import ADVERSE
 
 
 def mapped_cells(spec: dict, tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -119,6 +121,68 @@ def average_maturity(portfolio: pd.DataFrame, slices: pd.DataFrame, schedule: pd
     return out
 
 
+def _stage_share(by_stage: pd.DataFrame, scope: str, stage: int, year: int) -> float:
+    book = by_stage[by_stage["year"] == year]
+    book = book if scope == "Total" else book[book["portfolio"] == scope]
+    return float(book.loc[book["stage"] == stage, "gca"].sum() / book["gca"].sum())
+
+
+def plausibility_sheet(spec: dict, impairment: pd.DataFrame, by_stage: pd.DataFrame, loaded, indices: pd.DataFrame,
+                       years: list[int]) -> pd.DataFrame:
+    """The adverse result beside published figures (Basel principle 8, GL paragraph 62). The sheet
+    shows the difference and judges nothing; ratios come from sums, never from averaged ratios."""
+    required(spec, ("version", "source", "sources", "rows"), "plausibility")
+    first, last = min(years), max(years)
+    charges = impairment[impairment["scenario"] == ADVERSE]
+    stages = by_stage[by_stage["scenario"] == ADVERSE]
+    paths = loaded.scenario_values[loaded.scenario_values["scenario"] == ADVERSE]
+    growth = price_growth(indices[indices["scenario"] == ADVERSE])
+
+    def book(scope: str) -> pd.DataFrame:
+        return charges[charges["portfolio"] == scope].set_index("year")
+
+    def path(variable: str) -> pd.Series:
+        return paths[paths["variable"] == variable].groupby("year")["value"].mean()
+
+    def price_fall(variable: str) -> float:
+        return float(growth.loc[(growth["variable"] == variable) & (growth["year"] == last), "growth"].mean()) - 1.0
+
+    def unemployment_start() -> float:
+        rows = [s for s in loaded.scenario_meta["starting_values"] if s["variable"] == "unemployment"]
+        return float(np.mean([s["value"] * SCENARIO_UNITS[s["unit"]] for s in rows]))
+
+    def loss_rate(scope: str) -> float:
+        gca = stages[stages["year"] == first - 1]
+        gca = gca if scope == "Total" else gca[gca["portfolio"] == scope]
+        return float(book(scope).loc[last, "cumulative_charge"] / gca["gca"].sum())
+
+    measures = {
+        "credit_loss_rate": loss_rate,
+        "first_year_loss_share": lambda s: float(book(s).loc[first, "charge_total"] / book(s).loc[last, "cumulative_charge"]),
+        "s2_share_start": lambda s: _stage_share(stages, s, 2, first - 1),
+        "s2_share_end": lambda s: _stage_share(stages, s, 2, last),
+        "s3_share_start": lambda s: _stage_share(stages, s, 3, first - 1),
+        "s3_share_end": lambda s: _stage_share(stages, s, 3, last),
+        "gdp_cumulative": lambda s: float((1.0 + path("gdp_growth")).prod() - 1.0),
+        "unemployment_rise": lambda s: float(path("unemployment").loc[last] - unemployment_start()),
+        "residential_price_cumulative": lambda s: price_fall("residential_price_index"),
+        "cre_price_cumulative": lambda s: price_fall("cre_price_index"),
+    }
+    out = []
+    for row in spec["rows"]:
+        required(row, ("measure", "scope", "published", "source"), "plausibility row")
+        if row["measure"] not in measures:
+            raise BlockingError("report", "INVALID_INPUT", f"unknown plausibility measure {row['measure']}")
+        if row["source"] not in spec["sources"]:
+            raise BlockingError("report", "MISSING_INPUT", f"no source named {row['source']}")
+        value = measures[row["measure"]](row["scope"])
+        published = number(row["published"], "published")
+        out.append({"measure": row["measure"], "scope": row["scope"], "engine": value, "published": published,
+                    "multiple": value / published if published else np.nan, "source": spec["sources"][row["source"]],
+                    "benchmark_version": spec["version"], "basis": "NOT_LIKE_FOR_LIKE"})
+    return pd.DataFrame(out)
+
+
 def readiness(loaded, terminal_treatment: str) -> pd.DataFrame:
     rows = [
         ("input_approval", loaded.approval.get("status", "MISSING"), "Owner attestation recorded, not inferred"),
@@ -130,7 +194,7 @@ def readiness(loaded, terminal_treatment: str) -> pd.DataFrame:
         ("submission", "BLOCKED", "Synthetic analyses do not enable regulatory mode"),
     ]
     for name in ("benchmarks", "recoveries", "capital", "climate", "template_mapping", "challenge",
-                 "npe_backstop"):
+                 "npe_backstop", "plausibility"):
         rows.append((name, "SYNTHETIC_PROVIDED" if name in loaded.analysis else "NOT_PROVIDED",
                      "Independent validation and approved source package required"))
     return pd.DataFrame(rows, columns=["gate", "state", "evidence"])

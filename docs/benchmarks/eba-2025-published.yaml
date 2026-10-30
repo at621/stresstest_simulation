@@ -1,0 +1,23 @@
+# Published figures for the plausibility sheet. Values are decimal fractions, except
+# unemployment_rise, which is a change in the unemployment rate, also as a decimal fraction.
+# Typed from the documents named in `sources`; see README.md in this folder.
+version: eba-2025-published-1
+source: EBA, ESRB and ECB publications on the 2025 EU-wide stress test, adverse scenario
+sources:
+  eba_2025: 2025 EU-wide stress test, Results, EBA, August 2025
+  esrb_2025: ESRB macro-financial scenario for the 2025 stress test, January 2025; annual cross-country medians, compounded here, so approximate
+  ecb_2025: 2025 stress test of euro area banks, final results, ECB, August 2025
+rows:
+  - {measure: credit_loss_rate, scope: Total, published: 0.019, source: eba_2025}
+  - {measure: s3_share_start, scope: Total, published: 0.017, source: eba_2025}
+  - {measure: s3_share_end, scope: Total, published: 0.060, source: eba_2025}
+  - {measure: s2_share_start, scope: Total, published: 0.082, source: eba_2025}
+  - {measure: s2_share_end, scope: Total, published: 0.137, source: eba_2025}
+  - {measure: first_year_loss_share, scope: Total, published: 0.48, source: eba_2025}
+  - {measure: s3_share_start, scope: P04, published: 0.040, source: eba_2025}
+  - {measure: s3_share_end, scope: P04, published: 0.127, source: eba_2025}
+  - {measure: credit_loss_rate, scope: P02, published: 0.065, source: ecb_2025}
+  - {measure: gdp_cumulative, scope: Scenario, published: -0.063, source: eba_2025}
+  - {measure: unemployment_rise, scope: Scenario, published: 0.058, source: eba_2025}
+  - {measure: residential_price_cumulative, scope: Scenario, published: -0.19, source: esrb_2025}
+  - {measure: cre_price_cumulative, scope: Scenario, published: -0.30, source: esrb_2025}
