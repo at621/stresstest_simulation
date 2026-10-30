@@ -30,7 +30,9 @@ from stress import (
     validate,
 )
 from stress import params as parameters
+from stress.capital.assessment import capital_bridge
 from stress.contracts.errors import BlockingError
+from stress.contracts.preparation import ANALYSES
 from stress.contracts.run import MODE_SYNTHETIC, MODES, REPORTS_DIR, RESULTS_DIR, RUN_LOG, RunConfig
 from stress.contracts.tables import (
     CHARGES,
@@ -49,6 +51,14 @@ from stress.contracts.tables import (
     STAGE_FLOWS,
     Z_SCORES,
 )
+from stress.ecl.climate import climate_assessment
+from stress.params.assessment import (
+    benchmark_selection,
+    calibration_diagnostics,
+    challenge_analysis,
+    recovery_lgd,
+)
+from stress.validate.sicr import remaining_horizon_diagnostic
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -117,6 +127,13 @@ def pipeline(ctx) -> dict:
     ps = loaded.parameter_set
     ctx.lineage["parameter_set"] = {k: ps.get(k) for k in ("parameter_set_id", "version", "status")}
     ctx.lineage["load_controls"] = loaded.load_controls["rows"]
+    ctx.lineage["methodology"] = {
+        "reference": "EBA draft 2026-06-11", "status": "SYNTHETIC_PREPARATION",
+        "terminal_treatment": ctx.config.terminal_treatment,
+        "pd_anchor": "Z=0 average year; not unconditional cycle average",
+        "sicr_horizon": "opening remaining life", "qualitative_flags": "held until default",
+        "opening_stub": "constant hazard", "projected_ecl_stub": "pro rata",
+    }
 
     with step("R3"):
         routed = validate.validate_and_route(loaded, ctx)
@@ -187,8 +204,37 @@ def pipeline(ctx) -> dict:
                       ("provisions", PROVISIONS), ("ecl_buckets", ECL_BUCKETS), ("charges", CHARGES)):
         lineage.write_table(ctx, spec.filename, results[key])
 
+    analyses = preparation_analyses(loaded, routed, schedule, results)
+    for name, table in analyses.items():
+        spec = ANALYSES[name]
+        analyses[name] = _sorted(spec.check(table, "analysis"), spec)
+        lineage.write_table(ctx, spec.filename, analyses[name])
+    results["analyses"] = analyses
     with step("R10"):
         return report.build_reports(ctx, loaded, routed, drivers, schedule, params, results)
+
+
+def preparation_analyses(loaded, routed, schedule, results) -> dict:
+    """Wire independent diagnostics and explicitly supplied synthetic model outputs."""
+    ps, spec = loaded.parameter_set, loaded.analysis
+    matrices, _ = parameters.ttc_arrays(loaded.ttc_pd_matrix)
+    tables = {
+        "calibration": calibration_diagnostics(ps),
+        "sicr_horizon": remaining_horizon_diagnostic(routed.portfolio, schedule, matrices, ps["segments"]),
+    }
+    if "benchmarks" in spec:
+        tables["benchmark_selection"] = benchmark_selection(spec["benchmarks"])
+    if "recoveries" in spec:
+        tables["recovery_lgd"] = recovery_lgd(spec["recoveries"])
+    if "capital" in spec:
+        tables["capital"], tables["regulatory_exposure"] = capital_bridge(
+            spec["capital"], results["slices"], routed.portfolio, results["charges"])
+    if "climate" in spec:
+        tables["climate"] = climate_assessment(spec["climate"], routed.portfolio)
+    if "challenge" in spec:
+        tables["sensitivity"], tables["reverse_stress"] = challenge_analysis(
+            spec["challenge"], routed.portfolio, ps)
+    return tables
 
 
 def execute(config: RunConfig, runs_dir: Path) -> tuple[object, dict]:
@@ -248,7 +294,8 @@ def cmd_run(args) -> int:
     config = RunConfig(
         inputs=Path(args.inputs).as_posix(),
         scenarios=tuple(s.strip() for s in args.scenarios.split(",") if s.strip()),
-        variant=args.variant, mode=args.mode,
+        variant=args.variant, mode=args.mode, terminal_treatment=args.terminal_treatment,
+        analysis=args.analysis,
     )
     try:
         ctx, manifest = execute(config, Path(args.runs_dir))
@@ -274,9 +321,13 @@ def cmd_rerun(args) -> int:
     """Reproducibility control: same approved inputs and assumptions, same output hashes."""
     run_dir = Path(args.run)
     first = lineage.read_manifest(run_dir)
+    lineage.check_replay_environment(first)
     cfg = first["config"]
-    config = RunConfig(inputs=cfg["inputs"], scenarios=tuple(cfg["scenarios"]),
-                       variant=cfg["variant"], mode=cfg.get("mode", MODE_SYNTHETIC))
+    config = RunConfig(inputs=(run_dir / "data").as_posix(), scenarios=tuple(cfg["scenarios"]),
+                       variant=cfg["variant"], mode=cfg.get("mode", MODE_SYNTHETIC),
+                       terminal_treatment=cfg.get("terminal_treatment", "z"))
+    if cfg.get("analysis"):
+        config.analysis = str(run_dir / "data" / "analysis.yaml")
     runs_dir = Path(args.runs_dir) if args.runs_dir else run_dir.parent
     ctx, second = execute(config, runs_dir)
     differing = lineage.compare_outputs(first, second)
@@ -310,6 +361,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--scenarios", default="baseline,adverse",
                      help="comma-separated scenarios (default: baseline,adverse)")
     run.add_argument("--variant", default="core", help="core, annuity, linear or utilisation")
+    run.add_argument("--terminal-treatment", choices=("z", "parameters"), default="z",
+                     help="synthetic Z reversion or June-2026 draft parameter reversion")
+    run.add_argument("--analysis", help="optional versioned synthetic analysis YAML, captured at R2")
     run.add_argument("--mode", default=MODE_SYNTHETIC, choices=MODES,
                      help="synthetic (default); regulatory blocks in v1")
     run.add_argument("--runs-dir", default="runs", help="where run folders go (default: runs)")
@@ -334,7 +388,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     with console_logging(getattr(args, "quiet", False)):
-        return args.func(args)
+        try:
+            return args.func(args)
+        except BlockingError as exc:
+            LOG.error("%s", exc)
+            return EXIT_BLOCKED
 
 
 if __name__ == "__main__":

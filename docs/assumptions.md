@@ -30,6 +30,12 @@ The requirements and the design leave several inputs to the project owner. To de
 
 ## Other readings the requirements leave open
 
+The implementation review of 30 October 2026 adds strict parameter domains: CPR endpoints
+zero and one remain permitted for deterministic boundary cases, rho is in [0,1), the SICR
+multiple is positive, and LGD/prepayment sensitivities are nonnegative. This does not change
+the existing synthetic calibration. R8 validates against R5's schedule independently of the
+parameter records, so deleted terminal buckets cannot shorten the priced maturity.
+
 | # | Topic | Assumption |
 |---|---|---|
 | A12 | LGD-01, LGD-04 | Not built: LGD-12 uses no collateral or recovery data. The collateral fields (LTV, DSCR, type) are generated and kept as data. |
@@ -53,6 +59,32 @@ The requirements and the design leave several inputs to the project owner. To de
 | A30 | Qualitative SICR triggers | **Owner decision of 18 October 2026:** use the three triggers, so that a performing facility that is 30 or more days past due, on the watchlist or forborne is S2 whatever its grade (MIG-05); hold a flag until the facility defaults, because the flags are not projected (option (a)); and depart from MIG-07's last sentence and design D3 (C11). **Proposed by Claude Code, not owner-approved:** (1) one global setting for every segment (`sicr_triggers` in the parameter set: the switched-on triggers, the 30-day threshold, `hold: until_default`, a source definition per trigger); (2) a like-for-like replacement keeps its facility's flags; (3) in the synthetic data every flag is observed at the snapshot date (`credit_status_date`); (4) O3 makes 25% of each segment's S2 facilities S2 by a trigger alone, with a grade above the SICR line, 331 in input set `d62d0386f2c5256e`, 250 of them with no S2 grade at all; one that drew no trigger gets one (DPD 40%, watchlist 40%, forbearance 20%); (5) these O3 draws use their own random stream, so the rest of the book, the O4 openings included, is the same as in `514ed0e86e3dc760`. O3 needs `dpd_days` between 2 and 89 and at least one switched-on trigger, and stops otherwise. How the engine applies it: R3 rejects a missing flag (`MISSING_FLAG`), a negative DPD (`INVALID_DPD`), a missing or post-snapshot observation date (`INVALID_CREDIT_STATUS_DATE`) and a stage that neither the SICR line nor a trigger explains (`STAGE_GRADE_CONFLICT`); R3 blocks incomplete settings (`MISSING_PARAMETER`); R7 holds a flagged facility in S2 in every performing grade. No S1 facility carries a trigger. |
 
 ## Conflicts between documents
+
+Preparation extension authorised on 30 October 2026 by the request to implement the review
+and the clarification “Use the EBA draft and synthetic examples”: the new optional workflows
+are described in the [implementation register](implementation-status.md). This authorises
+synthetic demonstrations, not model approval or closure of numerical owner sign-offs.
+
+The selectable parameter-linear terminal method departs from D5/A27 only when requested:
+R6 blends transition probabilities and LGD endpoints, and R8 uses their product for S1 in
+2030. The default continues to interpolate the 2029 loss-rate product. Prepayment remains
+Z-driven in either mode. Recovery, benchmark, remaining-horizon SICR and climate analyses
+are separate from core parameters/stages. The design has a preparation addendum reflecting
+these boundaries. Existing A12 describes the core; the new recovery diagnostic does not replace it.
+
+All example risk weights, CCFs, floor factors, CET1 balances, climate matrices/loss rates,
+recovery costs/timing and internal loss budgets are invented, versioned demonstration inputs.
+The capital bridge has explicit symmetric tax treatment and externally supplied shortfall/NPL
+adjustments. Climate accepts adverse macro-conditioned bundles, with a non-offsetting check
+at channel/year aggregate level, not an exposure-level clamp. Insurance input is an amount
+reducing the incremental provision stock, not a cash-flow timing model. Remaining-horizon
+SICR uses the R5 replacement maturity and reports thresholds only. Calibration quadrature
+assumes standard-normal Z; severity diagnostics are one-year PD × EAD × LGD. No empirical
+validation or official template equivalence is implied.
+
+The frozen owner requirements/oracles remain unchanged; the draft reference and method
+selection are recorded in each run's manifest and readiness report instead of rewriting
+owner decisions. The numerical AT-48, AT-51 and AT-52 dependencies remain OPEN.
 
 The design leads. Where another document disagrees, the build follows the design, or both readings where it can, and the conflict is listed here for resolution.
 

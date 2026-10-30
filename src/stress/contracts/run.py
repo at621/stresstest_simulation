@@ -29,6 +29,8 @@ class RunConfig:
     scenarios: tuple[str, ...]
     variant: str
     mode: str = MODE_SYNTHETIC
+    terminal_treatment: str = "z"
+    analysis: str | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -36,6 +38,8 @@ class RunConfig:
             "scenarios": list(self.scenarios),
             "variant": self.variant,
             "mode": self.mode,
+            "terminal_treatment": self.terminal_treatment,
+            "analysis": self.analysis,
         }
 
 

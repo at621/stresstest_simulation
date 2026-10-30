@@ -24,7 +24,7 @@ def test_missing_terminal_input_blocks(mini, tmp_path):
     # 2. The interpolation of AT-06 needs the baseline end-of-horizon parameters.
     empty = Parameters(pit=pd.DataFrame(), facility=pd.DataFrame(),
                        pd_curves=pd.DataFrame({"scenario": pd.Series(dtype=str)}),
-                       lgd_of_year=pd.DataFrame())
+                       lgd_of_year=pd.DataFrame(), schedule=pd.DataFrame())
     z = pd.DataFrame({"segment": ["P01"], "country": ["NL"], "scenario": ["adverse"],
                       "year": [year + 1], "adverse_weight": [oracle(case["expected"]["terminal_case"])
                                                              ["expected"]["weights"]["adverse"]]})

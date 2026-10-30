@@ -12,4 +12,5 @@
 - Apply the accounting CCF once and the regulatory CCF once, never in sequence. Keep the regulatory EAD bridge apart (EAD-04, EAD-07, MOD-02).
 - Buckets after 2029 use the reverted Z (ECL-10). A missing terminal bucket blocks; it is never zero.
 - Build baseline parameters before adverse, because adverse reverts toward baseline 2029.
+- Authorised preparation alternative (30 October 2026): `terminal_treatment=parameters` linearly blends terminal matrix probabilities and LGD endpoints; prepayment remains Z-driven. R8 bypasses its default terminal product interpolation for this option. Standalone benchmark/recovery/challenge diagnostics never overwrite core ParameterRecords. See the design preparation addendum and implementation register.
 - Every value is a ParameterRecord under the MOD-06 key. A duplicate or missing key blocks.

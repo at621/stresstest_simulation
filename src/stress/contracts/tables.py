@@ -234,6 +234,8 @@ class Parameters:
     pd_curves: pd.DataFrame  # PD_CURVES
     facility: pd.DataFrame  # PARAMETERS
     lgd_of_year: pd.DataFrame  # LGD_OF_YEAR
+    schedule: pd.DataFrame  # R5 schedule: independent expected coverage, including final buckets
+    terminal_treatment: str = "z"
 
 
 @dataclass

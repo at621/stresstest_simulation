@@ -64,7 +64,8 @@ def test_missing_curve_bucket_blocks_the_ecl(core_run, full_tables):
     curves = builders.result(ctx, "pd_curves.parquet")
     facility = builders.result(ctx, "parameters.parquet")
     params = Parameters(pit=builders.result(ctx, "pit_matrices.parquet"), pd_curves=curves,
-                        facility=facility, lgd_of_year=builders.result(ctx, "lgd_of_year.parquet"))
+                        facility=facility, lgd_of_year=builders.result(ctx, "lgd_of_year.parquet"),
+                        schedule=builders.result(ctx, "cf_schedule.parquet"))
     fac = full_tables["facilities"].merge(full_tables["obligors"][["obligor_id", "country"]], on="obligor_id")
     portfolio = fac.assign(route=np.where(fac["ifrs_stage"] < 3, ROUTE_PERFORMING, ROUTE_S3_ORIGINAL))
     grades = tuple(full_tables["parameter_set"]["master_scale"]["grades"])
@@ -87,13 +88,14 @@ def test_missing_curve_bucket_blocks_the_ecl(core_run, full_tables):
     }
     for what, (drop, reason) in gaps.items():
         broken = Parameters(pit=params.pit, pd_curves=curves[~drop], facility=facility,
-                            lgd_of_year=params.lgd_of_year)
+                            lgd_of_year=params.lgd_of_year, schedule=params.schedule)
         with pytest.raises(BlockingError) as err:
             performing_ecl(broken, portfolio, scenario, year, grades)
         assert err.value.code == Block.PARAMETER_ALIGNMENT and reason in str(err.value), what
     unknown = curves.copy()
     unknown.loc[curve & (unknown["cohort"] == grades[0]), "cohort"] = "not a grade"
-    broken = Parameters(pit=params.pit, pd_curves=unknown, facility=facility, lgd_of_year=params.lgd_of_year)
+    broken = Parameters(pit=params.pit, pd_curves=unknown, facility=facility,
+                        lgd_of_year=params.lgd_of_year, schedule=params.schedule)
     with pytest.raises(BlockingError) as err:
         performing_ecl(broken, portfolio, scenario, year, grades)
     assert err.value.code == Block.PARAMETER_ALIGNMENT and "unknown grade" in str(err.value)

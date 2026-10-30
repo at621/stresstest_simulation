@@ -103,12 +103,27 @@ uv run ruff check
 
 ## Running
 
+Calculation controls reject malformed booleans/dates, non-finite scenario values and invalid
+synthetic parameter domains. Facility ECL inputs must cover exactly the independent R5
+contractual schedule; a missing middle or final bucket blocks the run. See the
+[review implementation register](docs/implementation-status.md) for the current work.
+
+Optional preparation analyses use the June 2026 EBA draft and explicit synthetic model inputs.
+The [runnable example](docs/examples/README.md) covers benchmark selection, recovery LGD,
+capital, separate climate, reporting mappings and reverse-loss diagnostics. Add
+`--terminal-treatment parameters` for a separate linear-parameter reversion sensitivity.
+These features do not enable regulatory submissions; the readiness report records the open gates.
+
 ```
 uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
 uv run stress report --run runs/<run_id>      # print results/reports/summary.md
 uv run stress rerun --run runs/<run_id>       # rerun from the manifest; output hashes must match
 uv run stress compare --base runs/<a> --new runs/<b>
 ```
+
+Report, compare and rerun verify sealed input/output hashes before reading them. Rerun uses
+the saved `data/` files and checks source-content and runtime identity. CI runs the locked
+environment, regression suite, import boundaries, lint and generated-spec drift check.
 
 Since 18 October 2026 the input contract carries `credit_status_date`, so the engine blocks at R2 on the older input sets (`514ed0e86e3dc760`, `32415eb9d5bbcd74`), and `stress rerun` of a run made on them blocks too.
 

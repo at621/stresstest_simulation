@@ -80,7 +80,7 @@ Check the protection with [runbook.md](runbook.md) after any change to `.claude/
 v1 is complete. These items wait on the owner, and until they are settled the engine runs on the assumptions in [assumptions.md](assumptions.md). When one is settled, record the answer in the design or the requirements and remove it here.
 
 1. **Parameter values and oracle values** (requirements §1.5): proposed values are in `foundation/parameter_set.yaml` and await the owner. The AT-48, AT-51 and AT-52 numbers stay open. See [assumptions.md](assumptions.md) A2 and A10.
-2. **LGD-01 and LGD-04:** kept for later production work and not built (A12). Confirm, or remove them (requirements §1.5).
+2. **LGD-01 and LGD-04:** production recovery-model integration remains open (A12). The October 2026 preparation extension adds a separate synthetic single-date recovery diagnostic, without changing core LGD. Confirm the production model and its calibration (requirements §1.5).
 3. **PD-10 requirement text (C9):** the owner dropped the √(1−ρ) divisor of the PD-10 shift on 18 October 2026 (D13, A29), which also settles SYN-PAR-09 (A8, C2). PD-10's text still prescribes the divisor and calls Z = 0 the median year. The owner updates it (C9 proposes wording); O1 then reruns, and a new input set follows.
 4. **§8.7 opening performing LGD:** used as each segment's reference (mean) TTC LGD (A13). Confirm.
 5. **`inputs/bank/`:** protected and not in git. Delete it by hand, or keep it as the future place for real data (OPS-05).
@@ -89,3 +89,4 @@ v1 is complete. These items wait on the owner, and until they are settled the en
    - the transcribed spec in `docs/spec/` (GOV-03);
    - the input set `inputs/d62d0386f2c5256e/`, which since 18 October 2026 carries the qualitative SICR triggers (A30) and replaces `inputs/514ed0e86e3dc760/`;
    - the results of the full core run. The first-year charge that came from O4 is gone since the divisor was dropped; see "Results that need the owner's eye" in [assumptions.md](assumptions.md).
+8. **Draft preparation to production:** reconcile the final 2027 package when released, validate the selected terminal convention, supply approved model/benchmark and capital inputs, extend sovereign fallback where needed, establish the complete climate perimeter and approve official template mappings. The user authorised draft-based synthetic examples on 30 October 2026; this does not close model validation or owner numerical sign-offs. See the [implementation register](implementation-status.md).

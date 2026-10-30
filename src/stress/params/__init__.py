@@ -57,14 +57,23 @@ def scenario_order(requested) -> list[str]:
 class PitBook:
     """PiT matrices M(y) per segment, country, scenario and year, cached by (segment, Z)."""
 
-    def __init__(self, ttc: dict[str, np.ndarray], segments: dict, z: dict, tol: float):
+    def __init__(self, ttc: dict[str, np.ndarray], segments: dict, z: dict, tol: float,
+                 terminal_rule: dict | None = None):
         self.ttc = ttc
         self.segments = segments
         self.z = z
         self.tol = tol
+        self.terminal_rule = terminal_rule
         self._cache: dict[tuple[str, float], np.ndarray] = {}
 
     def get(self, segment: str, country: str, scenario: str, year: int) -> np.ndarray:
+        if self.terminal_rule and year > self.terminal_rule["last_scenario_year"]:
+            last = self.terminal_rule["last_scenario_year"]
+            weight = max(0.0, 1 - (year - last) / self.terminal_rule["reversion_years"])
+            base = self.get(segment, country, BASELINE, last)
+            if scenario == BASELINE:
+                return base
+            return weight * self.get(segment, country, scenario, last) + (1 - weight) * base
         key = (segment, country, scenario, int(year))
         if key not in self.z:
             raise BlockingError(STEP, Block.MISSING_TERMINAL_INPUT,
@@ -141,7 +150,8 @@ def pd_curves(book: PitBook, schedule: pandas.DataFrame, perf: pandas.DataFrame,
 
 
 def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: pandas.DataFrame,
-                        ps: dict, variant: dict, scenarios: list[str]) -> pandas.DataFrame:
+                        ps: dict, variant: dict, scenarios: list[str],
+                        terminal_treatment: str = "z") -> pandas.DataFrame:
     """LGD, prepayment and EAD per facility, scenario, valuation date and default bucket."""
     segments = ps["segments"]
     attrs = perf[["facility_id", "segment", "country", "ttc_lgd", "undrawn"]].copy()
@@ -162,11 +172,30 @@ def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: p
         cpr_ttc = rows["segment"].map(lambda s: segments[s]["cpr_ttc"]).astype(float)
         cpr_v = rows["segment"].map(lambda s: segments[s]["cpr_v"]).astype(float)
         rows["lgd"] = lgd_from_z(rows["ttc_lgd"].to_numpy(), w.to_numpy(), rows["z"].to_numpy())
+        if terminal_treatment == "parameters" and scenario != BASELINE:
+            rule = ps["terminal_rule"]
+            last = rule["last_scenario_year"]
+            endpoints = z.loc[z["year"].eq(last)].set_index(["segment", "country", "scenario"])["z"]
+            index = pandas.MultiIndex.from_frame(rows[["segment", "country"]])
+            za = endpoints.xs(scenario, level="scenario").reindex(index).to_numpy()
+            zb = endpoints.xs(BASELINE, level="scenario").reindex(index).to_numpy()
+            if not np.isfinite(za).all() or not np.isfinite(zb).all():
+                raise BlockingError(STEP, Block.MISSING_TERMINAL_INPUT, "missing parameter-reversion endpoint")
+            a = np.clip(1 - (rows["bucket_year"].to_numpy() - last) / rule["reversion_years"], 0, 1)
+            reverted = (a * lgd_from_z(rows["ttc_lgd"], w, za)
+                        + (1 - a) * lgd_from_z(rows["ttc_lgd"], w, zb))
+            rows["lgd"] = np.where(rows["bucket_year"] > last, reverted, rows["lgd"])
         rows["prepayment_rate"] = prepayment_rate(cpr_ttc.to_numpy(), cpr_v.to_numpy(), rows["z"].to_numpy())
+        if not np.isfinite(rows["prepayment_rate"]).all():
+            raise BlockingError(STEP, Block.MISSING_PARAMETER, "non-finite prepayment rate")
         rows = rows.sort_values(["facility_id", "valuation_year", "period"], kind="mergesort")
         keys = [rows["facility_id"], rows["valuation_year"]]
         kept = (1.0 - rows["prepayment_rate"]).groupby(keys).cumprod()
-        rows["not_prepaid_share"] = kept.groupby(keys).shift(1).fillna(1.0)
+        rows["not_prepaid_share"] = kept.groupby(keys).shift(1)
+        first_bucket = rows.groupby(["facility_id", "valuation_year"]).cumcount().eq(0)
+        rows.loc[first_bucket, "not_prepaid_share"] = 1.0
+        if not np.isfinite(rows["not_prepaid_share"]).all():
+            raise BlockingError(STEP, Block.MISSING_PARAMETER, "missing prepayment survival")
         exposure = ead(rows["opening_balance"].to_numpy(), rows["undrawn"].to_numpy(),
                        rows["ccf"].astype(float).to_numpy(), rows["not_prepaid_share"].to_numpy())
         rows["ead_drawn"] = exposure.drawn
@@ -225,7 +254,8 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
     scenarios = scenario_order(ctx.scenarios)
     perf = routed.portfolio[routed.portfolio["route"] == ROUTE_PERFORMING]
     lookup = z_lookup(drivers.z)
-    book = PitBook(ttc, ps["segments"], lookup, tol)
+    book = PitBook(ttc, ps["segments"], lookup, tol,
+                   ps["terminal_rule"] if ctx.config.terminal_treatment == "parameters" else None)
     keys = sorted({(s, c) for s, c in zip(routed.portfolio["segment"], routed.portfolio["country"])})
     first = int(ps["horizon"]["projection_years"][0])
     last_reported = int(ps["terminal_rule"]["last_scenario_year"]) + int(ps["terminal_rule"]["reversion_years"]) + 1
@@ -237,7 +267,8 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
                     range(first, last_reported + 1), grades)
     curves = store.finalise_pd_curves(pd_curves(book, schedule, perf, scenarios, grades, tol), version)
     facility = store.finalise_parameters(
-        facility_parameters(schedule, perf, drivers.z, ps, ps["variants"][ctx.variant], scenarios), version)
+        facility_parameters(schedule, perf, drivers.z, ps, ps["variants"][ctx.variant], scenarios,
+                            ctx.config.terminal_treatment), version)
     lgd = lgd_of_year(routed.portfolio, drivers.z, ps, scenarios, ps["variants"][ctx.variant])
     LOG.info("PiT matrices: %d distinct shifts; every row sums to 1 within %g and PD rises with the grade",
              len(book._cache), tol)
@@ -253,5 +284,6 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
                  / 1_000_000)
     return Parameters(
         pit=pit.sort_values(list(PIT_MATRICES.key), kind="mergesort").reset_index(drop=True),
-        pd_curves=curves, facility=facility, lgd_of_year=lgd,
+        pd_curves=curves, facility=facility, lgd_of_year=lgd, schedule=schedule,
+        terminal_treatment=ctx.config.terminal_treatment,
     )

@@ -1,5 +1,12 @@
 # Runbook
 
+## Calculation integrity
+
+R2 rejects invalid boolean/date representations and infinite numeric values. R3 rejects
+non-finite or out-of-domain synthetic parameters. R8 compares facility parameter coverage
+against the R5 schedule, including the last bucket; missing data never becomes zero ECL.
+Resolve a blocked input by rebuilding a new input set, not by editing a sealed run.
+
 ## Protection check
 
 Run this after setting up the repo, after any change to `.claude/`, and after upgrading Claude Code.
@@ -49,3 +56,26 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 
 - **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about three minutes), and blocks the stop until they pass.
 - **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks and refuses protected paths and run folders.
+
+### Draft preparation and replay
+
+Use [the example commands](examples/README.md) to generate a synthetic analysis sidecar and
+pass it with `--analysis`. R2 validates its schema/status/input-set binding and seals its exact
+bytes. Omitted sections are reported as NOT_PROVIDED; explicitly supplied incomplete sections
+block. `analysis_readiness.csv` records input approval, draft status, model status and remaining
+bank/owner gates. An approval record is evidence, not a digital signature or a newly granted approval.
+
+`--terminal-treatment z` is the default. `--terminal-treatment parameters` instead linearly
+reverts transition probabilities and LGD from adverse 2029 to baseline 2029 over six years.
+Baseline stays flat. End-2029 S1 uses the resulting 2030 PD and LGD, while the default retains
+the existing product-loss-rate interpolation. Prepayment retains its Z convention. Compare
+the two sealed runs to quantify the sensitivity; do not mix them into one reported scenario.
+
+`stress report`, `compare` and `rerun` reject tampered sealed artifacts. Strict rerun first
+checks source contents and Python/package versions, then reads the verified saved `data/`
+snapshot, including the optional sidecar. It does not require the original input folder.
+Hashes detect accidental alteration; manifests are not cryptographic attestations from an approver.
+
+For the complete local CI gate, run `uv run python tests/ci_gate.py`. It checks O1 drift,
+Ruff, import boundaries and all tests. CI runs the same entry point. Numerical approval
+oracles remain open until supplied by the owner; passing automated checks does not close them.

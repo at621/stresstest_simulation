@@ -11,6 +11,9 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+tests/.ci-*/
+tests/.impl-*/
+tests/.review-*/
 
 # Run folders stay local; approved runs go to the bank's retention store (OPS-03)
 runs/*

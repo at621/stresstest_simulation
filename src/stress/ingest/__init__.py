@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import shutil
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ import yaml
 
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import (
+    APPROVAL_FILE,
     COMMITMENTS,
     DATASETS,
     FACILITIES,
@@ -100,19 +102,32 @@ def _infer_status(series: pd.Series, kind: str) -> pd.Series:
 def _cast(series: pd.Series, kind: str, name: str, dataset: str) -> pd.Series:
     try:
         if kind == "float":
-            return pd.to_numeric(series, errors="raise").astype(float)
+            values = pd.to_numeric(series, errors="raise").astype(float)
+            if np.isinf(values).any():
+                raise ValueError("infinite numeric value")
+            return values
         if kind == "int":
             values = pd.to_numeric(series, errors="raise")
             return values.astype("Int64")
         if kind == "bool":
-            if series.isna().any():
-                return series.astype(object)
-            return series.astype(bool)
+            def boolean(value):
+                if pd.isna(value):
+                    return None
+                if isinstance(value, (bool, np.bool_)):
+                    return bool(value)
+                if isinstance(value, (int, float, np.number)) and value in (0, 1):
+                    return bool(value)
+                if isinstance(value, str) and value.strip().lower() in ("true", "false", "0", "1"):
+                    return value.strip().lower() in ("true", "1")
+                raise ValueError(f"not a boolean: {value!r}")
+            return pd.Series([boolean(v) for v in series], index=series.index, dtype=object)
         if kind == "date":
             text = series.astype(object)
             bad = text.notna() & ~text.astype(str).str.match(DATE)
             if bad.any():
                 raise ValueError(f"not an ISO date: {text[bad].iloc[0]!r}")
+            for value in text.dropna().unique():
+                date.fromisoformat(str(value))
             return text
         return series.astype(object).where(series.notna(), None)
     except (TypeError, ValueError) as exc:
@@ -191,6 +206,8 @@ def read_scenarios(ctx: RunContext) -> tuple[pd.DataFrame, dict]:
                                 f"scenario value {n} has an unknown value type {value['value_type']!r}")
         raw = value["value"]
         number = np.nan if raw is None else float(raw)
+        if raw is not None and not np.isfinite(number):
+            raise BlockingError(STEP, Block.BAD_VALUE_TYPE, f"scenario value {n} is not finite")
         rows.append({
             "scenario": value["scenario"], "variable": value["variable"],
             "country": value["country"], "year": int(value["year"]),
@@ -271,6 +288,24 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
     manifest = json.loads((ctx.input_dir / INPUT_MANIFEST).read_text(encoding="utf-8"))
     check_hashes(ctx, manifest)
     copy_raw(ctx)
+    approval_path = ctx.input_dir / APPROVAL_FILE
+    approval = {"status": "MISSING", "input_set_hash": ctx.input_set_hash}
+    if approval_path.is_file():
+        try:
+            approval = json.loads(approval_path.read_text(encoding="utf-8"))
+            if not isinstance(approval, dict) or approval.get("status") not in ("APPROVED", "PENDING_OWNER_APPROVAL"):
+                raise ValueError("unknown approval status")
+            if approval.get("status") == "APPROVED":
+                if not approval.get("approved_by") or not approval.get("approved_on"):
+                    raise ValueError("approval lacks approver or date")
+                date.fromisoformat(approval["approved_on"])
+        except (ValueError, TypeError) as exc:
+            raise BlockingError(STEP, Block.BAD_VALUE_TYPE, f"invalid approval evidence: {exc}") from exc
+        if approval.get("input_set_hash") != ctx.input_set_hash:
+            raise BlockingError(STEP, Block.INPUT_HASH_MISMATCH, "approval belongs to another input set")
+        shutil.copy2(approval_path, ctx.data_dir / APPROVAL_FILE)
+    analysis = read_analysis(ctx)
+    ctx.lineage["approval"] = approval
     facilities = read_table(ctx, FACILITIES)
     obligors = read_table(ctx, OBLIGORS)
     commitments = read_table(ctx, COMMITMENTS)
@@ -311,5 +346,38 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
         input_set_hash=ctx.input_set_hash, manifest=manifest, facilities=facilities,
         obligors=obligors, commitments=commitments, opening_provisions=provisions,
         ttc_pd_matrix=matrix, scenario_values=scenario_values, scenario_meta=scenario_meta,
-        parameter_set=parameter_set, load_controls=controls,
+        parameter_set=parameter_set, load_controls=controls, analysis=analysis, approval=approval,
     )
+
+
+def read_analysis(ctx: RunContext) -> dict:
+    """Optional versioned preparation inputs, captured once at R2 and sealed with the run."""
+    if not ctx.config.analysis:
+        return {}
+    from pathlib import Path
+    path = Path(ctx.config.analysis)
+    try:
+        raw = path.read_bytes()
+        doc = yaml.safe_load(raw)
+        allowed = {"schema_version", "input_set_hash", "status", "source", "version", "benchmarks", "recoveries",
+                   "capital", "climate", "template_mapping", "challenge"}
+        if not isinstance(doc, dict) or doc.get("schema_version") != 1 or set(doc) - allowed:
+            raise ValueError("analysis must use schema_version 1 and known sections")
+        if doc.get("status") != "SYNTHETIC" or not doc.get("source") or not doc.get("version"):
+            raise ValueError("preparation analysis requires SYNTHETIC status, source and version")
+        if doc.get("input_set_hash") != ctx.input_set_hash:
+            raise ValueError("analysis belongs to another input set")
+        for section in ("benchmarks", "recoveries", "climate"):
+            if section in doc and (not isinstance(doc[section], list) or not doc[section]
+                                   or not all(isinstance(row, dict) for row in doc[section])):
+                raise ValueError(f"{section} must be a nonempty list of mappings")
+        for section in ("capital", "template_mapping", "challenge"):
+            if section in doc and (not isinstance(doc[section], dict) or not doc[section]):
+                raise ValueError(f"{section} must be a nonempty mapping")
+        (ctx.data_dir / "analysis.yaml").write_bytes(raw)
+        ctx.lineage["analysis"] = {"sha256": hashlib.sha256(raw).hexdigest(),
+                                   "version": doc["version"], "source": doc["source"],
+                                   "status": doc["status"]}
+        return doc
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise BlockingError(STEP, Block.BAD_VALUE_TYPE, f"analysis: {exc}") from exc

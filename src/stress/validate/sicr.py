@@ -80,3 +80,26 @@ def qualitative_trigger(dpd, watchlist, forborne, settings: dict) -> np.ndarray:
     if "forborne" in enabled:
         out |= np.asarray(forborne).astype(bool)
     return out
+
+
+def remaining_horizon_diagnostic(portfolio: pd.DataFrame, schedule: pd.DataFrame,
+                                  matrices: dict, segments: dict) -> pd.DataFrame:
+    """Compare fixed opening thresholds with thresholds on R5's residual/replaced maturity.
+
+    Does not change projected stages or carry an additional cash-flow generator.
+    """
+    lifetime = TtcLifetime(matrices)
+    perf = portfolio.loc[portfolio.stage.ne(3), ["facility_id", "segment", "origination_rank", "sicr_rank"]]
+    horizons = schedule[["facility_id", "valuation_year", "remaining_maturity", "generation"]].drop_duplicates()
+    rows = horizons.merge(perf, on="facility_id", validate="many_to_one")
+    thresholds = {}
+    for segment, origin, horizon in rows[["segment", "origination_rank", "remaining_maturity"]].drop_duplicates().itertuples(index=False, name=None):
+        line, contiguous = sicr_rank(lifetime.pd(segment, horizon), int(origin), segments[segment]["sicr_k"])
+        if not contiguous:
+            raise ValueError("remaining-horizon SICR grades are not contiguous")
+        thresholds[segment, origin, horizon] = line
+    rows["remaining_horizon_rank"] = [thresholds[s, o, h] for s, o, h in
+                                      rows[["segment", "origination_rank", "remaining_maturity"]].itertuples(index=False, name=None)]
+    rows = rows.rename(columns={"sicr_rank": "opening_horizon_rank"})
+    rows["changed"] = rows.remaining_horizon_rank.ne(rows.opening_horizon_rank)
+    return rows

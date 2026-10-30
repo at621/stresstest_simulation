@@ -16,8 +16,10 @@ import pandas as pd
 
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
+from stress.contracts.preparation import ANALYSIS_RATES
 from stress.contracts.run import REPORTS_DIR, RESULTS_DIR, RunContext
 from stress.contracts.tables import Drivers, Parameters, RoutedPortfolio
+from stress.report.assessment import mapped_cells, portfolio_diagnostics, readiness
 from stress.report.excel import write_workbook
 
 STEP = "R10"
@@ -346,6 +348,17 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "portfolio_pd": param_tables["portfolio_pd.csv"], "lgd": param_tables["lgd_by_z.csv"],
         "rejections": routed.rejections,
     })
+    extra = portfolio_diagnostics(port, loaded.obligors.data, loaded.facilities.data, results["slices"])
+    extra.update(results.get("analyses", {}))
+    extra["readiness"] = readiness(loaded, ctx.config.terminal_treatment)
+    if "template_mapping" in loaded.analysis:
+        extra["mapped_cells"] = mapped_cells(loaded.analysis["template_mapping"], extra)
+    for name, table in extra.items():
+        # Retain rate/diagnostic precision; amounts round only at this reporting boundary.
+        rate_columns = ANALYSIS_RATES.get(name, ())
+        # reverse_stress has its own solver status; preserve it beside the run label.
+        table = table.rename(columns={"status": "analysis_status"})
+        _write(ctx, f"analysis_{name}.csv", table, rate_columns)
     written = sorted(p.name for p in ctx.reports_dir.iterdir())
     LOG.info("wrote %d reports to %s: %s", len(written), ctx.reports_dir.relative_to(ctx.run_dir).as_posix(),
              ", ".join(written))
@@ -424,6 +437,8 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
 def compare_runs(base: Path, new: Path) -> pd.DataFrame:
     """Quantified difference of the impairment report between two runs (version change)."""
     def load(run: Path) -> pd.DataFrame:
+        from stress.contracts.artifacts import verified_manifest
+        verified_manifest(run)
         return pd.read_csv(run / RESULTS_DIR / REPORTS_DIR / "impairment.csv")
     a, b = load(base), load(new)
     keys = ["scenario", "year", "portfolio"]

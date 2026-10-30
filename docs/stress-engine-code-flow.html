@@ -1518,6 +1518,33 @@ html { scroll-behavior: smooth; }
     </ol>
   </section>
 
+  <section id="preparation">
+    <h2><span class="kicker k-neutral">Preparation extension</span>June 2026 draft analyses</h2>
+    <p>Authorised on 30 October 2026: use the EBA draft and synthetic examples. The original
+    core remains the default. These extensions are preparation tools, not regulatory approval.</p>
+    <ul>
+      <li>R2 alone loads a versioned, input-set-bound analysis YAML; R11 seals its exact bytes.
+      Content hashes and runtime versions identify the calculation. Replay verifies and uses the saved inputs.</li>
+      <li>R6 optionally linearly reverts matrix probabilities and LGD after 2029. R8 then uses
+      those parameters for end-2029 S1 too. The default retains D5/A27 product-loss-rate treatment;
+      prepayment remains Z-driven. This is an explicit alternative to the default one-Z terminal convention.</li>
+      <li>Separate R6 analyses select complete model/benchmark bundles and calculate a single-date
+      collateral recovery LGD. R3 compares SICR thresholds at R5's remaining maturity. These diagnostics
+      do not replace core model parameters or stages.</li>
+      <li>The capital package consumes external regulatory and standardised risk weights/CCFs,
+      applies separate approach floors and a bank-wide output floor, and bridges explicit CET1 inputs.</li>
+      <li>R8's independent climate analysis projects supplied adverse-macro-conditioned stage
+      transitions/loss rates. Transition is 2027–2029 and flood 2027; cohort floors, insurance stocks
+      and annual charges are separate. It does not feed core capital or combine climate channels.</li>
+      <li>R10 adds country/NACE/stage totals, concentration and SICR explanations, versioned
+      illustrative export mappings and a readiness report. Independent Gaussian calibration and
+      one-year severity/reverse-loss diagnostics remain labelled with their assumptions.</li>
+    </ul>
+    <p>Only <code>cli.py</code> connects steps, through contracts. Regulatory mode stays blocked.
+    The <a href="implementation-status.md">implementation register</a> records unsupported
+    production capabilities and open approvals; owner numerical oracles are unchanged.</p>
+  </section>
+
   <!-- ============ OUTSIDE ============ -->
   <section id="outside">
     <h2><span class="kicker k-neutral">Not in the code flow</span>Handled elsewhere or later</h2>

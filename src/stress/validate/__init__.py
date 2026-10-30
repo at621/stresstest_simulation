@@ -145,8 +145,17 @@ def _check_parameters(ps: dict, segments: set[str], variant: str) -> None:
         if missing:
             raise BlockingError(STEP, Block.MISSING_PARAMETER, f"segment {seg} lacks {missing}")
         for name in ("rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v"):
-            if params[name] is None:
-                raise BlockingError(STEP, Block.MISSING_PARAMETER, f"segment {seg}: {name} is OPEN")
+            value = params[name]
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not np.isfinite(value)):
+                raise BlockingError(STEP, Block.MISSING_PARAMETER,
+                                    f"segment {seg}: {name} must be finite")
+            valid = {"rho": 0 <= value < 1, "sicr_k": value > 0,
+                     "lgd_w": value >= 0, "cpr_ttc": 0 <= value <= 1,
+                     "cpr_v": value >= 0}[name]
+            if not valid:
+                raise BlockingError(STEP, Block.MISSING_PARAMETER,
+                                    f"segment {seg}: {name} outside its allowed domain")
         if not params["z_drivers"]:
             raise BlockingError(STEP, Block.MISSING_PARAMETER, f"segment {seg}: no Z drivers")
     _check_triggers(ps["sicr_triggers"])

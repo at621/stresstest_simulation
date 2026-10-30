@@ -7,17 +7,19 @@ output; a rerun must give identical output hashes. Owns runs/<run_id>/.
 OPS-01, OPS-04, SCN-04, REG-01, section 12.2 reproducibility.
 """
 
-import hashlib
 import json
 import os
+import platform
 import stat
 import subprocess
 from datetime import UTC, datetime
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 import yaml
 
 from stress import __version__
+from stress.contracts.artifacts import canonical_hash, sha256_file, verified_manifest
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import INPUT_MANIFEST
 from stress.contracts.run import (
@@ -38,17 +40,22 @@ HASH_PREFIX = 16  # input-set folder names use the first 16 hex characters of th
 CODE_PATHS = ("src", "foundation", "pyproject.toml", "uv.lock")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for block in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
+def source_fingerprint(root: Path) -> dict:
+    files = {}
+    for name in CODE_PATHS:
+        path = root / name
+        candidates = path.rglob("*") if path.is_dir() else [path]
+        for file in sorted(candidates):
+            if (file.is_file() and "__pycache__" not in file.parts
+                    and file.suffix in (".py", ".yaml", ".json", ".toml", ".lock")):
+                files[file.relative_to(root).as_posix()] = sha256_file(file)
+    return {"sha256": canonical_hash(files), "files": files}
 
 
-def canonical_hash(data) -> str:
-    text = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def runtime_environment() -> dict:
+    return {"python": platform.python_version(), "platform": platform.platform(),
+            "packages": {p: package_version(p) for p in
+                         ("numpy", "pandas", "scipy", "pyarrow", "openpyxl", "pyyaml")}}
 
 
 def _git(*args: str) -> str | None:
@@ -68,7 +75,9 @@ def code_version() -> tuple[str, str]:
     if top:
         status = _git("-C", top, "status", "--porcelain", "--", *CODE_PATHS)
         if status:
-            dirty = "+dirty." + hashlib.sha256(status.encode()).hexdigest()[:8]
+            dirty = "+dirty." + source_fingerprint(Path(top))["sha256"][:12]
+    else:
+        dirty = "+source." + source_fingerprint(Path(__file__).resolve().parents[3])["sha256"][:12]
     return sha, f"{__version__}+{sha[:12]}{dirty}"
 
 
@@ -87,12 +96,14 @@ def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> 
     """R1: create runs/<run_id>/ with config.yaml. Blocks on regulatory mode (D9)."""
     if config.mode not in MODES:
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, f"unknown mode {config.mode!r}")
+    if config.terminal_treatment not in ("z", "parameters"):
+        raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, "unknown terminal treatment")
     if config.mode != MODE_SYNTHETIC:
         raise BlockingError(
             STEP_OPEN, Block.REGULATORY_MODE,
-            "regulatory mode is not available in v1: ECB benchmarks, sovereign routing and the "
-            "MOD-03 coverage test are not built, and synthetic values never fill an official "
-            "parameter (GOV-04, D9)",
+            "regulatory mode is unavailable: preparation analyses use synthetic model outputs; "
+            "official scenarios, benchmark integration, model validation and approved submission "
+            "mappings remain required. Synthetic values never fill an official parameter (GOV-04, D9)",
         )
     if not config.scenarios:
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, "no scenario requested")
@@ -101,7 +112,12 @@ def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> 
     input_dir = Path(config.inputs)
     manifest = read_input_manifest(input_dir)
     input_hash = manifest.get("input_set_hash", "")
-    if not input_hash or input_dir.name != input_hash[:HASH_PREFIX]:
+    snapshot = input_dir.name == "data"
+    if snapshot:
+        sealed = verified_manifest(input_dir.parent)
+        if sealed["input_set_hash"] != input_hash:
+            raise BlockingError(STEP_OPEN, Block.INPUT_HASH_MISMATCH, "snapshot identity differs")
+    if not input_hash or (not snapshot and input_dir.name != input_hash[:HASH_PREFIX]):
         raise BlockingError(STEP_OPEN, Block.INPUT_HASH_MISMATCH,
                             f"folder {input_dir.name} is not named by its input-set hash")
     git_sha, version = code_version()
@@ -128,6 +144,9 @@ def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> 
         input_dir=input_dir, code_version=version, spec_version=spec_version,
         created_at=now.isoformat(timespec="seconds"), status_label=STATUS_SYNTHETIC,
         lineage={"git_sha": git_sha, "engine_version": __version__,
+                 "source": source_fingerprint(Path(_git("rev-parse", "--show-toplevel")
+                                                 or Path(__file__).resolve().parents[3])),
+                 "environment": runtime_environment(),
                  "input_manifest": {k: manifest.get(k) for k in ("generator", "status", "parameter_set_id")}},
     )
 
@@ -195,7 +214,16 @@ def make_read_only(root: Path) -> None:
 
 
 def read_manifest(run_dir: Path) -> dict:
-    return json.loads((run_dir / RUN_MANIFEST).read_text(encoding="utf-8"))
+    return verified_manifest(run_dir)
+
+
+def check_replay_environment(manifest: dict) -> None:
+    """A strict rerun checks its runtime before spending time projecting a different model."""
+    root = Path(_git("rev-parse", "--show-toplevel") or Path(__file__).resolve().parents[3])
+    if manifest.get("source") and manifest["source"] != source_fingerprint(root):
+        raise BlockingError("rerun", "SOURCE_MISMATCH", "restore the sealed run's source revision before rerunning")
+    if manifest.get("environment") and manifest["environment"] != runtime_environment():
+        raise BlockingError("rerun", "ENVIRONMENT_MISMATCH", "restore the sealed run's Python and package environment")
 
 
 def compare_outputs(first: dict, second: dict) -> list[str]:

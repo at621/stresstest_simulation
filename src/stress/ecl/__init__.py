@@ -54,8 +54,32 @@ class PerformingEcl:
         self.off_life = np.einsum("igk,ik->ig", m, w_off)
 
 
-def _dense(rows: pd.DataFrame, fac_ids: np.ndarray) -> dict:
+def _dense(rows: pd.DataFrame, fac_ids: np.ndarray, schedule: pd.DataFrame) -> dict:
     """Facility parameter rows of one scenario and valuation as facility x bucket arrays."""
+    expected = schedule.rename(columns={"period": "default_bucket"})
+    key = ["facility_id", "default_bucket"]
+    if rows.empty or rows.duplicated(key).any() or expected.duplicated(key).any():
+        raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, "empty or duplicate facility buckets")
+    expected = expected[expected["facility_id"].isin(fac_ids)]
+    coverage = expected[key + ["fraction", "bucket_year"]].merge(
+        rows[key + ["fraction", "bucket_year"]], on=key, how="outer",
+        suffixes=("_expected", "_actual"), indicator=True, validate="one_to_one")
+    if (set(expected["facility_id"]) != set(fac_ids)
+            or not coverage["_merge"].eq("both").all()
+            or not coverage["fraction_expected"].eq(coverage["fraction_actual"]).all()
+            or not coverage["bucket_year_expected"].eq(coverage["bucket_year_actual"]).all()):
+        raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT,
+                            "facility buckets do not match the contractual schedule")
+    numeric = ["ead_drawn", "ead_undrawn", "lgd", "discount_factor", "fraction", "default_bucket"]
+    values = rows[numeric].to_numpy(dtype=float)
+    if (not np.isfinite(values).all() or (values < 0).any()
+            or (rows["lgd"] > 1).any() or not rows["fraction"].between(0, 1, inclusive="right").all()
+            or (rows["default_bucket"] < 1).any()
+            or not rows["default_bucket"].eq(rows["default_bucket"].astype(int)).all()):
+        raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, "invalid facility bucket values")
+    counts = rows.groupby("facility_id")["default_bucket"].agg(["count", "max", "min"])
+    if not counts["count"].eq(counts["max"]).all() or not counts["min"].eq(1).all():
+        raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, "facility buckets have gaps")
     pos = pd.Series(np.arange(len(fac_ids)), index=fac_ids)
     mapped = rows["facility_id"].map(pos)
     if mapped.isna().any():
@@ -107,9 +131,10 @@ def performing_ecl(params: Parameters, portfolio: pd.DataFrame, scenario: str, v
     fac_ids = perf["facility_id"].to_numpy()
     fp = params.facility
     rows = fp[(fp["scenario"] == scenario) & (fp["valuation_year"] == valuation)]
-    if rows["basis"].nunique() > 1:
-        raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, "mixed parameter bases in one product")
-    dense = _dense(rows, fac_ids)
+    if not rows["basis"].eq("accounting").all():
+        raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT, "non-accounting parameter basis")
+    schedule = params.schedule[params.schedule["valuation_year"] == valuation]
+    dense = _dense(rows, fac_ids, schedule)
     w_on = dense["ead_drawn"] * dense["lgd"] * dense["discount_factor"]
     w_off = dense["ead_undrawn"] * dense["lgd"] * dense["discount_factor"]
     n = len(grades)
@@ -201,7 +226,7 @@ def year_end_provisions(slices: pd.DataFrame, params: Parameters, z: pd.DataFram
     snapshot and the result is a diagnostic: S3 keeps its frozen opening allowance."""
     facts = portfolio.set_index("facility_id")
     ecl, dense = performing_ecl(params, portfolio, scenario, year, grades)
-    terminal = (not opening) and year == last_scenario_year
+    terminal = (not opening) and year == last_scenario_year and params.terminal_treatment == "z"
     if terminal:
         on12, off12 = terminal_s1(params, z, portfolio, scenario, year, grades, dense)
     else:

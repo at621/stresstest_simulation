@@ -2,6 +2,7 @@
 last scenario year (SCN-05, SCN-08, ECL-10)."""
 
 from collections.abc import Mapping, Sequence
+from math import isfinite
 
 from stress.contracts.errors import Block, BlockingError
 
@@ -30,14 +31,15 @@ def z_score(values: Mapping[str, float], drivers: Mapping[str, Mapping[str, floa
     contributions = {}
     for name, coef in drivers.items():
         for field in ("beta", "mean", "sd"):
-            if coef is None or coef.get(field) is None:
+            if (coef is None or not isinstance(coef.get(field), (int, float))
+                    or isinstance(coef[field], bool) or not isfinite(coef[field])):
                 raise BlockingError(STEP, Block.MISSING_PARAMETER,
                                     f"Z coefficient {field} missing for driver {name} {where}")
         if coef["sd"] <= 0:
             raise BlockingError(STEP, Block.MISSING_PARAMETER,
                                 f"standard deviation of driver {name} must be positive {where}")
         x = values.get(name)
-        if x is None:
+        if x is None or not isfinite(x):
             raise BlockingError(STEP, Block.MISSING_SCENARIO_VALUE,
                                 f"scenario value for driver {name} missing {where}")
         contributions[name] = coef["beta"] * (x - coef["mean"]) / coef["sd"]

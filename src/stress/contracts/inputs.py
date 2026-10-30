@@ -229,3 +229,5 @@ class LoadedInputs:
     scenario_meta: dict
     parameter_set: dict
     load_controls: dict
+    analysis: dict = field(default_factory=dict)
+    approval: dict = field(default_factory=dict)

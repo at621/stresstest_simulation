@@ -22,6 +22,7 @@ if [ -n "$local_runs" ]; then
 fi
 
 unset VIRTUAL_ENV
+uv run python -m foundation.transcribe --check || exit 1
 uv run ruff check || exit 1
 uv run lint-imports --cache-dir tests/.import_linter_cache || exit 1
 uv run pytest -q -x -p no:cacheprovider || exit 1
