@@ -17,8 +17,9 @@ import pandas as pd
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
 from stress.contracts.preparation import ANALYSIS_RATES
-from stress.contracts.run import REPORTS_DIR, RESULTS_DIR, RunContext
+from stress.contracts.run import RunContext
 from stress.contracts.tables import Drivers, Parameters, RoutedPortfolio
+from stress.report import comparison
 from stress.report.assessment import mapped_cells, portfolio_diagnostics, readiness
 from stress.report.excel import write_workbook
 
@@ -436,14 +437,5 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
 
 def compare_runs(base: Path, new: Path) -> pd.DataFrame:
     """Quantified difference of the impairment report between two runs (version change)."""
-    def load(run: Path) -> pd.DataFrame:
-        from stress.contracts.artifacts import verified_manifest
-        verified_manifest(run)
-        return pd.read_csv(run / RESULTS_DIR / REPORTS_DIR / "impairment.csv")
-    a, b = load(base), load(new)
-    keys = ["scenario", "year", "portfolio"]
-    cols = ["closing_on", "closing_off", "charge_total", "cumulative_charge"]
-    joined = a[keys + cols].merge(b[keys + cols], on=keys, how="outer", suffixes=("_base", "_new"))
-    for col in cols:
-        joined[f"{col}_diff"] = joined[f"{col}_new"] - joined[f"{col}_base"]
-    return joined
+    tables, _, _ = comparison.compare(base, new)
+    return tables["impairment"]

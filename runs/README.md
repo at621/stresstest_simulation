@@ -24,6 +24,10 @@ runs/<run_id>/
     └── reports/             # R10: starting-point reconciliation, stage migration, parameters, impairment
 ```
 
+## Comparisons
+
+`stress compare --base runs/<a> --new runs/<b>` writes `runs/comparisons/<a>__<b>/`, beside the run folders, because a sealed run is write-once: `summary.md`, the differences in impairment, stage stocks and coverage, PD and LGD as CSV, and `comparison.json`, which names both runs by digest and hashes the files. The same two runs give the same bytes.
+
 ## Run ID
 
 `<yyyymmddThhmmZ>-<variant>-<hash8>`, for example `20261017T1830Z-core-3f2a9c1b`. The hash covers the config, the input set, the code version and the spec version.

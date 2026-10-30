@@ -1,12 +1,16 @@
 """Section 12.2 calculation and run controls: blocking conditions, parameter alignment,
 static balance, reproducibility and version change."""
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from stress.cli import main
+from stress.cli import EXIT_BLOCKED, main
+from stress.contracts.artifacts import sha256_file, verified_manifest
 from stress.contracts.errors import Block, BlockingError
+from stress.contracts.run import COMPARISONS_DIR
 from stress.contracts.tables import ROUTE_PERFORMING, ROUTE_S3_ORIGINAL, Parameters
 from stress.ecl import performing_ecl
 from stress.lineage import compare_outputs
@@ -14,6 +18,7 @@ from stress.params.matrix import check_matrix, pit_matrix
 from stress.params.pd import check_curve, curve_from_conditional
 from stress.projection import check_static
 from stress.report import compare_runs
+from stress.report.comparison import difference
 from tests import builders
 from tests.support import tolerance
 
@@ -191,6 +196,53 @@ def test_version_change_difference_report(mini, mini_tables, tmp_path):
     p05 = diff[(diff["portfolio"] == "P05") & (diff["scenario"] == "adverse")]
     assert (p05["closing_on_diff"].abs() > 0).any(), "the impacted book shows a quantified difference"
     assert isinstance(diff, pd.DataFrame) and {"closing_on_base", "closing_on_new"} <= set(diff.columns)
+
+
+@pytest.mark.control("Version change")
+def test_difference_report_is_retained_beside_the_runs(mini, mini_tables, tmp_path, capsys):
+    base_ctx, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
+    mini["parameter_set"]["segments"]["P05"]["lgd_w"] *= 2
+    new_ctx, _ = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "runs")
+    args = ["compare", "--base", base_ctx.run_dir.as_posix(), "--new", new_ctx.run_dir.as_posix()]
+    assert main(args) == 0
+    assert "closing_on_base" in capsys.readouterr().out, "the screen output stays"
+    folder = tmp_path / "runs" / COMPARISONS_DIR / f"{base_ctx.run_id}__{new_ctx.run_id}"
+    first = {p.name: p.read_bytes() for p in folder.iterdir()}
+    assert {"summary.md", "comparison.json", "impairment.csv", "stage_stocks.csv", "portfolio_pd.csv",
+            "lgd_by_segment.csv"} == set(first)
+
+    stages = pd.read_csv(folder / "stage_stocks.csv")
+    p05 = stages[(stages["portfolio"] == "P05") & (stages["scenario"] == "adverse")]
+    assert (p05["allowance_on_diff"].abs() > 0).any() and (p05["coverage_rate_diff"].abs() > 0).any()
+    lgd = pd.read_csv(folder / "lgd_by_segment.csv")
+    assert (lgd.loc[lgd["segment"] == "P05", "exposure_weighted_lgd_diff"].abs() > 0).any()
+    assert (lgd.loc[lgd["segment"] == "P01", "exposure_weighted_lgd_diff"] == 0).all()
+    assert "portfolio_pd.csv" in first and (pd.read_csv(folder / "portfolio_pd.csv")["one_year_pd_diff"] == 0).all()
+
+    record = json.loads(first["comparison.json"])
+    assert record["base"]["run_id"] == base_ctx.run_id and record["new"]["run_id"] == new_ctx.run_id
+    assert record["files"]["summary.md"] == sha256_file(folder / "summary.md")
+    assert base_ctx.run_id in first["summary.md"].decode("utf-8")
+    assert main(args) == 0
+    assert {p.name: p.read_bytes() for p in folder.iterdir()} == first, "a comparison is reproducible"
+    verified_manifest(base_ctx.run_dir)
+    verified_manifest(new_ctx.run_dir)
+
+
+@pytest.mark.control("Version change")
+def test_difference_report_never_enters_a_sealed_run(mini_tables, tmp_path):
+    ctx, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
+    run = ctx.run_dir.as_posix()
+    assert main(["compare", "--base", run, "--new", run, "--out", f"{run}/results/diff"]) == EXIT_BLOCKED
+    assert not (ctx.results_dir / "diff").exists()
+
+
+@pytest.mark.control("Version change")
+def test_a_row_in_only_one_run_is_not_read_as_zero():
+    base = pd.DataFrame({"year": [2027, 2028], "gca": [1.0, 2.0]})
+    new = pd.DataFrame({"year": [2027], "gca": [1.0]})
+    joined = difference(base, new, ("year",), ("gca",))
+    assert joined.loc[joined["year"] == 2028, "gca_diff"].isna().all()
 
 
 @pytest.mark.control("Z-score and prepayment")

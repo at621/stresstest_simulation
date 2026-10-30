@@ -19,6 +19,7 @@ RUN_LOG = "run.log"  # timed step log; outside results/, so it never enters the 
 DATA_DIR = "data"
 RESULTS_DIR = "results"
 REPORTS_DIR = "reports"
+COMPARISONS_DIR = "comparisons"  # beside the run folders: a sealed run is write-once
 
 
 @dataclass

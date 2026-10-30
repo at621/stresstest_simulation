@@ -121,7 +121,7 @@ uv run stress rerun --run runs/<run_id>       # rerun from the manifest; output 
 uv run stress compare --base runs/<a> --new runs/<b>
 ```
 
-Report, compare and rerun verify sealed input/output hashes before reading them. Rerun uses
+`stress compare` keeps its report in `runs/comparisons/<a>__<b>/` (see the [runbook](docs/runbook.md)). Report, compare and rerun verify sealed input/output hashes before reading them. Rerun uses
 the saved `data/` files and checks source-content and runtime identity. CI runs the locked
 environment, regression suite, import boundaries, lint and generated-spec drift check.
 

@@ -425,7 +425,7 @@ All carry `approval.json` with status `PENDING_OWNER_APPROVAL`. Since the input 
 | `stress run --inputs inputs/<hash> [--scenarios baseline,adverse] [--variant core] [--mode synthetic] [--runs-dir runs] [-q]` | Run R1–R11 on one input set |
 | `stress report --run runs/<run_id>` | Print the run's `summary.md`, or the blocking reason |
 | `stress rerun --run runs/<run_id> [--runs-dir …] [-q]` | Rerun from the manifest's configuration into a new folder and compare every output hash |
-| `stress compare --base runs/<a> --new runs/<b>` | Quantified difference of the impairment report between two runs (version-change control) |
+| `stress compare --base runs/<a> --new runs/<b> [--out …]` | Quantified difference of impairment, stage stocks and coverage, PD and LGD between two runs; prints the impairment differences and keeps the report in `runs/comparisons/<a>__<b>/` (version change). |
 
 | Exit code | Meaning |
 |---|---|
@@ -797,7 +797,7 @@ Every report carries the run's status label.
 | Checks | Every control applied, step by step, with its outcome, and rejected records by reason |
 | Notes | Status, input set, parameter set, variant, versions, horizon and portfolio names |
 
-**Run comparison.** `compare_runs` joins the `impairment.csv` of two runs on scenario, year and portfolio. It reports base, new and difference for closing allowances, charge and cumulative charge.
+**Run comparison (`report/comparison.py`).** `compare` verifies both manifests and joins four reports of the two runs: impairment, stage stocks and coverage, one-year PD, and LGD by segment. Each gives base, new and difference; a row that only one run has keeps an empty difference. `write_report` keeps the tables, `summary.md` and `comparison.json` in `runs/comparisons/<base>__<new>/` (§12.2 version change). It holds no time, so the same two runs give the same bytes, and it refuses a folder inside a sealed run.
 
 **Capital kernels (`capital/`).** `methodological_floor` applies the starting-point floor separately to the IRB and STA REA contributions (CAP-03, AT-10). `output_floor` computes the bank-wide comparison max(UTREA, factor × STREA) (CAP-04, AT-11). Nothing in v1 feeds them portfolio REA.
 

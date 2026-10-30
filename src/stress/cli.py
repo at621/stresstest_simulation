@@ -342,10 +342,14 @@ def cmd_rerun(args) -> int:
 
 
 def cmd_compare(args) -> int:
-    """Version-change control: a quantified difference report between two sealed runs."""
-    table = report.compare_runs(Path(args.base), Path(args.new))
+    """Version-change control: a quantified, retained difference report between two sealed runs."""
+    base, new = Path(args.base), Path(args.new)
+    tables, base_manifest, new_manifest = report.comparison.compare(base, new)
+    folder = Path(args.out) if args.out else report.comparison.default_folder(base, new)
+    report.comparison.write_report(tables, base_manifest, new_manifest, folder, (base, new))
     with pd.option_context("display.width", 160, "display.max_rows", 200):
-        print(table.to_string(index=False))
+        print(tables["impairment"].to_string(index=False))
+    print(f"difference report {folder.as_posix()}")
     return EXIT_OK
 
 
@@ -381,6 +385,7 @@ def build_parser() -> argparse.ArgumentParser:
     cmp = sub.add_parser("compare", help="quantified difference report between two runs")
     cmp.add_argument("--base", required=True)
     cmp.add_argument("--new", required=True)
+    cmp.add_argument("--out", help="report folder (default: comparisons/<base>__<new> beside the runs)")
     cmp.set_defaults(func=cmd_compare)
     return parser
 

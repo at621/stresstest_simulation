@@ -28,6 +28,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 from stress import cli
 from stress.contracts.run import (
+    COMPARISONS_DIR,
     DATA_DIR,
     MODE_SYNTHETIC,
     REPORTS_DIR,
@@ -248,7 +249,7 @@ def _sealed(path: Path) -> bool:
 def list_runs() -> pd.DataFrame:
     """Every run folder, oldest first. A folder without a manifest was never sealed."""
     rows = []
-    for path in sorted(p for p in RUNS_DIR.iterdir() if p.is_dir()):
+    for path in sorted(p for p in RUNS_DIR.iterdir() if p.is_dir() and p.name != COMPARISONS_DIR):
         if not _sealed(path):
             rows.append({"run_id": path.name, "status": "UNSEALED"})
             continue
