@@ -25,7 +25,8 @@ uv run stress compare --base runs/<default_run> --new runs/<parameter_run>
 Results are `results/analysis_*.parquet` and `results/reports/analysis_*.csv`. Every run also
 reports readiness, country/NACE/stage totals, group concentrations, SICR flag attribution,
 remaining-horizon SICR thresholds, a mathematical calibration diagnostic, LTV under the scenario's
-price indices, average maturity and the default-loss-weighted LGD. The optional
+price indices, average maturity, the default-loss-weighted LGD and a replica of the draft's
+CSV_CR_SCEN provisions (`analysis_template_replica.csv`) beside the engine's stock. The optional
 mapping writes a long cell table with source/measure/version and matching row counts; it is
 not an official EBA workbook. Missing matches and duplicate destinations block.
 

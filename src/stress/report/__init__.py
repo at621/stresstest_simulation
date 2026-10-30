@@ -28,6 +28,7 @@ from stress.report.assessment import (
     stressed_ltv,
 )
 from stress.report.excel import write_workbook
+from stress.report.template import template_replica
 
 STEP = "R10"
 LOG = logging.getLogger("stress.R10")
@@ -358,6 +359,8 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     extra = portfolio_diagnostics(port, loaded.obligors.data, loaded.facilities.data, results["slices"])
     extra["ltv"] = stressed_ltv(port, loaded.facilities.data, results["slices"], drivers.indices)
     extra["maturity"] = average_maturity(port, results["slices"], schedule)
+    extra["template_replica"] = template_replica(results["slices"], results["stage_flows"], params.lgd_of_year,
+                                                 drivers.z, port, years, tol)
     extra.update(results.get("analyses", {}))
     extra["readiness"] = readiness(loaded, ctx.config.terminal_treatment)
     if "template_mapping" in loaded.analysis:

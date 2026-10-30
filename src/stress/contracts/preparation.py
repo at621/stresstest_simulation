@@ -34,5 +34,7 @@ ANALYSIS_RATES = {
     "mapped_cells": ("value",),
     "ltv": ("average_ltv", "share_above_100"),
     "maturity": ("average_maturity",),
+    "template_replica": ("tr12", "tr21", "pd12m_s1", "pd12m_s2", "lgd_s1", "lgd_s2", "lrlt_s2", "loss_rate_s1_next",
+                         "gap_s1", "gap_s2", "gap_s3_new", "gap_s3_old"),
     "loss_weighted_lgd": ("loss_weighted_lgd",),
 }
