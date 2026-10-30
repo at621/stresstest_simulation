@@ -6,7 +6,7 @@
 | **Baseline** | `main` at `b59446e` (tag `v1.1.0`) |
 | **Reference run** | `20261019T0511Z-core-05ddae55`, input set `d62d0386f2c5256e` |
 | **Regulatory text** | EBA 2027 draft package of 11 June 2026. No final package was found at this date |
-| **Status** | Findings and proposals by Claude Code. Not reviewed by `change-reviewer` and not decided by the owner. This review changed nothing in the engine, the requirements or the design |
+| **Status** | Findings by Claude Code, now built on branches stacked on `improve/eba-draft-preparation`: see [Status of the findings](#status-of-the-findings). Not decided by the owner and not merged |
 
 ## Summary
 
@@ -35,6 +35,32 @@ Recommended order: fix finding 5 first, because it is small and safe. Then settl
 | 13 | No external plausibility check | Not applicable | Build; owner judges |
 | 14 | Not ready for the final package | None | Build before the final package |
 | 15 | Polish EUR exposures are not recorded as a conflict | None | Add to `docs/assumptions.md` |
+
+## Status of the findings
+
+Updated on 31 October 2026. The default run is unchanged: cumulative charges stay €130.4m baseline and €635.0m adverse, and every earlier output reproduces. Anything that would change the default, or that departs from the design, is a selectable option or a recorded conflict, so the choice stays with the owner.
+
+| # | State | Branch | What exists now | Still open |
+|---|---|---|---|---|
+| 1 | Selectable reading | `improve/s2-and-runoff-readings` | `--s2-treatment held`: +€73.3m adverse, +€26.8m baseline (C14) | The owner picks the reading |
+| 2 | Selectable reading | `improve/lgd-trough-reading` | `--lgd-path trough`: +€19.2m adverse, nil baseline (C16). Property-secured books only, so below the €40.3m measured on every book | The owner picks the reading. A model on price level and LTV stays with LGD-01 |
+| 3 | Recorded | `improve/review-conflicts` | Conflict C13 | The owner amends ECL-11, then O1 |
+| 4 | Selectable reading | `improve/s2-and-runoff-readings` | `--horizon-runoff replaced`: timing only (C15) | Decide with finding 1 |
+| 5 | Fixed | `improve/r9-bridge-rounding` | R9 compares at the §12.3 tolerance | Nothing |
+| 6 | Built | `improve/acceptance-through-runs`, `improve/ltv-maturity-report` | 32 of 36 acceptance tests reach a run or a step, and [their README](../../tests/acceptance/README.md) lists each route. RPT-06's LGD is reported | AT-28, 36 and 38 stay kernel-only with a reason. AT-01 is about the input set |
+| 7 | Built | `improve/traceability-and-sources` | [The matrix](../traceability/traceability-matrix.md): 68 tested, 27 built, 31 deferred, 7 process | Eight requirements are unmet with no decision recorded: REG-03, SCP-05, DAT-07, SYN-02, SYN-03, SCN-03, PD-07, LGD-11 |
+| 8 | Built | `improve/compare-report` | Retained report in `runs/comparisons/` with stages, coverage, PD and LGD | Nothing |
+| 9 | Report built | `improve/template-replica` | Boxes 3–9 per segment beside the engine's stock, with the flow lines and Table 4 classes (A32) | The CRR conversion factors of ¶81 change parameters, so they are not built. The S1 gap beyond discounting is not split. P04's SME split |
+| 10 | Built | `improve/ltv-maturity-report` | LTV under the scenario's prices, and average maturity (A31) | Nothing |
+| 11 | **Not built** | | Nothing | It needs the owner's decision on the Z key, a change to SCN-08 and synthetic GVA paths, so a new input set |
+| 12 | Built on a supplied calendar | `improve/npe-backstop` | Shortfall per exposure beside the capital bridge, which keeps its input (A33) | The text of Article 47c could not be retrieved, so only the unsecured 35% (footnote 75) is sourced. The capital team's approval |
+| 13 | Sheet built | `improve/plausibility-sheet` | [Published figures](../benchmarks/README.md) beside the adverse result | The owner judges. Driver moments and the Z scale change results and need a new input set, so they are **not built** |
+| 14 | Built | `improve/traceability-and-sources` | [Source register](../source-register/source-register.md) and [GOV-03 template](../source-register/gov-03-impact-assessment-template.md) | Local approval dates are blank: the owner's to give |
+| 15 | Recorded | `improve/review-conflicts` | Conflict C12 | Nothing: a scope decision |
+
+All three readings together give +€99.3m adverse and +€31.1m baseline. The first measure of finding 1 and the E1 + E3 total below used simple proxies, so they differ from these built readings: the held reading works per facility and values a replaced facility afresh, as ¶125 says.
+
+The branches stack in this order, each on the one before, from `improve/eba-draft-preparation`: `improve/r9-bridge-rounding`, `improve/compare-report`, `improve/ltv-maturity-report`, `improve/review-conflicts`, `improve/template-replica`, `improve/npe-backstop`, `improve/plausibility-sheet`, `improve/s2-and-runoff-readings`, `improve/lgd-trough-reading`, `improve/acceptance-through-runs`, `improve/traceability-and-sources`, `improve/review-status`.
 
 ## How the findings were reached
 
@@ -171,7 +197,7 @@ For new S3, ¶142 says provisions "are accumulated", while the engine re-floors 
 
 #### 5. R9 can block a correct run
 
-[The bridge check](../../src/stress/accounting/__init__.py#L52) tests `opening + charge + fx + other - closing` against `RELEASE_EPS = 1e-9`. But `charge` is defined as closing minus opening, and FX and other movements are zero, so the identity always holds and only float rounding can trip it. When it trips, the run is sealed BLOCKED with `NOT_PERMITTED_MOVEMENT`.
+[The bridge check](../../src/stress/accounting/__init__.py) tests `opening + charge + fx + other - closing` against `RELEASE_EPS = 1e-9`. But `charge` is defined as closing minus opening, and FX and other movements are zero, so the identity always holds and only float rounding can trip it. When it trips, the run is sealed BLOCKED with `NOT_PERMITTED_MOVEMENT`.
 
 Above about €8.4m, adjacent float64 values are 1.9e-9 apart, wider than the tolerance. Rounding appears when opening is well below closing, which is what happens when a large facility defaults.
 
@@ -184,7 +210,7 @@ Above about €8.4m, adjacent float64 values are 1.9e-9 apart, wider than the to
 
 #### 6. Acceptance tests bypass the pipeline
 
-21 of the 36 acceptance tests never go through a pipeline run: AT-02, 03, 04, 05, 06, 07, 08, 10, 11, 16, 18, 25, 28, 29, 33, 34, 36, 37, 38, 39 and 40. Those tests call a function directly.
+25 of the 36 acceptance tests never went through a pipeline run: AT-01, 02, 03, 04, 05, 06, 07, 08, 10, 11, 16, 18, 25, 28, 29, 33, 34, 36, 37, 38, 39, 40, 47, 49 and 51. Those tests call a function directly or read the input set. The first version of this review said 21, because it missed the four that take only the input tables.
 
 At least 13 of them (AT-03, 05, 10, 11, 25, 29, 33, 34, 36, 37, 38, 39, 40) rest on helpers that no engine code calls. A green result there proves the helper, not the engine, because R7 and R8 use separate vectorised code. R5's `contractual_schedule` is the one case seen with a parity check: `test_kernels` and AT-51 compare it with the vectorised code. The 17 public functions with no caller in the engine are:
 
@@ -323,7 +349,7 @@ If KPMG's expectation holds, the final methodology arrives within about two mont
 
 ## Work on another branch
 
-`improve/eba-draft-preparation` began as `improve/calculation-controls`. On 30 October 2026 it held 22 changed tracked files plus new modules, all uncommitted, in the same working tree as this review. Its [status note](../implementation-status.md) reports all twelve of its review items as implemented, 148 tests passing, `change-reviewer` approval and default charges unchanged at €130.4m and €635.0m. This review read that work but did not test it, and the state may have moved since.
+`improve/eba-draft-preparation` began as `improve/calculation-controls` and was committed on 30 October 2026 as `e79fc85`, after this review was first written. Its [status note](../implementation-status.md) reports all twelve of its review items as implemented, 148 tests passing, `change-reviewer` approval and default charges unchanged at €130.4m and €635.0m. This review read that work but did not test it, and the state may have moved since.
 
 ### Do not start these separately
 
@@ -371,7 +397,7 @@ The response is strongly non-linear (GL ¶68). At 3× about half the book is in 
 
 - **Scope.** It adds a climate projection in `src/stress/ecl/climate.py`, but §1.3 and §9 exclude climate risk. Its status note says the request authorised scope extensions. If so, the requirements need the same change through O1.
 - **Root folder.** It adds `.github/`, and `CLAUDE.md` requires the user's permission for a new root folder.
-- **Branch size.** Twelve review items sit on one uncommitted branch, while `CLAUDE.md` asks for one branch per improvement. Parallel sessions in one working tree also see each other's unfinished code, so a run started here can use changes that are not committed.
+- **Branch size.** Twelve review items sit in one commit, while `CLAUDE.md` asks for one branch per improvement.
 
 ## Limits
 
@@ -379,7 +405,7 @@ The response is strongly non-linear (GL ¶68). At 3× about half the book is in 
 - The June text is a draft and can change.
 - The requirement scan (finding 7) matches ID names, and the caller scan (finding 6) is static, so both show where to look rather than prove a gap.
 - The comparison with EBA 2025 (finding 13) is not like for like in perimeter or portfolio mix.
-- Neither the experiments nor this document have been reviewed by `change-reviewer`.
+- This document and the sizes in its findings are a review's estimates. Where a finding has been built, the measured figure is in [Status of the findings](#status-of-the-findings).
 
 ## Sources
 
