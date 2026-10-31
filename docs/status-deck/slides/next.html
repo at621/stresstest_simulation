@@ -1,0 +1,40 @@
+<section id="next" data-transition="fade" style="background:#F7F6F1;color:#14263B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:104px 128px 160px;display:flex;flex-direction:column;gap:30px">
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1.1;color:#14263B">Next steps, in order</h2>
+<div style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;gap:28px;align-items:center;background:#ECE9DF;padding:20px 30px;border-radius:12px">
+<p style="width:56px;font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1;color:#17598F">1</p>
+<div style="width:350px;display:flex;flex-direction:column;gap:2px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Tidy the merge</h3>
+<p style="font-size:24px;color:#46536A">Engineering</p>
+</div>
+<p style="flex:1;font-size:26px;line-height:1.3;color:#14263B">Delete 10 leftover test folders, correct stale status notes, log the new limits in TODO.md, and stop line endings blocking replay of earlier sealed runs.</p>
+</div>
+<div style="display:flex;gap:28px;align-items:center;background:#ECE9DF;padding:20px 30px;border-radius:12px">
+<p style="width:56px;font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1;color:#17598F">2</p>
+<div style="width:350px;display:flex;flex-direction:column;gap:2px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Settle decisions</h3>
+<p style="font-size:24px;color:#46536A">Owner</p>
+</div>
+<p style="flex:1;font-size:26px;line-height:1.3;color:#14263B">Give the sign-offs, choose the draft readings, rule on the 8 unmet requirements, and decide how far a rerun must reproduce across machines.</p>
+</div>
+<div style="display:flex;gap:28px;align-items:center;background:#ECE9DF;padding:20px 30px;border-radius:12px">
+<p style="width:56px;font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1;color:#17598F">3</p>
+<div style="width:350px;display:flex;flex-direction:column;gap:2px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Close regulatory gaps</h3>
+<p style="font-size:24px;color:#46536A">Owner and bank teams</p>
+</div>
+<p style="flex:1;font-size:26px;line-height:1.3;color:#14263B">Reconcile the final package, load official inputs and bank data, estimate and validate models, then open a run path for non-synthetic data.</p>
+</div>
+<div style="display:flex;gap:28px;align-items:center;background:#ECE9DF;padding:20px 30px;border-radius:12px">
+<p style="width:56px;font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1;color:#17598F">4</p>
+<div style="width:350px;display:flex;flex-direction:column;gap:2px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Extend the engine</h3>
+<p style="font-size:24px;color:#46536A">Engineering</p>
+</div>
+<p style="flex:1;font-size:26px;line-height:1.3;color:#14263B">Add fresh vintages, sales, write-offs and cures; charges by country for crises; new product types and portfolio-level grade scales.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1480px;font-size:24px;color:#5A6577">To do · Steps 1 and 2 can start now; step 3 depends on the EBA and on bank data</p>
+<p style="position:absolute;right:128px;bottom:64px;width:80px;font-size:24px;color:#5A6577;text-align:right">10</p>
+<aside>Step 1 is small and has no effect on results. The leftover folders are ten untracked test folders under tests/. The stale notes are TODO.md line 43, docs/implementation-status.md line 107, line 9 of the review findings, and architecture section 6 item 12, which still lists SCN-03 as undecided. The replay point: the four new source files changed line endings at checkout, so the source fingerprint no longer matches runs sealed before the merge, and a rerun of those runs stops with SOURCE_MISMATCH. Runs made on main replay correctly. Step 4 is a backlog that needs prioritising, not a commitment, and each item needs a design decision first. No dates are shown because none have been agreed.</aside>
+</section>

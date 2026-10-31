@@ -1,0 +1,50 @@
+<section id="goals" data-transition="fade" style="background:#F7F6F1;color:#14263B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:104px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1.1;color:#14263B">Six goals: five work, one is still open</h2>
+<table style="font-size:24px;color:#14263B">
+<tr style="background:#14263B">
+<th style="width:20%;color:#F7F6F1">Goal</th>
+<th style="width:13%;color:#F7F6F1">Status</th>
+<th style="width:33.5%;color:#F7F6F1">What works now</th>
+<th style="width:33.5%;color:#F7F6F1">Limit that remains</th>
+</tr>
+<tr style="background:#F6E4D7">
+<td>EBA 2027</td>
+<td style="color:#A8440F">Not met</td>
+<td>Full loss and provision method, run on synthetic data</td>
+<td>Regulatory mode blocks; final EBA package and approvals are missing</td>
+</tr>
+<tr>
+<td>Dynamic assumptions</td>
+<td style="color:#17598F">Works, with limits</td>
+<td>Annual drawn and undrawn changes by scenario and portfolio</td>
+<td>Scales existing loans; no new vintages, sales, write-offs or cures</td>
+</tr>
+<tr>
+<td>Multiple portfolios</td>
+<td style="color:#17598F">Works, with limits</td>
+<td>New portfolio from prepared tables, with no new calculation code</td>
+<td>Six product types, one shared grade scale, EUR amortised cost only</td>
+</tr>
+<tr>
+<td>Portfolio-specific macro models</td>
+<td style="color:#17598F">Works, with limits</td>
+<td>Linear, lagged polynomial or supplied score, per segment</td>
+<td>Models are run, not estimated; one score per segment and year</td>
+</tr>
+<tr>
+<td>Clear inputs and configuration</td>
+<td style="color:#17598F">Works, with limits</td>
+<td>One reference document and one versioned, hash-bound run file</td>
+<td>Base data and optional analyses stay in their own files</td>
+</tr>
+<tr>
+<td>Ad hoc crisis scenarios</td>
+<td style="color:#17598F">Works, with limits</td>
+<td>Named crises defined in a file, with no change to the solution</td>
+<td>Synthetic label only; baseline must run; horizon sits in the base data</td>
+</tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1480px;font-size:24px;color:#5A6577">Goals · Status is this review’s judgement of each goal as written in the README</p>
+<p style="position:absolute;right:128px;bottom:64px;width:80px;font-size:24px;color:#5A6577;text-align:right">3</p>
+<aside>Before today’s merge, none of the six goals was fully met: dynamic assumptions and one specification were not done, and the other four were partial. Each limit on this slide was checked in code or by a test run. The specification rejects a horizon setting, rejects any status other than SYNTHETIC, and a run without baseline blocks at R4. Goal 5 is the closest call: there is one reference document and one run file, but at run time the base input set, the run file and an optional analysis file are three separate things, and the horizon, tolerances, master scale and variants stay in the base parameter set.</aside>
+</section>

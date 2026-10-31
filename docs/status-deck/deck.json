@@ -1,0 +1,20 @@
+{
+  "v": 4,
+  "createdOnFiles": {"v": 1, "at": "2026-10-31T15:01:00Z"},
+  "lists": "css",
+  "title": "Stress Engine Status",
+  "cover": "cover",
+  "order": ["cover", "summary", "goals", "architecture", "extension", "core", "configurable", "results", "remaining", "next"],
+  "sections": {
+    "s1": {"description": "Where the solution stands, in one page.", "start": "cover"},
+    "s2": {"description": "The six goals and how far each has got.", "start": "goals"},
+    "s3": {"description": "How the engine is built and where the new options plug in.", "start": "architecture"},
+    "s4": {"description": "What can be used today, on main and on the branch, with the measured results.", "start": "core"},
+    "s5": {"description": "What is left to do, who owns it and in what order.", "start": "remaining"}
+  },
+  "faces": {
+    "source-serif-4": {"family": "Source Serif 4", "href": "https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400..700&display=swap"},
+    "ibm-plex-sans": {"family": "IBM Plex Sans", "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"}
+  },
+  "designSystems": []
+}

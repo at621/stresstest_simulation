@@ -1,0 +1,887 @@
+<meta charset="utf-8">
+<title>Stress Run Workflow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one column in step order, full-width figures and tables. Same tokens as docs/stress-engine-code-flow.html:
+   ochre = what you prepare, blue = the run and your links, grey = files, red = blocked. Chart hues validated in both themes. */
+:root {
+  --bg: #f3f5f8; --surface: #ffffff; --surface-2: #e9edf2; --fg: #17202b; --muted: #566272; --line: #d0d7e0;
+  --run: #2652c4; --run-soft: #e8eefb; --run-line: #9cb1e8;
+  --once: #9a5900; --once-soft: #faf0df; --once-line: #e0b26f;
+  --frozen: #4b5665; --frozen-soft: #e6eaef;
+  --block: #b3302d; --block-soft: #fbe8e7;
+  --ok: #276f50; --ok-soft: #e3f3ea;
+  --c-base: #0090a3; --c-adv: #2652c4; --c-crisis: #c26a00;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+    --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+    --frozen: #b2bcc8; --frozen-soft: #212932;
+    --block: #ff8a83; --block-soft: #3a1c1c;
+    --ok: #74d3a3; --ok-soft: #16302a;
+    --c-base: #14a08a; --c-adv: #5a78e8; --c-crisis: #cc8020;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+  --run: #89a6ff; --run-soft: #18223a; --run-line: #3d5698;
+  --once: #e6a94f; --once-soft: #2c2215; --once-line: #7d5b2a;
+  --frozen: #b2bcc8; --frozen-soft: #212932;
+  --block: #ff8a83; --block-soft: #3a1c1c;
+  --ok: #74d3a3; --ok-soft: #16302a;
+  --c-base: #14a08a; --c-adv: #5a78e8; --c-crisis: #cc8020;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
+.page {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 44px 80px;
+}
+a { color: var(--run); }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; border-radius: 3px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+p code, li code, td code, th code, h3 code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+.masthead { display: grid; gap: 18px; }
+.masthead > * { min-width: 0; }
+.eyebrow { margin: 0; font: 500 12px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(2.1rem, 5vw, 3.2rem); line-height: 1.02; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; max-width: 70ch; font-size: 1.06rem; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+section { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--line); display: grid; gap: 16px; }
+section > * { margin: 0; min-width: 0; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; line-height: 1.15; text-wrap: balance; }
+h2 .kicker { display: block; font: 600 12px/1.6 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--run); }
+h2 .kicker.opt { color: var(--once); }
+h2 .kicker.ref { color: var(--muted); }
+h3 { margin: 0; font-size: 1.02rem; font-weight: 600; line-height: 1.3; }
+.prose { max-width: 72ch; }
+.prose p { margin: 0; }
+.prose p + p { margin-top: 10px; }
+ul.plain, ol.plain { margin: 0; padding-left: 20px; max-width: 76ch; display: grid; gap: 6px; }
+
+.note { background: var(--surface-2); border-radius: 8px; padding: 12px 16px; max-width: 86ch; }
+.note p { margin: 0; }
+.note code { background: var(--surface); }
+.note.warn { background: var(--once-soft); }
+.note.warn code { background: var(--surface); }
+
+pre.cmd { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 13px/1.55 var(--mono); }
+pre.cmd .dim { color: var(--muted); }
+pre.cmd .ps { color: var(--run); font-weight: 600; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.split > * { min-width: 0; }
+.stack { display: grid; gap: 12px; }
+.stack > * { min-width: 0; margin: 0; }
+.split.code-wide { grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); }
+.tri { display: grid; gap: 14px; }
+.tri > * { min-width: 0; }
+.kind { display: grid; grid-template-columns: minmax(0, 250px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.kind > * { min-width: 0; }
+.kind h3 { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.kind p { margin: 0; font-size: 14px; color: var(--muted); }
+@media (max-width: 900px) { .split, .split.code-wide, .kind { grid-template-columns: minmax(0, 1fr); } }
+
+figure { margin: 0; display: grid; gap: 10px; }
+figure > * { min-width: 0; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+figcaption { color: var(--muted); font-size: 13.5px; max-width: 86ch; }
+.diagram { display: block; width: 100%; min-width: 860px; height: auto; color: var(--muted); font-family: var(--sans); }
+.diagram .band { fill: var(--run-soft); stroke: var(--run-line); stroke-width: 1; }
+.diagram .box { fill: var(--surface); stroke: var(--run-line); stroke-width: 1.25; }
+.diagram .box-once { fill: var(--once-soft); stroke: var(--once-line); stroke-width: 1.25; }
+.diagram .box-opt { fill: var(--surface); stroke: var(--once-line); stroke-width: 1.25; stroke-dasharray: 5 4; }
+.diagram .box-plain { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
+.diagram .box-link { fill: var(--run-soft); stroke: var(--run); stroke-width: 1.5; }
+.diagram .store { fill: var(--frozen-soft); stroke: var(--frozen); stroke-width: 1.1; }
+.diagram .hair { stroke: var(--line); stroke-width: 1; }
+.diagram text { dominant-baseline: auto; }
+.diagram .t-title { font-size: 13px; font-weight: 600; fill: var(--fg); }
+.diagram .t-big { font-size: 22px; font-weight: 700; fill: var(--fg); font-family: var(--display); }
+.diagram .t-sub { font-size: 11.5px; fill: var(--muted); }
+.diagram .t-mono { font: 600 12px var(--mono); fill: var(--fg); }
+.diagram .t-id { font: 600 12px var(--mono); fill: var(--run); }
+.diagram .t-label { font-size: 11px; fill: var(--muted); }
+.diagram .t-label-mono { font: 11px var(--mono); fill: var(--muted); }
+.diagram .t-label-run { font: 600 11px var(--mono); fill: var(--run); }
+.diagram .t-label-block { font-size: 11.5px; font-weight: 600; fill: var(--block); }
+.diagram .t-lane-once { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--once); }
+.diagram .t-lane-run { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--run); }
+.diagram .t-lane-muted { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; fill: var(--muted); }
+.diagram .edge { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.diagram .edge-run { stroke: var(--run); stroke-width: 2; fill: none; }
+.diagram .edge-once { stroke: var(--once); stroke-width: 1.3; fill: none; }
+.diagram .edge-block { stroke: var(--block); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+.diagram .ah-mut { fill: var(--muted); }
+.diagram .ah-run { fill: var(--run); }
+.diagram .ah-once { fill: var(--once); }
+.diagram .ah-block { fill: var(--block); }
+
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table.tbl { border-collapse: collapse; width: 100%; font-size: 14px; }
+.tbl th { text-align: left; font-weight: 600; font-size: 12.5px; color: var(--muted); padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: bottom; }
+.tbl td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tbl .nw { white-space: nowrap; }
+.tbl tr.total td { font-weight: 600; background: var(--surface-2); }
+.tbl tr.linked td { background: var(--run-soft); }
+.tbl tr.linked td code { background: var(--surface); }
+.tbl .moved { font-weight: 600; color: var(--run); }
+.tbl .grp { border-left: 1px solid var(--line); }
+.tbl .err { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; min-width: 260px; }
+.w-wide { min-width: 860px; }
+.w-mid { min-width: 640px; }
+.pill { display: inline-block; font: 600 11.5px/1.5 var(--mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.p-keep { background: var(--frozen-soft); color: var(--frozen); }
+.p-link { background: var(--run-soft); color: var(--run); }
+.p-carve { background: var(--once-soft); color: var(--once); }
+.p-ok { background: var(--ok-soft); color: var(--ok); }
+.p-block { background: var(--block-soft); color: var(--block); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--muted); }
+.legend li { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.c-base { background: var(--c-base); }
+.c-adv { background: var(--c-adv); }
+.c-crisis { background: var(--c-crisis); }
+.bars { display: grid; gap: 0; min-width: 170px; }
+.hit { display: block; padding: 1.5px 0; cursor: default; }
+.bar { display: block; height: 7px; border-radius: 0 4px 4px 0; min-width: 2px; }
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--fg); color: var(--bg); font-size: 12.5px; padding: 4px 8px; border-radius: 5px; white-space: nowrap; }
+
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+summary { cursor: pointer; padding: 11px 14px; font-weight: 600; }
+details .inner { padding: 0 14px 14px; display: grid; gap: 10px; }
+details .inner > * { min-width: 0; }
+details pre.cmd { max-height: 520px; overflow: auto; }
+button.copy { justify-self: start; font: 600 13px var(--sans); color: var(--run); background: var(--run-soft); border: 1px solid var(--run-line); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; display: grid; gap: 6px; }
+footer p { margin: 0; max-width: 90ch; }
+</style>
+
+<div class="page">
+<header class="masthead">
+  <p class="eyebrow">Stress engine · worked run on main at fe123e5</p>
+  <h1>From a portfolio to a sealed result</h1>
+  <p class="lede">One real run, followed step by step: which portfolios it uses, how each one gets its macro model, what the engine then does, and what comes out. Every figure, file name and error message below comes from that run or from a deliberate test of it.</p>
+  <div class="note warn"><p>The book is synthetic, and the coefficients, external scores and energy prices are invented for this example. The page shows how the engine behaves. It says nothing about what an energy crisis would really cost.</p></div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#overview">Overview</a>
+    <a href="#s1">1 Book</a>
+    <a href="#s2">2 Portfolios</a>
+    <a href="#s3">3 Model links</a>
+    <a href="#s4">4 Scenario data</a>
+    <a href="#s5">5 Run</a>
+    <a href="#s6">6 Inside the run</a>
+    <a href="#s7">7 One loan</a>
+    <a href="#s8">8 Results</a>
+    <a href="#s9">9 Check and replay</a>
+    <a href="#volumes">Volumes</a>
+    <a href="#stops">What stops a run</a>
+    <a href="#limits">Limits</a>
+    <a href="#files">The files</a>
+  </nav>
+</header>
+
+<section id="overview">
+  <h2>The workflow at a glance</h2>
+  <figure>
+    <div class="fig-scroll">
+      <svg class="diagram" viewBox="0 0 1080 386" role="img" aria-label="You prepare an input set and a specification file. The engine runs steps R1 to R11 and seals a run folder. You read it with stress report, compare and rerun. A blocked run returns you to the specification file.">
+        <defs>
+          <marker id="a-mut" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-mut" d="M0 0L8 4L0 8z"/></marker>
+          <marker id="a-run" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah-run" d="M0 0L8 4L0 8z"/></marker>
+          <marker id="a-once" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-once" d="M0 0L8 4L0 8z"/></marker>
+          <marker id="a-block" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-block" d="M0 0L8 4L0 8z"/></marker>
+        </defs>
+        <text class="t-lane-once" x="20" y="24">YOU PREPARE</text>
+        <text class="t-lane-run" x="280" y="24">THE ENGINE RUNS</text>
+        <text class="t-lane-muted" x="890" y="24">YOU READ AND DECIDE</text>
+
+        <rect class="box-opt" x="20" y="40" width="190" height="58" rx="7"/>
+        <text class="t-title" x="115" y="64" text-anchor="middle">Prepared tables</text>
+        <text class="t-sub" x="115" y="82" text-anchor="middle">only for a new portfolio</text>
+        <line class="edge-once" x1="115" y1="98" x2="115" y2="148" marker-end="url(#a-once)"/>
+        <text class="t-label-mono" x="124" y="127">package</text>
+
+        <rect class="box-once" x="20" y="150" width="190" height="58" rx="7"/>
+        <text class="t-mono" x="115" y="174" text-anchor="middle">inputs/&lt;hash&gt;/</text>
+        <text class="t-sub" x="115" y="192" text-anchor="middle">5 tables, 2 YAML files, hashed</text>
+        <line class="edge-once" x1="115" y1="262" x2="115" y2="210" marker-end="url(#a-once)"/>
+        <text class="t-label-mono" x="124" y="240">input_set_hash</text>
+
+        <rect class="box-once" x="20" y="262" width="190" height="58" rx="7"/>
+        <text class="t-title" x="115" y="286" text-anchor="middle">Run specification</text>
+        <text class="t-sub" x="115" y="304" text-anchor="middle">one YAML file per experiment</text>
+
+        <rect class="band" x="280" y="40" width="570" height="280" rx="10"/>
+        <text class="t-id" x="296" y="68">uv run stress run --specification &lt;file&gt;</text>
+
+        <rect class="box" x="288" y="92" width="98" height="126" rx="7"/>
+        <text class="t-id" x="337" y="114" text-anchor="middle">R1–R3</text>
+        <text class="t-title" x="337" y="134" text-anchor="middle">Open, check</text>
+        <text class="t-sub" x="337" y="156" text-anchor="middle">hash checks,</text>
+        <text class="t-sub" x="337" y="172" text-anchor="middle">file applied,</text>
+        <text class="t-sub" x="337" y="188" text-anchor="middle">rules, routing</text>
+
+        <rect class="box" x="402" y="92" width="98" height="126" rx="7"/>
+        <text class="t-id" x="451" y="114" text-anchor="middle">R4</text>
+        <text class="t-title" x="451" y="134" text-anchor="middle">Macro score</text>
+        <text class="t-sub" x="451" y="156" text-anchor="middle">Z by segment,</text>
+        <text class="t-sub" x="451" y="172" text-anchor="middle">country, year</text>
+        <text class="t-sub" x="451" y="188" text-anchor="middle">and scenario</text>
+
+        <rect class="box" x="516" y="92" width="98" height="126" rx="7"/>
+        <text class="t-id" x="565" y="114" text-anchor="middle">R5–R6</text>
+        <text class="t-title" x="565" y="134" text-anchor="middle">Parameters</text>
+        <text class="t-sub" x="565" y="156" text-anchor="middle">cash flows once,</text>
+        <text class="t-sub" x="565" y="172" text-anchor="middle">then PiT, LGD,</text>
+        <text class="t-sub" x="565" y="188" text-anchor="middle">prepayment, EAD</text>
+
+        <rect class="box" x="630" y="92" width="98" height="126" rx="7"/>
+        <text class="t-id" x="679" y="114" text-anchor="middle">R7–R9</text>
+        <text class="t-title" x="679" y="134" text-anchor="middle">Each year</text>
+        <text class="t-sub" x="679" y="156" text-anchor="middle">migrate grades,</text>
+        <text class="t-sub" x="679" y="172" text-anchor="middle">measure ECL,</text>
+        <text class="t-sub" x="679" y="188" text-anchor="middle">book the charge</text>
+
+        <rect class="box" x="744" y="92" width="98" height="126" rx="7"/>
+        <text class="t-id" x="793" y="114" text-anchor="middle">R10–R11</text>
+        <text class="t-title" x="793" y="134" text-anchor="middle">Report, seal</text>
+        <text class="t-sub" x="793" y="156" text-anchor="middle">32 reports,</text>
+        <text class="t-sub" x="793" y="172" text-anchor="middle">hash every file,</text>
+        <text class="t-sub" x="793" y="188" text-anchor="middle">write manifest</text>
+
+        <line class="edge" x1="386" y1="155" x2="401" y2="155" marker-end="url(#a-mut)"/>
+        <line class="edge" x1="500" y1="155" x2="515" y2="155" marker-end="url(#a-mut)"/>
+        <line class="edge" x1="614" y1="155" x2="629" y2="155" marker-end="url(#a-mut)"/>
+        <line class="edge" x1="728" y1="155" x2="743" y2="155" marker-end="url(#a-mut)"/>
+        <path class="edge" d="M702 218V236Q702 242 696 242H662Q656 242 656 236V220" marker-end="url(#a-mut)"/>
+        <text class="t-label" x="679" y="260" text-anchor="middle">3 years, each scenario</text>
+
+        <line class="edge-once" x1="210" y1="179" x2="287" y2="179" marker-end="url(#a-once)"/>
+        <text class="t-label" x="218" y="172">read at R2</text>
+        <path class="edge-once" d="M210 291H337V220" marker-end="url(#a-once)"/>
+        <text class="t-label" x="346" y="262">resolved before R1, sealed with the run</text>
+        <text class="t-label" x="346" y="284">Baseline runs first: other scenarios revert toward it</text>
+
+        <line class="edge" x1="842" y1="155" x2="889" y2="155" marker-end="url(#a-mut)"/>
+        <text class="t-label" x="870" y="147" text-anchor="middle">sealed</text>
+
+        <rect class="store" x="890" y="104" width="170" height="100" rx="7"/>
+        <text class="t-mono" x="975" y="130" text-anchor="middle">runs/&lt;run_id&gt;/</text>
+        <text class="t-sub" x="975" y="150" text-anchor="middle">data, results, run.log,</text>
+        <text class="t-sub" x="975" y="166" text-anchor="middle">manifest with hashes,</text>
+        <text class="t-sub" x="975" y="182" text-anchor="middle">never edited</text>
+
+        <line class="edge" x1="975" y1="204" x2="975" y2="221" marker-end="url(#a-mut)"/>
+        <rect class="box-plain" x="890" y="222" width="170" height="132" rx="7"/>
+        <text class="t-mono" x="902" y="242">stress report</text>
+        <text class="t-sub" x="902" y="258">the headline</text>
+        <line class="hair" x1="890" y1="266" x2="1060" y2="266"/>
+        <text class="t-mono" x="902" y="286">stress compare</text>
+        <text class="t-sub" x="902" y="302">differences between runs</text>
+        <line class="hair" x1="890" y1="310" x2="1060" y2="310"/>
+        <text class="t-mono" x="902" y="330">stress rerun</text>
+        <text class="t-sub" x="902" y="346">output hashes must match</text>
+
+        <path class="edge-block" d="M565 320V372H115V322" marker-end="url(#a-block)"/>
+        <text class="t-label-block" x="128" y="364">Blocked, exit 2: reason in manifest.json. Fix the file and run again.</text>
+      </svg>
+    </div>
+    <figcaption>Figure 1. The base data never changes. The specification file sits beside it and is applied in memory during R2, so each experiment is one file and one sealed run.</figcaption>
+  </figure>
+
+  <h3>Choose your path</h3>
+  <div class="scroll"><table class="tbl w-mid">
+    <thead><tr><th>You want</th><th>What you do</th><th>Start at</th></tr></thead>
+    <tbody>
+      <tr><td>The standard static run on the existing book</td><td>One command and no file. It gives €130.4m baseline and €635.0m adverse.<br><code>uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core</code></td><td class="nw"><a href="#s5">Step 5</a></td></tr>
+      <tr><td>Different models, sectors or a crisis on the existing book</td><td>Write a specification file. The base data stays as it is. This page does exactly this.</td><td class="nw"><a href="#s1">Step 1</a></td></tr>
+      <tr><td>A portfolio with its own data</td><td>Package the data into a new input set first, then write the file.</td><td class="nw"><a href="#add">Adding data</a></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="prose"><p><strong>The example.</strong> One file makes three changes. Consumer credit (P02) gets a nonlinear model. Commercial real estate (P04) gets scores from an external model. The energy sector moves out of corporate lending (P05) into its own portfolio (P07), with a model that reads energy prices. The run then covers baseline, adverse and a new energy crisis.</p></div>
+</section>
+
+<section id="s1">
+  <h2><span class="kicker">Step 1</span>Start from the book</h2>
+  <div class="prose">
+    <p>The current input set is <code>d62d0386f2c5256e</code>: six portfolios with €11.0bn of GCA and €2.0bn undrawn, across DE, ES, FR, IT, NL and PL.</p>
+    <p>A <strong>portfolio</strong> is a reporting label. A <strong>segment</strong> is the unit the engine calculates on: it has its own TTC matrix, parameters and macro model. Five portfolios have one segment each. P06 has two.</p>
+  </div>
+  <div class="scroll"><table class="tbl w-wide">
+    <thead><tr><th>Portfolio</th><th>Segment</th><th>Products</th><th class="n">Facilities</th><th class="n">GCA, €m</th><th class="n">Undrawn, €m</th><th>Base Z drivers</th><th>In this example</th></tr></thead>
+    <tbody>
+      <tr><td>P01 Residential mortgages</td><td><code>P01</code></td><td>mortgage</td><td class="n">4,000</td><td class="n">1,200</td><td class="n">0</td><td>GDP, unemployment, residential prices</td><td><span class="pill p-keep">keep</span></td></tr>
+      <tr><td>P02 Consumer credit</td><td><code>P02</code></td><td>consumer loan</td><td class="n">3,000</td><td class="n">60</td><td class="n">0</td><td>GDP, unemployment</td><td><span class="pill p-link">link model</span></td></tr>
+      <tr><td>P03 SME lending</td><td><code>P03</code></td><td>term loan, revolver</td><td class="n">1,500</td><td class="n">1,500</td><td class="n">600</td><td>GDP, unemployment, reference rate</td><td><span class="pill p-keep">keep</span></td></tr>
+      <tr><td>P04 Commercial real estate</td><td><code>P04</code></td><td>term loan</td><td class="n">500</td><td class="n">2,000</td><td class="n">0</td><td>GDP, CRE prices, reference rate</td><td><span class="pill p-link">link model</span></td></tr>
+      <tr><td>P05 Corporate lending</td><td><code>P05</code></td><td>term loan, revolver</td><td class="n">800</td><td class="n">4,000</td><td class="n">1,400</td><td>GDP, reference rate</td><td><span class="pill p-carve">carve out</span></td></tr>
+      <tr><td>P06 Sovereigns</td><td><code>P06_GG</code></td><td>debt security</td><td class="n">120</td><td class="n">1,344</td><td class="n">0</td><td>GDP, reference rate</td><td><span class="pill p-keep">keep</span></td></tr>
+      <tr><td>P06 Credit institutions</td><td><code>P06_CI</code></td><td>debt security</td><td class="n">80</td><td class="n">896</td><td class="n">0</td><td>GDP, unemployment, reference rate</td><td><span class="pill p-keep">keep</span></td></tr>
+      <tr class="total"><td colspan="3">Total</td><td class="n">10,000</td><td class="n">11,000</td><td class="n">2,000</td><td colspan="2"></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><p><strong>Models link to segments.</strong> To change P06 you write <code>P06_GG</code> and <code>P06_CI</code>. Writing <code>P06</code> stops the run with <code>inherited segment must be a nonempty string</code>, because the engine reads an unknown name as a new segment with no parent.</p></div>
+  <p class="prose">The base scenarios are <code>baseline</code> and <code>adverse</code>, each with five variables for 2027–2029: <code>gdp_growth</code>, <code>unemployment</code>, <code>residential_price_change</code>, <code>cre_price_change</code> and <code>reference_rate</code>. Every country has the same path today, so Z does not yet differ by country.</p>
+</section>
+
+<section id="s2">
+  <h2><span class="kicker">Step 2</span>Decide what each portfolio does</h2>
+  <p class="prose">Each portfolio takes one of four moves. Anything you leave out of the file stays as it is.</p>
+  <div class="scroll"><table class="tbl w-wide">
+    <thead><tr><th>Move</th><th>What it does</th><th>What you write</th><th>In this example</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill p-keep">keep</span></td><td>The segment keeps its base <code>z_drivers</code>. Its baseline and adverse results match the default run.</td><td>Nothing</td><td>P01, P03, P06</td></tr>
+      <tr><td><span class="pill p-link">link model</span></td><td>The segment uses a named model in place of its base drivers.</td><td><code>segments.&lt;id&gt;.macro_model</code></td><td>P02, P04</td></tr>
+      <tr><td><span class="pill p-carve">carve out</span></td><td>Part of a book moves to a new segment and, if you want, a new reporting portfolio. Balances and opening provisions stay as they are. The new segment copies its parent's matrix and parameters.</td><td><code>assignments</code>, plus a new entry under <code>segments</code> with <code>inherits</code></td><td>NACE D of P05 becomes <code>P05_ENERGY</code> in portfolio P07</td></tr>
+      <tr><td><span class="pill p-carve">add data</span></td><td>A book with its own facilities, matrix and parameters enters as a new input set.</td><td>Prepare the data, package it, then write the file</td><td>Not used here. <a href="#add">Steps below</a></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>The carve-out in this example</h3>
+  <div class="split">
+    <pre class="cmd" data-check><span class="dim"># In the specification file</span>
+assignments:
+  - where: {portfolio: P05, nace_code: D}
+    segment: P05_ENERGY
+    portfolio: P07</pre>
+    <ul class="plain">
+      <li>The selector catches 136 facilities: €800m of GCA and €252.8m undrawn.</li>
+      <li>P05 falls to 664 facilities and €3,200m. P07 starts at €800m.</li>
+      <li>A selector can match on <code>facility_id</code>, <code>portfolio</code>, <code>segment</code>, <code>country</code> or <code>nace_code</code>. Every condition must hold.</li>
+      <li>The <code>portfolio</code> line here is what moves the facilities. The <code>portfolio</code> field under <code>segments</code> is only a description.</li>
+    </ul>
+  </div>
+
+  <h3 id="add">Adding a portfolio with its own data</h3>
+  <ol class="plain">
+    <li>Copy the seven input files to a working folder and add the new book: rows in <code>facilities</code>, <code>obligors</code>, <code>opening_provisions</code> and, for undrawn limits, <code>commitments</code>, matrix rows in <code>ttc_pd_matrix</code>, and a segment entry in <code>parameter_set.yaml</code>.</li>
+    <li>Freeze the folder: <code>uv run python -m foundation.synth package --source &lt;prepared-directory&gt; --out inputs</code>. This writes the hashes and control totals and records pending owner approval. It does not generate loans or estimate provisions.</li>
+    <li>In your file, set <code>input_set_hash</code> to the full hash in the new <code>manifest.json</code>, and <code>run.inputs</code> to the new folder.</li>
+    <li>Give the new segment a <code>template_class</code>, and a model if it needs one.</li>
+  </ol>
+  <p class="prose">The review tested this with a seventh portfolio. P01–P06 baseline and adverse charges matched the control run to €0.01m.</p>
+</section>
+
+<section id="s3">
+  <h2><span class="kicker">Step 3</span>Link the models</h2>
+  <p class="prose">A link takes two parts: a definition under <code>models</code>, and one line under <code>segments</code>. The figure shows how each facility reaches its Z in this example.</p>
+  <figure>
+    <div class="fig-scroll">
+      <svg class="diagram" viewBox="0 0 1080 384" role="img" aria-label="Facilities reach a segment, and each segment reaches a model or its base drivers. All models produce one Z per segment, country, year and scenario, and that Z drives the PiT matrix, LGD, prepayment and EAD.">
+        <defs>
+          <marker id="b-mut" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-mut" d="M0 0L8 4L0 8z"/></marker>
+          <marker id="b-run" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path class="ah-run" d="M0 0L8 4L0 8z"/></marker>
+        </defs>
+        <text class="t-lane-muted" x="16" y="26">FACILITIES</text>
+        <text class="t-label-run" x="235" y="26" text-anchor="middle">assignments</text>
+        <text class="t-lane-muted" x="278" y="26">SEGMENT</text>
+        <text class="t-label-run" x="439" y="26" text-anchor="middle">macro_model</text>
+        <text class="t-lane-muted" x="482" y="26">MODEL</text>
+        <text class="t-lane-run" x="752" y="26">R4</text>
+        <text class="t-lane-run" x="936" y="26">R6</text>
+
+        <rect class="box-plain" x="16" y="44" width="176" height="54" rx="7"/>
+        <text class="t-title" x="28" y="66">P02 Consumer credit</text>
+        <text class="t-sub" x="28" y="84">3,000 facilities</text>
+        <rect class="box-plain" x="16" y="112" width="176" height="54" rx="7"/>
+        <text class="t-title" x="28" y="134">P04 Commercial RE</text>
+        <text class="t-sub" x="28" y="152">500 facilities</text>
+        <rect class="box-plain" x="16" y="180" width="176" height="54" rx="7"/>
+        <text class="t-title" x="28" y="202">P05, NACE D</text>
+        <text class="t-sub" x="28" y="220">136 facilities</text>
+        <rect class="box-plain" x="16" y="248" width="176" height="54" rx="7"/>
+        <text class="t-title" x="28" y="270">P05, other sectors</text>
+        <text class="t-sub" x="28" y="288">664 facilities</text>
+        <rect class="box-plain" x="16" y="316" width="176" height="54" rx="7"/>
+        <text class="t-title" x="28" y="338">P01, P03, P06</text>
+        <text class="t-sub" x="28" y="356">5,700 facilities</text>
+
+        <line class="edge" x1="192" y1="71" x2="277" y2="71" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="192" y1="139" x2="277" y2="139" marker-end="url(#b-mut)"/>
+        <line class="edge-run" x1="192" y1="207" x2="276" y2="207" marker-end="url(#b-run)"/>
+        <line class="edge" x1="192" y1="275" x2="277" y2="275" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="192" y1="343" x2="277" y2="343" marker-end="url(#b-mut)"/>
+
+        <rect class="box-plain" x="278" y="44" width="118" height="54" rx="7"/>
+        <text class="t-mono" x="337" y="76" text-anchor="middle">P02</text>
+        <rect class="box-plain" x="278" y="112" width="118" height="54" rx="7"/>
+        <text class="t-mono" x="337" y="144" text-anchor="middle">P04</text>
+        <rect class="box-link" x="278" y="180" width="118" height="54" rx="7"/>
+        <text class="t-mono" x="337" y="212" text-anchor="middle">P05_ENERGY</text>
+        <rect class="box-plain" x="278" y="248" width="118" height="54" rx="7"/>
+        <text class="t-mono" x="337" y="280" text-anchor="middle">P05</text>
+        <rect class="box-plain" x="278" y="316" width="118" height="54" rx="7"/>
+        <text class="t-mono" x="337" y="339" text-anchor="middle">P01, P03,</text>
+        <text class="t-mono" x="337" y="355" text-anchor="middle">P06_GG, P06_CI</text>
+
+        <line class="edge-run" x1="396" y1="71" x2="480" y2="71" marker-end="url(#b-run)"/>
+        <line class="edge-run" x1="396" y1="139" x2="480" y2="139" marker-end="url(#b-run)"/>
+        <line class="edge-run" x1="396" y1="207" x2="480" y2="207" marker-end="url(#b-run)"/>
+        <line class="edge" x1="396" y1="275" x2="481" y2="275" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="396" y1="343" x2="481" y2="343" marker-end="url(#b-mut)"/>
+
+        <rect class="box-link" x="482" y="44" width="222" height="54" rx="7"/>
+        <text class="t-mono" x="494" y="66">consumer_nonlinear</text>
+        <text class="t-sub" x="494" y="84">polynomial: GDP, GDP², unemployment</text>
+        <rect class="box-link" x="482" y="112" width="222" height="54" rx="7"/>
+        <text class="t-mono" x="494" y="134">cre_external</text>
+        <text class="t-sub" x="494" y="152">supplied: 54 rows of Z in the file</text>
+        <rect class="box-link" x="482" y="180" width="222" height="54" rx="7"/>
+        <text class="t-mono" x="494" y="202">energy_sector</text>
+        <text class="t-sub" x="494" y="220">linear: GDP, energy prices</text>
+        <rect class="box-plain" x="482" y="248" width="222" height="54" rx="7"/>
+        <text class="t-title" x="494" y="270">Base z_drivers</text>
+        <text class="t-sub" x="494" y="288">no link: GDP, reference rate</text>
+        <rect class="box-plain" x="482" y="316" width="222" height="54" rx="7"/>
+        <text class="t-title" x="494" y="338">Base z_drivers</text>
+        <text class="t-sub" x="494" y="356">no link: each segment keeps its own</text>
+
+        <line class="edge" x1="704" y1="71" x2="751" y2="71" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="704" y1="139" x2="751" y2="139" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="704" y1="207" x2="751" y2="207" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="704" y1="275" x2="751" y2="275" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="704" y1="343" x2="751" y2="343" marker-end="url(#b-mut)"/>
+
+        <rect class="box" x="752" y="44" width="138" height="326" rx="7"/>
+        <text class="t-big" x="821" y="172" text-anchor="middle">One Z</text>
+        <text class="t-sub" x="821" y="196" text-anchor="middle">for each segment,</text>
+        <text class="t-sub" x="821" y="212" text-anchor="middle">country, year</text>
+        <text class="t-sub" x="821" y="228" text-anchor="middle">and scenario</text>
+        <text class="t-label" x="821" y="256" text-anchor="middle">4,896 values, 2027–2060</text>
+
+        <line class="edge" x1="890" y1="96" x2="935" y2="96" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="890" y1="207" x2="935" y2="207" marker-end="url(#b-mut)"/>
+        <line class="edge" x1="890" y1="318" x2="935" y2="318" marker-end="url(#b-mut)"/>
+
+        <rect class="box" x="936" y="64" width="130" height="64" rx="7"/>
+        <text class="t-title" x="1001" y="90" text-anchor="middle">PiT matrix</text>
+        <text class="t-sub" x="1001" y="108" text-anchor="middle">migration and PD</text>
+        <rect class="box" x="936" y="175" width="130" height="64" rx="7"/>
+        <text class="t-title" x="1001" y="201" text-anchor="middle">LGD</text>
+        <text class="t-sub" x="1001" y="219" text-anchor="middle">moves with Z</text>
+        <rect class="box" x="936" y="286" width="130" height="64" rx="7"/>
+        <text class="t-title" x="1001" y="312" text-anchor="middle">Prepayment</text>
+        <text class="t-sub" x="1001" y="330" text-anchor="middle">and so EAD</text>
+      </svg>
+    </div>
+    <figcaption>Figure 2. Blue lines are entries you write in the file. Grey lines are what the engine does with no entry. Whatever the model, it produces the same thing: one Z, which feeds every later step.</figcaption>
+  </figure>
+
+  <h3>The three model kinds, as used here</h3>
+  <div class="tri">
+    <div class="kind">
+      <div class="stack"><h3><code>linear</code> for P05_ENERGY</h3>
+      <p>Use for a standard regression. Z is the sum of β × (x − mean) / sd.</p></div>
+      <pre class="cmd" data-check>models:
+  energy_sector:
+    kind: linear
+    source: "Illustrative coefficients"
+    version: walkthrough-v1
+    drivers:
+      gdp_growth: {beta: 0.5, mean: 0.015, sd: 0.03}
+      energy_price_change: {beta: -0.5, mean: 0.03, sd: 0.15}</pre>
+    </div>
+    <div class="kind">
+      <div class="stack"><h3><code>polynomial</code> for P02</h3>
+      <p>Use for curvature or lags. Each term can set <code>lag</code> and <code>power</code> (1, 2 or 3), and the model can add an <code>intercept</code>.</p></div>
+      <pre class="cmd" data-check>models:
+  consumer_nonlinear:
+    kind: polynomial
+    source: "Illustrative coefficients"
+    version: walkthrough-v1
+    terms:
+      activity: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: 0.6}
+      activity_squared: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: -0.08, power: 2}
+      unemployment: {variable: unemployment, mean: 0.07, sd: 0.025, beta: -0.3}</pre>
+    </div>
+    <div class="kind">
+      <div class="stack"><h3><code>supplied</code> for P04</h3>
+      <p>Use when Z comes from an external model. You give one row per scenario, country and year.</p></div>
+      <pre class="cmd" data-check>models:
+  cre_external:
+    kind: supplied
+    source: "Illustrative scores standing in for an external CRE model"
+    version: walkthrough-v1
+    values:
+        - {scenario: baseline, country: DE, year: 2027, z: 0.00}
+        - {scenario: baseline, country: ES, year: 2027, z: 0.00}
+<span class="dim">        # ... 54 rows in all: 3 scenarios, 6 countries, 3 years</span></pre>
+    </div>
+  </div>
+
+  <h3>The link itself</h3>
+  <div class="split code-wide">
+    <pre class="cmd" data-check>segments:
+  P02:
+    macro_model: consumer_nonlinear
+  P04:
+    macro_model: cre_external
+  P05_ENERGY:
+    inherits: P05
+    portfolio: P07
+    macro_model: energy_sector
+    template_class: "Loans and advances - NFC - Energy sector (walkthrough label)"</pre>
+    <ul class="plain">
+      <li>A model can serve several segments: name it under each.</li>
+      <li>A link replaces the segment's Z only. Its matrix, <code>rho</code>, <code>sicr_k</code>, <code>lgd_w</code> and prepayment settings stay, unless you override them here.</li>
+      <li>One Z drives PD, LGD and prepayment together. You cannot give PD one model and LGD another.</li>
+      <li>A defined model with no segment stops the run, and so does a link to a model that is not defined.</li>
+      <li>A new segment in a static run needs a <code>template_class</code>.</li>
+    </ul>
+  </div>
+
+  <h3>What each link computes: energy crisis, 2027</h3>
+  <div class="scroll"><table class="tbl w-wide">
+    <thead><tr><th>Segment</th><th>Terms, from <code>driver_contributions.csv</code></th><th class="n">Z</th></tr></thead>
+    <tbody>
+      <tr class="linked"><td><code>P05_ENERGY</code></td><td class="mono">0.5 × (−0.080 − 0.015) / 0.03 = −1.583<br>−0.5 × (0.600 − 0.030) / 0.15 = −1.900</td><td class="n">−3.48</td></tr>
+      <tr class="linked"><td><code>P02</code></td><td class="mono">0.6 × (−0.080 − 0.020) / 0.03 = −2.000<br>−0.08 × ((−0.080 − 0.020) / 0.03)² = −0.889<br>−0.3 × (0.075 − 0.070) / 0.025 = −0.060</td><td class="n">−2.95</td></tr>
+      <tr class="linked"><td><code>P04</code></td><td class="mono">Read directly from the file: −2.40</td><td class="n">−2.40</td></tr>
+      <tr><td><code>P05</code>, no link</td><td class="mono">0.7 × (−0.080 − 0.015) / 0.03 = −2.217<br>−0.3 × (0.060 − 0.025) / 0.015 = −0.700</td><td class="n">−2.92</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s4">
+  <h2><span class="kicker">Step 4</span>Give the models their data</h2>
+  <p class="prose">Every model needs a path for every variable it reads, in every scenario you run. This example adds one scenario and one new variable.</p>
+  <div class="stack">
+    <div class="stack">
+      <h3>A new scenario</h3>
+      <pre class="cmd" data-check>scenarios:
+  energy_crisis:
+    inherits: adverse
+    narrative: "Energy shock: deeper recession and higher rates than adverse."
+    overrides:
+      - {variable: gdp_growth, country: '*', year: 2027, value: -0.08, unit: decimal, value_type: growth}
+      - {variable: gdp_growth, country: '*', year: 2028, value: -0.04, unit: decimal, value_type: growth}
+      - {variable: reference_rate, country: '*', year: 2027, value: 0.06, unit: decimal, value_type: level}</pre>
+      <ul class="plain">
+        <li><code>inherits</code> copies every adverse value. <code>overrides</code> replace only the cells named.</li>
+        <li><code>country: '*'</code> means all six countries. For one country, name it. You cannot use <code>'*'</code> and a single country on the same cell.</li>
+        <li>You can also write a full path with <code>values</code> and no parent.</li>
+        <li>Names are permanent: reusing <code>adverse</code> stops the run.</li>
+      </ul>
+    </div>
+    <div class="stack">
+      <h3>A new driver</h3>
+      <pre class="cmd" data-check>additional_values:
+  - {scenario: baseline, country: '*', variable: energy_price_change, year: 2027, value: 0.03, unit: decimal, value_type: growth}
+  - {scenario: adverse, country: '*', variable: energy_price_change, year: 2027, value: 0.10, unit: decimal, value_type: growth}
+  - {scenario: energy_crisis, country: '*', variable: energy_price_change, year: 2027, value: 0.60, unit: decimal, value_type: growth}
+<span class="dim">  # ... 9 rows in all: 3 scenarios, 3 years</span></pre>
+      <ul class="plain">
+        <li>Baseline and adverse need the new variable too, or R4 stops with <code>MISSING_SCENARIO_VALUE</code>.</li>
+        <li><code>additional_values</code> can add values but never overwrite one.</li>
+        <li>A term with <code>lag: 1</code> also needs a 2026 value. The engine does not interpolate or fill gaps.</li>
+      </ul>
+      <h3>How the crisis fades</h3>
+      <pre class="cmd" data-check>terminal_policies:
+  energy_crisis: {method: reversion, years: 3}</pre>
+      <ul class="plain">
+        <li>Past 2029, Z moves back to the baseline's 2029 level. The base rule takes 6 years. This policy takes 3.</li>
+        <li><code>method: flat</code> holds the 2029 Z instead. Baseline always stays flat.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="kicker">Step 5</span>Finish the file and run it</h2>
+  <div class="split code-wide">
+    <div class="stack">
+      <h3>The header</h3>
+      <pre class="cmd" data-check>schema_version: 1
+status: SYNTHETIC
+source: "Workflow walkthrough, 31 October 2026. Illustrative values."
+version: walkthrough-v1
+input_set_hash: d62d0386f2c5256eb50fbc787678fdc420fc5bda42ab5f8100a147d097dc91ee
+
+run:
+  inputs: ../../inputs/d62d0386f2c5256e
+  scenarios: [baseline, adverse, energy_crisis]
+  variant: core</pre>
+      <p class="prose">The hash is the full value in <code>manifest.json</code>. <code>inputs</code> is relative to the file. The <a href="#files">complete file</a> is at the end of this page, and in <code>docs/run-workflow/</code>. Every field is defined in <code>docs/run-inputs/stress-run-inputs.html</code>.</p>
+    </div>
+    <div class="stack">
+      <h3>Other settings under <code>run</code></h3>
+      <div class="scroll"><table class="tbl">
+        <thead><tr><th>Setting</th><th>Default</th><th>Alternative</th></tr></thead>
+        <tbody>
+          <tr><td><code>variant</code></td><td>core</td><td>annuity, linear, utilisation</td></tr>
+          <tr><td><code>balance_sheet</code></td><td>static</td><td>dynamic</td></tr>
+          <tr><td><code>terminal_treatment</code></td><td>z</td><td>parameters</td></tr>
+          <tr><td><code>s2_treatment</code></td><td>repriced</td><td>held</td></tr>
+          <tr><td><code>horizon_runoff</code></td><td>contractual</td><td>replaced</td></tr>
+          <tr><td><code>lgd_path</code></td><td>annual</td><td>trough</td></tr>
+          <tr><td><code>analysis</code></td><td>none</td><td>path to an analysis file</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <h3>Run it</h3>
+  <pre class="cmd"><span class="ps">&gt;</span> uv run stress run --specification docs/run-workflow/walkthrough.yaml
+
+run 20261031T1640Z-core-d7080e13: SYNTHETIC
+baseline: cumulative charge 2027-2029 EUR 132.3m (first year 40.5m); closing provisions 2029 EUR 410.9m; S3 GCA 2029 EUR 847.6m
+adverse: cumulative charge 2027-2029 EUR 662.2m (first year 465.8m); closing provisions 2029 EUR 940.8m; S3 GCA 2029 EUR 1,634.0m
+energy_crisis: cumulative charge 2027-2029 EUR 1,173.4m (first year 978.4m); closing provisions 2029 EUR 1,452.0m; S3 GCA 2029 EUR 2,420.6m</pre>
+  <ul class="plain">
+    <li>This run took 42 seconds for three scenarios on this machine.</li>
+    <li>Exit codes: <code>0</code> sealed, <code>2</code> blocked, <code>1</code> engine fault.</li>
+    <li>Calculation settings belong in the file. Only <code>--quiet</code> and <code>--runs-dir</code> may accompany <code>--specification</code>.</li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2><span class="kicker">Step 6</span>What the engine does, step by step</h2>
+  <p class="prose">You do nothing during this part. The right-hand column shows what this run did, taken from its <code>run.log</code>.</p>
+  <div class="scroll"><table class="tbl w-wide">
+    <thead><tr><th>Step</th><th>What it does</th><th>In this run</th></tr></thead>
+    <tbody>
+      <tr><td class="nw"><strong>Before R1</strong></td><td>Reads the file, checks its shape and resolves the settings.</td><td>Three scenarios, variant <code>core</code>, static book.</td></tr>
+      <tr><td class="nw"><strong>R1</strong> Open</td><td>Creates the run folder and records the code version and settings.</td><td><code>20261031T1640Z-core-d7080e13</code>, code <code>0.1.0+fe123e52fb6d</code>.</td></tr>
+      <tr><td class="nw"><strong>R2</strong> Load</td><td>Checks all seven files against their hashes, copies them and your file into <code>data/</code>, then applies your file in memory.</td><td>10,000 facilities, 8,320 obligors, 931 commitments. Totals match: GCA €11,000.0m, undrawn €2,000.0m, opening allowances €278.6m. <code>energy_crisis</code> added, 136 facilities moved.</td></tr>
+      <tr><td class="nw"><strong>R3</strong> Validate</td><td>Checks matrices and data rules, computes the SICR line and routes each facility.</td><td>8 segments valid. 9,669 performing, 331 original S3. 960 flagged by a qualitative trigger and held in S2. No rejections.</td></tr>
+      <tr><td class="nw"><strong>R4</strong> Z</td><td>Evaluates each segment's model or base drivers, then extends Z to 2060 by the terminal rule.</td><td>4,896 Z values. Mean Z in 2027: baseline +0.02, adverse −1.31, crisis −2.71.</td></tr>
+      <tr><td class="nw"><strong>R5</strong> Cash flows</td><td>Builds contractual schedules once. They are the same in every scenario.</td><td>383,819 periods for 9,669 facilities at 4 valuation dates.</td></tr>
+      <tr><td class="nw"><strong>R6</strong> Parameters</td><td>Turns Z into PiT matrices, PD curves, LGD, prepayment and EAD. Baseline comes first.</td><td>62,760 PD-curve records, 1,151,457 facility records. Crisis LGD 4.8%–96.1%.</td></tr>
+      <tr><td class="nw"><strong>R7</strong> Migrate</td><td>Moves exposure between grades and stages for one year. Repeats for each year and scenario.</td><td>Crisis 2027: S1 €7,356.0m, S2 €2,208.9m, S3 €1,435.1m. New S3 €1,071.3m. Exposure conserved.</td></tr>
+      <tr><td class="nw"><strong>R8</strong> Provide</td><td>Measures year-end provisions on each slice, with S3 floors.</td><td>Crisis 2027: €1,146.5m on balance and €110.5m off balance.</td></tr>
+      <tr><td class="nw"><strong>R9</strong> Charge</td><td>Turns the change in provisions into the year's P&amp;L charge.</td><td>Crisis 2027: €885.5m on balance and €92.9m off balance.</td></tr>
+      <tr><td class="nw"><strong>R10</strong> Report</td><td>Aggregates, reconciles and writes the reports.</td><td>32 reports. Stocks, stage flows, charge bridge and ECL by bucket all reconcile.</td></tr>
+      <tr><td class="nw"><strong>R11</strong> Seal</td><td>Hashes every output and writes the manifest. The folder is never edited again.</td><td>50 outputs, digest <code>5108cd79021a0b2d</code>.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s7">
+  <h2><span class="kicker">Step 7</span>What a link does to one loan</h2>
+  <p class="prose">Loan <code>F09030</code> is a €37.64m term loan to an Italian obligor in NACE D (energy supply): grade G5, Stage 1, with a €95.6k opening allowance. The carve-out moved it to <code>P05_ENERGY</code>. The first column shows the same loan in the default run, under P05's base drivers.</p>
+  %%T_LOAN%%
+  <ul class="plain">
+    <li>Under adverse, the loan does better than in the default run. The energy model has a smaller GDP beta (0.5 against 0.7) and no rate term, and energy prices rise only 10%.</li>
+    <li>Under the crisis, a 60% energy price rise pushes Z to −3.48, and the PD to 10.55%.</li>
+    <li>Nothing else about the loan changed. Balance, grade, matrix and TTC LGD are the same in all four columns.</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <h2><span class="kicker">Step 8</span>Read the results</h2>
+  <h3>Cumulative impairment charge 2027–2029, € million</h3>
+  <ul class="legend" aria-label="Bar colours">
+    <li><span class="sw c-base"></span>Baseline</li>
+    <li><span class="sw c-adv"></span>Adverse</li>
+    <li><span class="sw c-crisis"></span>Energy crisis</li>
+  </ul>
+  %%T_RESULTS%%
+  <p class="prose">P01, P03 and P06 match the default run to the cent in baseline and adverse, because the file does not touch them. Figures in blue moved, and P04 baseline moved by only €0.03m. P05 falls because €800m of GCA left it. %%P0507%% The €1.9m rise in the baseline total comes from the new models on P02, P04 and P07. Totals and sums use unrounded figures.</p>
+
+  <h3>Z by segment</h3>
+  %%T_Z%%
+  <p class="prose">Shaded rows have a linked model. The crisis overrides reach every segment, including the unlinked ones, because each reads GDP. P04 is the exception: its Z comes straight from the file. All six countries have the same Z here, because every path uses <code>country: '*'</code>.</p>
+
+  <h3>Where to find each answer</h3>
+  <p class="prose">Files are in <code>runs/&lt;run_id&gt;/results/reports/</code> unless shown otherwise.</p>
+  <div class="scroll"><table class="tbl w-mid">
+    <thead><tr><th>Question</th><th>File</th></tr></thead>
+    <tbody>
+      <tr><td>What are the headline results?</td><td><code>summary.md</code>, or <code>uv run stress report --run runs/&lt;run_id&gt;</code></td></tr>
+      <tr><td>What is the full picture by portfolio?</td><td><code>stress_report.xlsx</code>: 11 sheets, with P07 and <code>energy_crisis</code> beside the others</td></tr>
+      <tr><td>What is the charge by portfolio and year?</td><td><code>impairment.csv</code></td></tr>
+      <tr><td>Which model did each segment use?</td><td><code>macro_models.csv</code></td></tr>
+      <tr><td>What is each segment's Z, and what drove it?</td><td><code>z_scores.csv</code>, <code>driver_contributions.csv</code></td></tr>
+      <tr><td>How did stages move?</td><td><code>stage_migration.csv</code>, <code>impairment_by_stage.csv</code></td></tr>
+      <tr><td>What are stocks and provisions by country and NACE?</td><td><code>analysis_dimensions.csv</code></td></tr>
+      <tr><td>Exactly what was applied?</td><td><code>effective_specification.json</code></td></tr>
+      <tr><td>Which approvals are still open?</td><td><code>analysis_readiness.csv</code></td></tr>
+      <tr><td>Was any record rejected?</td><td><code>results/rejections.parquet</code> (empty here)</td></tr>
+      <tr><td>What did each step do, and how long did it take?</td><td><code>run.log</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s9">
+  <h2><span class="kicker">Step 9</span>Check, compare and replay</h2>
+  <ol class="plain">
+    <li><strong>Confirm each link.</strong> Open <code>macro_models.csv</code>. Each segment should show the model you intended.</li>
+    <li><strong>Compare with the last run.</strong> Unlinked portfolios should not move.</li>
+    <li><strong>Replay it.</strong> The rerun reads the sealed copies, so the original files are no longer needed.</li>
+    <li><strong>Read the open gates.</strong> A sealed run is a result. It is not an approval.</li>
+    <li><strong>To change anything, write a new version.</strong> Edit the file, change <code>version</code> and run again. Sealed runs are never edited.</li>
+  </ol>
+  <div class="split">
+    <div class="stack">
+      <h3>Which model ran: <code>macro_models.csv</code></h3>
+      %%T_MODELS%%
+    </div>
+    <div class="stack">
+      <h3>Open gates: <code>analysis_readiness.csv</code></h3>
+      <div class="scroll"><table class="tbl">
+        <thead><tr><th>Gate</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td><code>input_approval</code></td><td>PENDING_OWNER_APPROVAL</td></tr>
+          <tr><td><code>experiment_approval</code></td><td>PENDING</td></tr>
+          <tr><td><code>methodology</code></td><td>DRAFT</td></tr>
+          <tr><td><code>parameters</code></td><td>PROPOSED</td></tr>
+          <tr><td><code>scenario</code></td><td>SYNTHETIC</td></tr>
+          <tr><td><code>numerical_oracles</code></td><td>OPEN</td></tr>
+          <tr><td><code>submission</code></td><td>BLOCKED</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <pre class="cmd"><span class="ps">&gt;</span> uv run stress rerun --run runs/20261031T1640Z-core-d7080e13
+
+rerun 20261031T1642Z-core-43b5a0b5: SYNTHETIC
+reproduced: all 50 output hashes identical to 20261031T1640Z-core-d7080e13
+
+<span class="ps">&gt;</span> uv run stress compare --base runs/&lt;default_run&gt; --new runs/20261031T1640Z-core-d7080e13
+
+<span class="dim"># Prints the impairment table and writes runs/comparisons/&lt;base&gt;__&lt;new&gt;/:
+# summary.md, impairment.csv, stage_stocks.csv, portfolio_pd.csv, lgd_by_segment.csv, comparison.json</span></pre>
+  <p class="prose">In this comparison, P07 and <code>energy_crisis</code> have no partner in the default run, so their base columns show NaN. A rerun that differs exits with code 3 and lists the outputs that changed.</p>
+</section>
+
+<section id="volumes">
+  <h2><span class="kicker opt">Optional</span>Let the balance sheet change</h2>
+  <p class="prose">The runs above keep the book static, as the EBA method does. To test a changing book, add one setting and a complete grid of volume rates. Treat the result as an internal sensitivity.</p>
+  <div class="stack">
+    <pre class="cmd" data-check-dyn>run:
+  balance_sheet: dynamic
+
+balance_sheet:
+  assumptions:
+    - {scenario: baseline, year: 2027, portfolio: P01, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: adverse, year: 2027, portfolio: P01, drawn_change: -0.03, undrawn_change: 0.1}
+    - {scenario: energy_crisis, year: 2027, portfolio: P01, drawn_change: -0.1, undrawn_change: 0.1}
+    - {scenario: energy_crisis, year: 2027, portfolio: P07, drawn_change: 0.05, undrawn_change: -0.2}
+<span class="dim">    # ... 63 rows in all: 3 scenarios, 3 years, 7 portfolios</span></pre>
+    <ul class="plain">
+      <li>Each year, before migration, performing drawn and undrawn balances are multiplied by 1 plus the rate.</li>
+      <li>S3 cohorts and their provisions are never scaled.</li>
+      <li>Portfolios here means reporting portfolios, so P07 needs its own rows. A missing row stops the run.</li>
+      <li>In this example energy firms draw on their lines in the crisis, so P07 drawn rises 5% a year and undrawn falls 20%. Other books shrink 10% a year.</li>
+      <li>The run adds <code>exposure_movements.csv</code> and <code>dynamic_books.csv</code>. It drops <code>static_books.csv</code> and <code>analysis_template_replica.csv</code>.</li>
+    </ul>
+  </div>
+  %%T_DYNAMIC%%
+  <p class="prose">Most books shrink, so total charges fall. P07 goes the other way: its crisis charge rises from €108.1m to €111.5m. In the dynamic run P07 reached €909.5m rather than €926.1m (€800m × 1.05³), because S3 balances are not scaled.</p>
+</section>
+
+<section id="stops">
+  <h2><span class="kicker ref">Reference</span>What stops a run</h2>
+  <p class="prose">Each message below was produced by a test of this example on <code>main</code>. All exit with code 2. Where a run folder was opened, it is sealed as BLOCKED, with the reason in <code>manifest.json</code>.</p>
+  <div class="scroll"><table class="tbl w-wide">
+    <thead><tr><th>Reported at</th><th>Message</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">Before R1</td><td class="err">specifications currently require SYNTHETIC status</td><td>Keep <code>status: SYNTHETIC</code>. Regulatory use is not available.</td></tr>
+      <tr><td class="nw">Before R1</td><td class="err">put calculation settings in the specification, not both sources: ['variant']</td><td>Move the flag into <code>run</code>.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">specification belongs to another input set</td><td>Use the full hash from that set's <code>manifest.json</code>.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">inherited segment must be a nonempty string</td><td>The name is not an existing segment. Use <code>P06_GG</code> and <code>P06_CI</code>, or add <code>inherits</code>.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">segment P02: unknown ['macro_modell'], missing []</td><td>Fix the spelling. Unknown fields always block.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">existing segments cannot be reparented</td><td>Remove <code>inherits</code> from the existing segment.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">a supplied macro model is not assigned to any segment</td><td>Attach the model or delete it.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">missing supplied score ('energy_crisis', 'PL', 2029)</td><td>Add the row. Countries with no exposure need one too.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">assignment matches no facility or overlaps an earlier assignment</td><td>Check the selector. A facility can match only one assignment.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">duplicate scenario path energy_crisis/('gdp_growth', 'IT', 2027)</td><td>Replace <code>'*'</code> with one row per country for that cell.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">scenario adverse already exists; choose a new immutable identifier</td><td>Choose a new name.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">additional value would overwrite existing path ('adverse', 'gdp_growth', 'DE', 2027)</td><td>Define a new scenario with <code>overrides</code>.</td></tr>
+      <tr><td class="nw">R2</td><td class="err">volume coverage: missing [('energy_crisis', 2029, 'P07')], unexpected []</td><td>Complete the grid. Zero rates must be written out.</td></tr>
+      <tr><td class="nw">R3</td><td class="err">each segment must belong to exactly one portfolio</td><td>Give the assignments for that segment the same <code>portfolio</code>.</td></tr>
+      <tr><td class="nw">R4</td><td class="err">scenario value for driver energy_price_change missing baseline/DE/2027</td><td>Add the path to <code>additional_values</code>.</td></tr>
+      <tr><td class="nw">R4</td><td class="err">adverse Z reverts toward baseline 2029, so baseline must run too (ECL-10)</td><td>Keep <code>baseline</code> in <code>run.scenarios</code>.</td></tr>
+      <tr><td class="nw">Report, R10</td><td class="err">a segment has no Table 4 class</td><td>Add <code>template_class</code>. This one appears only after the full calculation.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="limits">
+  <h2><span class="kicker ref">Reference</span>What this workflow does not do</h2>
+  <ul class="plain">
+    <li><strong>Regulatory use.</strong> Files must say <code>SYNTHETIC</code>, and <code>--mode regulatory</code> blocks. Regulatory use still needs the final EBA package, official inputs, validated models and owner sign-off.</li>
+    <li><strong>Model estimation.</strong> The engine runs the coefficients it is given. It does not estimate, backtest or validate them.</li>
+    <li><strong>Separate models per risk parameter.</strong> One Z per segment drives PD, LGD and prepayment.</li>
+    <li><strong>A new matrix for a carve-out.</strong> The new segment copies its parent's matrix. A different matrix needs a new input set.</li>
+    <li><strong>A different horizon or grade scale.</strong> Horizon, master scale, tolerances and variants stay in the base parameter set. A <code>horizon</code> key in the file blocks.</li>
+    <li><strong>New lending.</strong> Volume rates scale existing facilities. There are no fresh vintages, sales, write-offs or cures, and new product types need code.</li>
+    <li><strong>Charges by country.</strong> A country crisis shows in Z, stocks and provisions. No report gives the charge by country.</li>
+    <li><strong>Approval.</strong> Approving the base input set does not approve an experiment's scenarios or models.</li>
+    <li><strong>Replay across code changes.</strong> A rerun needs the same source and environment. Runs sealed before <code>fe123e5</code> stop with <code>SOURCE_MISMATCH</code> on <code>main</code>.</li>
+  </ul>
+</section>
+
+<section id="files">
+  <h2><span class="kicker ref">Reference</span>The complete files</h2>
+  <p class="prose">These are the exact files that ran. Both are stored in <code>docs/run-workflow/</code>, so the command in <a href="#s5">step 5</a> repeats the run.</p>
+  <details>
+    <summary>Static run: walkthrough.yaml (%%N_STATIC%% lines)</summary>
+    <div class="inner">
+      <button class="copy" type="button" data-copy="yaml-static">Copy file</button>
+      <pre class="cmd" id="yaml-static" tabindex="0">%%YAML_STATIC%%</pre>
+    </div>
+  </details>
+  <details>
+    <summary>Dynamic run: walkthrough-dynamic.yaml (%%N_DYNAMIC%% lines)</summary>
+    <div class="inner">
+      <button class="copy" type="button" data-copy="yaml-dynamic">Copy file</button>
+      <pre class="cmd" id="yaml-dynamic" tabindex="0">%%YAML_DYNAMIC%%</pre>
+    </div>
+  </details>
+</section>
+
+<footer>
+  <p>Runs: static <code>20261031T1640Z-core-d7080e13</code>, dynamic <code>20261031T1641Z-core+dynamic-f2289d98</code>, default for comparison <code>20261031T1510Z-core-68598915</code>. All three were made on <code>main</code> at <code>fe123e5</code> with <code>--runs-dir</code> pointing to a scratch folder, so they are not in the repository's <code>runs/</code>.</p>
+  <p>Operating reference: <code>docs/eba-2027-review/input-and-run-specification.md</code> and <code>docs/runbook.md</code>. Every input is defined in <code>docs/run-inputs/stress-run-inputs.html</code>.</p>
+</footer>
+</div>
+<div id="tip" role="status" hidden></div>
+<script>
+(function () {
+  var tip = document.getElementById('tip');
+  function place(x, y) {
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x + 12)) + 'px';
+    tip.style.top = Math.max(8, y - h - 10) + 'px';
+  }
+  document.querySelectorAll('[data-tip]').forEach(function (el) {
+    el.addEventListener('mouseenter', function (e) { tip.textContent = el.getAttribute('data-tip'); tip.hidden = false; place(e.clientX, e.clientY); });
+    el.addEventListener('mousemove', function (e) { place(e.clientX, e.clientY); });
+    el.addEventListener('mouseleave', function () { tip.hidden = true; });
+  });
+  document.querySelectorAll('button.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var block = document.getElementById(btn.getAttribute('data-copy'));
+      function done(text) { btn.textContent = text; setTimeout(function () { btn.textContent = 'Copy file'; }, 1800); }
+      function select() {
+        var range = document.createRange(); range.selectNodeContents(block);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        done('Selected: press Ctrl+C');
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(block.textContent).then(function () { done('Copied'); }, select);
+      } else { select(); }
+    });
+  });
+})();
+</script>

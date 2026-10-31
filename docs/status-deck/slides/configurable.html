@@ -1,0 +1,44 @@
+<section id="configurable" data-transition="fade" style="background:#F7F6F1;color:#14263B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:104px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1.1;color:#14263B">Available: configurable layer, tested together</h2>
+<p style="font-size:26px;line-height:1.35;color:#46536A">One review file combined every option on a seven-portfolio book built for this check.</p>
+<table style="font-size:24px;color:#14263B">
+<tr style="background:#14263B">
+<th style="width:22%;color:#F7F6F1">Capability</th>
+<th style="width:42%;color:#F7F6F1">What was run</th>
+<th style="width:36%;color:#F7F6F1">What happened</th>
+</tr>
+<tr>
+<td>New portfolio</td>
+<td>Seventh portfolio packaged from prepared tables, no code change</td>
+<td>P01–P06 baseline and adverse charges match the control</td>
+</tr>
+<tr>
+<td>Own macro model</td>
+<td>P07 on a lagged polynomial with a new inflation driver</td>
+<td>Only P07 moved in baseline and adverse</td>
+</tr>
+<tr>
+<td>One-country crisis</td>
+<td>Adverse inherited, with Italy’s 2027 GDP overridden</td>
+<td>Z of −2.2 in Italy against −1.2 elsewhere (P03)</td>
+</tr>
+<tr>
+<td>Dynamic volumes</td>
+<td>P07 drawn stock +5% a year; other books −4% a year in the crisis</td>
+<td>Baseline P07 grew €363m to €416m; stock bridge closed</td>
+</tr>
+<tr>
+<td>Sealed replay</td>
+<td>Rerun from the sealed copy on the same code</td>
+<td>51 of 51 output hashes identical</td>
+</tr>
+<tr>
+<td>Rejected inputs</td>
+<td>Non-synthetic status, unknown setting, no baseline, no reporting class</td>
+<td>All four blocked</td>
+</tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1480px;font-size:24px;color:#5A6577">Available · Invented coefficients: this shows behaviour, not calibration</p>
+<p style="position:absolute;right:128px;bottom:64px;width:80px;font-size:24px;color:#5A6577;text-align:right">7</p>
+<aside>This slide reports an independent check made for this review, outside the repository. One specification combined a seventh portfolio packaged with the new command, its own polynomial model with a one-year GDP lag and a squared term on a new inflation variable, a crisis inherited from adverse with one Italian override, a three-year terminal reversion, and dynamic volumes. The six original portfolios matched a control run to the nearest EUR 0.01m in baseline and adverse. The stock bridge closed to within EUR 0.00001 each year. Rerunning the example run made on main also reproduced all 51 outputs. One limit showed up: the workbook has no view by country. A country crisis can be read from the Z scores and from country stocks and provisions in a CSV, but no report gives charges by country.</aside>
+</section>

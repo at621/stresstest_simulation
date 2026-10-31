@@ -1,0 +1,131 @@
+# Worked example for the workflow page. Illustrative values: not estimates, not a forecast.
+schema_version: 1
+status: SYNTHETIC
+source: "Workflow walkthrough, 31 October 2026. Illustrative values."
+version: walkthrough-v1
+input_set_hash: d62d0386f2c5256eb50fbc787678fdc420fc5bda42ab5f8100a147d097dc91ee
+
+run:
+  inputs: ../../inputs/d62d0386f2c5256e
+  scenarios: [baseline, adverse, energy_crisis]
+  variant: core
+# The crisis: everything comes from adverse except the cells named here.
+scenarios:
+  energy_crisis:
+    inherits: adverse
+    narrative: "Energy shock: deeper recession and higher rates than adverse."
+    overrides:
+      - {variable: gdp_growth, country: '*', year: 2027, value: -0.08, unit: decimal, value_type: growth}
+      - {variable: gdp_growth, country: '*', year: 2028, value: -0.04, unit: decimal, value_type: growth}
+      - {variable: reference_rate, country: '*', year: 2027, value: 0.06, unit: decimal, value_type: level}
+
+# A driver the base scenarios do not have. Every scenario in the run needs it.
+additional_values:
+  - {scenario: baseline, country: '*', variable: energy_price_change, year: 2027, value: 0.03, unit: decimal, value_type: growth}
+  - {scenario: baseline, country: '*', variable: energy_price_change, year: 2028, value: 0.03, unit: decimal, value_type: growth}
+  - {scenario: baseline, country: '*', variable: energy_price_change, year: 2029, value: 0.03, unit: decimal, value_type: growth}
+  - {scenario: adverse, country: '*', variable: energy_price_change, year: 2027, value: 0.10, unit: decimal, value_type: growth}
+  - {scenario: adverse, country: '*', variable: energy_price_change, year: 2028, value: 0.06, unit: decimal, value_type: growth}
+  - {scenario: adverse, country: '*', variable: energy_price_change, year: 2029, value: 0.03, unit: decimal, value_type: growth}
+  - {scenario: energy_crisis, country: '*', variable: energy_price_change, year: 2027, value: 0.60, unit: decimal, value_type: growth}
+  - {scenario: energy_crisis, country: '*', variable: energy_price_change, year: 2028, value: 0.25, unit: decimal, value_type: growth}
+  - {scenario: energy_crisis, country: '*', variable: energy_price_change, year: 2029, value: 0.00, unit: decimal, value_type: growth}
+
+# The models. Each one must be attached to a segment below.
+models:
+  consumer_nonlinear:
+    kind: polynomial
+    source: "Illustrative coefficients"
+    version: walkthrough-v1
+    terms:
+      activity: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: 0.6}
+      activity_squared: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: -0.08, power: 2}
+      unemployment: {variable: unemployment, mean: 0.07, sd: 0.025, beta: -0.3}
+  energy_sector:
+    kind: linear
+    source: "Illustrative coefficients"
+    version: walkthrough-v1
+    drivers:
+      gdp_growth: {beta: 0.5, mean: 0.015, sd: 0.03}
+      energy_price_change: {beta: -0.5, mean: 0.03, sd: 0.15}
+  cre_external:
+    kind: supplied
+    source: "Illustrative scores standing in for an external CRE model"
+    version: walkthrough-v1
+    values:
+        - {scenario: baseline, country: DE, year: 2027, z: 0.00}
+        - {scenario: baseline, country: ES, year: 2027, z: 0.00}
+        - {scenario: baseline, country: FR, year: 2027, z: 0.00}
+        - {scenario: baseline, country: IT, year: 2027, z: 0.00}
+        - {scenario: baseline, country: NL, year: 2027, z: 0.00}
+        - {scenario: baseline, country: PL, year: 2027, z: 0.00}
+        - {scenario: baseline, country: DE, year: 2028, z: 0.07}
+        - {scenario: baseline, country: ES, year: 2028, z: 0.07}
+        - {scenario: baseline, country: FR, year: 2028, z: 0.07}
+        - {scenario: baseline, country: IT, year: 2028, z: 0.07}
+        - {scenario: baseline, country: NL, year: 2028, z: 0.07}
+        - {scenario: baseline, country: PL, year: 2028, z: 0.07}
+        - {scenario: baseline, country: DE, year: 2029, z: 0.12}
+        - {scenario: baseline, country: ES, year: 2029, z: 0.12}
+        - {scenario: baseline, country: FR, year: 2029, z: 0.12}
+        - {scenario: baseline, country: IT, year: 2029, z: 0.12}
+        - {scenario: baseline, country: NL, year: 2029, z: 0.12}
+        - {scenario: baseline, country: PL, year: 2029, z: 0.12}
+        - {scenario: adverse, country: DE, year: 2027, z: -1.80}
+        - {scenario: adverse, country: ES, year: 2027, z: -1.80}
+        - {scenario: adverse, country: FR, year: 2027, z: -1.80}
+        - {scenario: adverse, country: IT, year: 2027, z: -1.80}
+        - {scenario: adverse, country: NL, year: 2027, z: -1.80}
+        - {scenario: adverse, country: PL, year: 2027, z: -1.80}
+        - {scenario: adverse, country: DE, year: 2028, z: -1.50}
+        - {scenario: adverse, country: ES, year: 2028, z: -1.50}
+        - {scenario: adverse, country: FR, year: 2028, z: -1.50}
+        - {scenario: adverse, country: IT, year: 2028, z: -1.50}
+        - {scenario: adverse, country: NL, year: 2028, z: -1.50}
+        - {scenario: adverse, country: PL, year: 2028, z: -1.50}
+        - {scenario: adverse, country: DE, year: 2029, z: -0.70}
+        - {scenario: adverse, country: ES, year: 2029, z: -0.70}
+        - {scenario: adverse, country: FR, year: 2029, z: -0.70}
+        - {scenario: adverse, country: IT, year: 2029, z: -0.70}
+        - {scenario: adverse, country: NL, year: 2029, z: -0.70}
+        - {scenario: adverse, country: PL, year: 2029, z: -0.70}
+        - {scenario: energy_crisis, country: DE, year: 2027, z: -2.40}
+        - {scenario: energy_crisis, country: ES, year: 2027, z: -2.40}
+        - {scenario: energy_crisis, country: FR, year: 2027, z: -2.40}
+        - {scenario: energy_crisis, country: IT, year: 2027, z: -2.40}
+        - {scenario: energy_crisis, country: NL, year: 2027, z: -2.40}
+        - {scenario: energy_crisis, country: PL, year: 2027, z: -2.40}
+        - {scenario: energy_crisis, country: DE, year: 2028, z: -1.90}
+        - {scenario: energy_crisis, country: ES, year: 2028, z: -1.90}
+        - {scenario: energy_crisis, country: FR, year: 2028, z: -1.90}
+        - {scenario: energy_crisis, country: IT, year: 2028, z: -1.90}
+        - {scenario: energy_crisis, country: NL, year: 2028, z: -1.90}
+        - {scenario: energy_crisis, country: PL, year: 2028, z: -1.90}
+        - {scenario: energy_crisis, country: DE, year: 2029, z: -0.90}
+        - {scenario: energy_crisis, country: ES, year: 2029, z: -0.90}
+        - {scenario: energy_crisis, country: FR, year: 2029, z: -0.90}
+        - {scenario: energy_crisis, country: IT, year: 2029, z: -0.90}
+        - {scenario: energy_crisis, country: NL, year: 2029, z: -0.90}
+        - {scenario: energy_crisis, country: PL, year: 2029, z: -0.90}
+
+# The links: segment -> model. Segments not listed keep their base z_drivers.
+segments:
+  P02:
+    macro_model: consumer_nonlinear
+  P04:
+    macro_model: cre_external
+  P05_ENERGY:
+    inherits: P05
+    portfolio: P07
+    macro_model: energy_sector
+    template_class: "Loans and advances - NFC - Energy sector (walkthrough label)"
+
+# Move NACE D out of P05 into the new segment and a new reporting portfolio.
+assignments:
+  - where: {portfolio: P05, nace_code: D}
+    segment: P05_ENERGY
+    portfolio: P07
+
+# The crisis fades to baseline in 3 years instead of the base rule's 6.
+terminal_policies:
+  energy_crisis: {method: reversion, years: 3}

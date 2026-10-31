@@ -1,0 +1,47 @@
+<section id="core" data-transition="fade" style="background:#F7F6F1;color:#14263B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:104px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1.1;color:#14263B">Available: the EBA preparation engine</h2>
+<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:18px">
+<div style="display:flex;flex-direction:column;gap:6px;background:#ECE9DF;padding:22px 26px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Credit projection</h3>
+<p style="font-size:24px;line-height:1.3;color:#46536A">Stage migration, PD, LGD, EAD and provisions for 2027–2029</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;background:#ECE9DF;padding:22px 26px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">IFRS 9 rules</h3>
+<p style="font-size:24px;line-height:1.3;color:#46536A">SICR line plus 30-day, watchlist and forbearance triggers; Stage 3 floors</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;background:#ECE9DF;padding:22px 26px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Draft readings</h3>
+<p style="font-size:24px;line-height:1.3;color:#46536A">Selectable S2 holding, in-horizon run-off, trough LGD, parameter reversion</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;background:#ECE9DF;padding:22px 26px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Preparation analyses</h3>
+<p style="font-size:24px;line-height:1.3;color:#46536A">Benchmarks, recovery LGD, capital, climate, NPE and reverse stress, as diagnostics</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;background:#ECE9DF;padding:22px 26px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Reports</h3>
+<p style="font-size:24px;line-height:1.3;color:#46536A">Eleven-sheet workbook, CSV reports and a cell-mapping export</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;background:#ECE9DF;padding:22px 26px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Controls</h3>
+<p style="font-size:24px;line-height:1.3;color:#46536A">Hash-named inputs, write-once runs, strict replay, compare between runs</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">133 requirements, by status</h3>
+<div style="display:flex;gap:2px">
+<div style="width:848px;height:30px;background:#1A66A8;border-radius:4px 0 0 4px"></div>
+<div style="width:312px;height:30px;background:#8DB4D6"></div>
+<div style="width:87px;height:30px;background:#A9ADA9"></div>
+<div style="width:411px;height:30px;background:#C8551B;border-radius:0 4px 4px 0"></div>
+</div>
+<div style="display:flex;gap:40px">
+<div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;background:#1A66A8;border-radius:4px"></div><p style="font-size:24px;color:#14263B">68 named by a test</p></div>
+<div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;background:#8DB4D6;border-radius:4px"></div><p style="font-size:24px;color:#14263B">25 built, no test</p></div>
+<div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;background:#A9ADA9;border-radius:4px"></div><p style="font-size:24px;color:#14263B">7 met by process</p></div>
+<div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;background:#C8551B;border-radius:4px"></div><p style="font-size:24px;color:#14263B">33 deferred, 8 with no decision</p></div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1480px;font-size:24px;color:#5A6577">Available · “Named by a test” shows where to look; it does not prove full coverage</p>
+<p style="position:absolute;right:128px;bottom:64px;width:80px;font-size:24px;color:#5A6577;text-align:right">6</p>
+<aside>This is the base of the solution: a working static stress engine for the draft EBA 2027 method on a synthetic book. The draft readings are selectable because the draft can be read more than one way. The preparation analyses are separate diagnostics: their outputs do not replace core losses, and they run on supplied, illustrative inputs. The workbook and exports are not an official EBA template. The requirement counts come from the generated traceability matrix for requirements version 1.3. Compared with the commit before the merge, tested rose from 66 to 68, built fell from 27 to 25, and unmet requirements with no decision fell from 9 to 8 as SCN-03 gained a recorded decision.</aside>
+</section>

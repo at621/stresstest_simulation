@@ -1,0 +1,31 @@
+<section id="results" data-transition="fade" style="background:#F7F6F1;color:#14263B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:104px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1.1;color:#14263B">Results: default holds, options move as set</h2>
+<div style="display:flex;gap:48px">
+<div style="flex:1;display:flex;flex-direction:column;gap:14px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Cumulative impairment charge 2027–2029, € million</h3>
+<div style="display:flex;gap:12px;align-items:center;padding:8px 0 0 0"><div style="width:20px;height:20px;background:#1A66A8;border-radius:4px"></div><p style="font-size:24px;font-weight:600;color:#14263B">Default static run</p></div>
+<div style="display:flex;gap:16px;align-items:center"><p style="width:220px;font-size:24px;color:#46536A">Baseline</p><div style="width:81px;height:40px;background:#1A66A8;border-radius:0 4px 4px 0"></div><p style="font-size:24px;font-weight:600;color:#14263B">130.4</p></div>
+<div style="display:flex;gap:16px;align-items:center"><p style="width:220px;font-size:24px;color:#46536A">Adverse</p><div style="width:394px;height:40px;background:#1A66A8;border-radius:0 4px 4px 0"></div><p style="font-size:24px;font-weight:600;color:#14263B">635.0</p></div>
+<div style="display:flex;gap:12px;align-items:center;padding:16px 0 0 0"><div style="width:20px;height:20px;background:#C8551B;border-radius:4px"></div><p style="font-size:24px;font-weight:600;color:#14263B">Dynamic example, illustrative</p></div>
+<div style="display:flex;gap:16px;align-items:center"><p style="width:220px;font-size:24px;color:#46536A">Baseline</p><div style="width:81px;height:40px;background:#C8551B;border-radius:0 4px 4px 0"></div><p style="font-size:24px;font-weight:600;color:#14263B">130.9</p></div>
+<div style="display:flex;gap:16px;align-items:center"><p style="width:220px;font-size:24px;color:#46536A">Adverse</p><div style="width:378px;height:40px;background:#C8551B;border-radius:0 4px 4px 0"></div><p style="font-size:24px;font-weight:600;color:#14263B">610.4</p></div>
+<div style="display:flex;gap:16px;align-items:center"><p style="width:220px;font-size:24px;color:#46536A">Energy crisis</p><div style="width:616px;height:40px;background:#C8551B;border-radius:0 4px 4px 0"></div><p style="font-size:24px;font-weight:600;color:#14263B">993.4</p></div>
+</div>
+<div style="width:560px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#ECE9DF;padding:28px 32px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Drawn book at end-2029</h3>
+<div style="display:flex;justify-content:space-between"><p style="font-size:24px;color:#46536A">Default, each scenario</p><p style="font-size:24px;font-weight:600">€11.0bn</p></div>
+<div style="display:flex;justify-content:space-between"><p style="font-size:24px;color:#46536A">Example baseline</p><p style="font-size:24px;font-weight:600">€11.0bn</p></div>
+<div style="display:flex;justify-content:space-between"><p style="font-size:24px;color:#46536A">Example adverse</p><p style="font-size:24px;font-weight:600">€10.1bn</p></div>
+<div style="display:flex;justify-content:space-between"><p style="font-size:24px;color:#46536A">Example energy crisis</p><p style="font-size:24px;font-weight:600">€8.3bn</p></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;background:#ECE9DF;padding:28px 32px;border-radius:12px">
+<h3 style="font-size:26px;font-weight:600;line-height:1.25;color:#14263B">Reading the gaps</h3>
+<p style="font-size:24px;line-height:1.3;color:#46536A">The €0.5m baseline gap comes from the example’s P02 model, not from volumes. Its adverse charge falls mainly because drawn stock shrinks 3% a year.</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1480px;font-size:24px;color:#5A6577">Available · Rerun on main at fe123e5. Synthetic book and invented paths: not a forecast</p>
+<p style="position:absolute;right:128px;bottom:64px;width:80px;font-size:24px;color:#5A6577;text-align:right">8</p>
+<aside>Both runs were repeated on main for this review and match the sealed runs recorded in the implementation plan. Default: EUR 130.4m baseline and EUR 635.0m adverse, of which EUR 439.8m falls in 2027. Dynamic example, from docs/examples/configurable-projection.yaml: EUR 130.9m baseline, EUR 610.4m adverse and EUR 993.4m for the energy crisis. In the example, baseline volume changes are zero, and only P02 moves because the example selects a different consumer model. The example’s coefficients and paths are illustrative. The figures show that the mechanics respond as configured, not what a real crisis would cost. Selecting the draft readings C13 to C16 would add a further EUR 99.3m adverse and EUR 31.1m baseline to the default.</aside>
+</section>

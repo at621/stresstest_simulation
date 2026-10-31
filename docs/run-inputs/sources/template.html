@@ -1,0 +1,272 @@
+<meta charset="utf-8">
+<title>Stress Run Inputs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one reference column, tables at full width. Same tokens as docs/stress-engine-code-flow.html.
+   Role colours: blue drives results, ochre checked only, teal reports only, grey not read. */
+:root {
+  --bg: #f3f5f8; --surface: #ffffff; --surface-2: #e9edf2; --fg: #17202b; --muted: #566272; --line: #d0d7e0;
+  --run: #2652c4; --run-soft: #e8eefb;
+  --once: #9a5900; --once-soft: #faf0df;
+  --cf: #07788a; --cf-soft: #dff3f5;
+  --frozen: #4b5665; --frozen-soft: #e6eaef;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #89a6ff; --run-soft: #18223a;
+    --once: #e6a94f; --once-soft: #2c2215;
+    --cf: #5ccbdb; --cf-soft: #112f37;
+    --frozen: #b2bcc8; --frozen-soft: #212932;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+  --run: #89a6ff; --run-soft: #18223a;
+  --once: #e6a94f; --once-soft: #2c2215;
+  --cf: #5ccbdb; --cf-soft: #112f37;
+  --frozen: #b2bcc8; --frozen-soft: #212932;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
+.page {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 44px 80px;
+}
+a { color: var(--run); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; border-radius: 3px; }
+code { font-family: var(--mono); font-size: 0.88em; }
+p code, li code, td code, th code, h3 code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.masthead { display: grid; gap: 18px; }
+.masthead > * { min-width: 0; }
+.eyebrow { margin: 0; font: 500 12px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(2.1rem, 5vw, 3.2rem); line-height: 1.02; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; max-width: 72ch; font-size: 1.06rem; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+section { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--line); display: grid; gap: 14px; scroll-margin-top: 12px; }
+section > * { margin: 0; min-width: 0; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; line-height: 1.15; text-wrap: balance; overflow-wrap: anywhere; }
+h2 .kicker { display: block; font: 600 12px/1.6 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--run); }
+h2 .kicker.opt { color: var(--once); }
+h2 .kicker.ref { color: var(--muted); }
+h2 code.h { font-family: var(--mono); font-size: 0.82em; font-weight: 600; }
+h3 { margin: 8px 0 0; font-size: 1.04rem; font-weight: 600; line-height: 1.3; }
+h4 { margin: 14px 0 6px; font-size: 0.95rem; font-weight: 600; }
+.prose { max-width: 76ch; }
+.meta { color: var(--muted); font-size: 14px; }
+ul.plain { margin: 0; padding-left: 20px; max-width: 80ch; display: grid; gap: 6px; }
+.note { background: var(--surface-2); border-radius: 8px; padding: 12px 16px; max-width: 90ch; }
+.note p { margin: 0; }
+.note p + p { margin-top: 8px; }
+.note code { background: var(--surface); }
+.note.warn { background: var(--once-soft); }
+pre.cmd { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 13px/1.55 var(--mono); }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table.tbl { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.45; }
+.tbl th { text-align: left; font-weight: 600; font-size: 12.5px; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: bottom; }
+.tbl td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl tbody tr:last-child td { border-bottom: 0; }
+.tbl .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tbl .grp { border-left: 1px solid var(--line); }
+.tbl tr.group td { background: var(--surface-2); font-weight: 600; font-size: 12.5px; }
+.tbl.cols { min-width: 980px; }
+.tbl.cols th:nth-child(1), .tbl.cols td:nth-child(1) { width: 200px; }
+.tbl.cols th:nth-child(2), .tbl.cols td:nth-child(2) { width: 58px; }
+.tbl.cols th:nth-child(3), .tbl.cols td:nth-child(3) { width: 54px; }
+.tbl.cols th:nth-child(5), .tbl.cols td:nth-child(5) { width: 270px; overflow-wrap: anywhere; }
+.tbl.fields { min-width: 860px; }
+.tbl.fields td:first-child { min-width: 190px; }
+.tbl.narrow { min-width: 560px; }
+.tbl.mat { font-size: 12.5px; }
+.rule { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+.pill { display: inline-block; font: 600 11px/1.5 var(--mono); padding: 0 7px; border-radius: 999px; white-space: nowrap; margin-bottom: 3px; }
+.r-calc { background: var(--run-soft); color: var(--run); }
+.r-check { background: var(--once-soft); color: var(--once); }
+.r-report { background: var(--cf-soft); color: var(--cf); }
+.r-none { background: var(--frozen-soft); color: var(--frozen); }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+summary { cursor: pointer; padding: 11px 14px; font-weight: 600; }
+details .inner { padding: 0 14px 14px; }
+footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
+footer p { margin: 0; max-width: 90ch; }
+</style>
+
+<div class="page">
+<header class="masthead">
+  <p class="eyebrow">Stress engine · input set %%HASH%% · main at fe123e5</p>
+  <h1>Every input a run reads</h1>
+  <p class="lede">A run needs seven datasets and a manifest. A run specification, an analysis file and an approval record are optional. This page defines all of them: every column, setting and option, with what the engine does with each one.</p>
+  <div class="note warn"><p>The column lists, types and current values are generated from the engine's input contract and input set <code>%%HASH%%</code>. The build stops if a column, parameter or option has no definition. All current values are synthetic.</p></div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#overview">Overview</a>
+    <a href="#rules">Rules for every table</a>
+    <a href="#facilities">facilities</a>
+    <a href="#obligors">obligors</a>
+    <a href="#commitments">commitments</a>
+    <a href="#opening_provisions">opening_provisions</a>
+    <a href="#ttc_pd_matrix">ttc_pd_matrix</a>
+    <a href="#scenarios">scenarios</a>
+    <a href="#parameters">parameter_set</a>
+    <a href="#manifest">manifest, approval</a>
+    <a href="#specification">Run specification</a>
+    <a href="#analysis">Analysis file</a>
+    <a href="#options">Command options</a>
+  </nav>
+</header>
+
+<section id="overview">
+  <h2>What a run needs</h2>
+  %%OVERVIEW%%
+  <p class="prose">The seven datasets and the manifest sit together in one folder, <code>inputs/&lt;hash&gt;/</code>, named by the first 16 characters of the set's hash. All seven must exist, even when a table has no rows for your book. The tables hold %%N_COLUMNS%% columns before status companions.</p>
+  <h3>How the inputs connect</h3>
+  <div class="scroll"><table class="tbl narrow">
+    <thead><tr><th>From</th><th>To</th><th>Link</th><th>If the link is broken</th></tr></thead>
+    <tbody>
+      <tr><td><code>facilities.obligor_id</code></td><td><code>obligors</code></td><td>Many to one</td><td>Facility rejected: <code>ORPHAN_FACILITY</code></td></tr>
+      <tr><td><code>commitments.facility_id</code></td><td><code>facilities</code></td><td>Zero or one per facility</td><td>Commitment rejected: <code>ORPHAN_COMMITMENT</code></td></tr>
+      <tr><td><code>opening_provisions.facility_id</code></td><td><code>facilities</code></td><td>Exactly one per facility</td><td>Facility rejected: <code>MISSING_OPENING_PROVISION</code></td></tr>
+      <tr><td><code>facilities.segment</code></td><td><code>ttc_pd_matrix</code>, <code>parameter_set.segments</code></td><td>Many to one</td><td>Facility rejected: <code>UNKNOWN_SEGMENT</code></td></tr>
+      <tr><td><code>obligors.country</code></td><td><code>scenarios.values.country</code></td><td>Many to one</td><td>Facility rejected: <code>UNMAPPED_COUNTRY</code></td></tr>
+      <tr><td>Run specification <code>input_set_hash</code></td><td><code>manifest.json</code></td><td>Exact match</td><td>Run blocks: <code>INVALID_SPECIFICATION</code></td></tr>
+    </tbody>
+  </table></div>
+  <h3>What the role labels mean</h3>
+  <div class="scroll"><table class="tbl narrow">
+    <thead><tr><th>Label</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill r-calc">drives results</span></td><td>A calculation reads it. Changing it changes results.</td></tr>
+      <tr><td><span class="pill r-check">checked only</span></td><td>Validated at load. A bad value rejects the record or blocks the run. A good value has no further effect.</td></tr>
+      <tr><td><span class="pill r-report">reports only</span></td><td>Read by reports or optional analyses. Core losses do not depend on it.</td></tr>
+      <tr><td><span class="pill r-none">not read</span></td><td>Must be present, and is kept in the sealed copy. No code reads it.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="rules">
+  <h2>Rules for every table</h2>
+  <ul class="plain">
+    <li><strong>Units.</strong> Amounts are EUR. Rates and probabilities are decimal fractions, so 3% is 0.03. Dates are text in <code>YYYY-MM-DD</code>.</li>
+    <li><strong>Exact columns.</strong> A missing column blocks the run (<code>MISSING_COLUMN</code>), and so does an extra one (<code>UNKNOWN_COLUMN</code>). Column names are case-sensitive.</li>
+    <li><strong>Booleans.</strong> Accepted as true or false, 1 or 0, or the text <code>true</code>, <code>false</code>, <code>1</code>, <code>0</code>. Anything else blocks: <code>BAD_VALUE_TYPE</code>.</li>
+    <li><strong>Immutable sets.</strong> R2 hashes all seven files. To change a value, build a new input set. Changing a file blocks the run: <code>INPUT_HASH_MISMATCH</code>.</li>
+    <li><strong>Blank column.</strong> "Blank: no" means a blank value in that column cannot pass. "Blank: yes" means the file may hold a blank, but a calculation that needs the value can still reject the record.</li>
+  </ul>
+  <h3>Value status: why a blank is never zero</h3>
+  <p class="prose">Any column can have a companion named <code>&lt;column&gt;__status</code>. Without one, R2 infers the status: blank is <code>missing</code>, a numeric 0 is <code>zero</code>, and anything else is <code>supplied</code>. A stated status wins, but a blank stays <code>missing</code> unless it says <code>not_applicable</code>.</p>
+  <div class="scroll"><table class="tbl narrow">
+    <thead><tr><th>Status</th><th>Meaning</th><th>A calculation may use it</th></tr></thead>
+    <tbody>
+      <tr><td><code>supplied</code></td><td>A real value from the source.</td><td>Yes</td></tr>
+      <tr><td><code>zero</code></td><td>A true zero.</td><td>Yes</td></tr>
+      <tr><td><code>estimated</code></td><td>An estimate.</td><td>Yes</td></tr>
+      <tr><td><code>not_applicable</code></td><td>The field does not apply to this record.</td><td>No</td></tr>
+      <tr><td><code>missing</code></td><td>The value should exist and does not.</td><td>No</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Rejected or blocked</h3>
+  <ul class="plain">
+    <li><strong>Rejected:</strong> R3 drops the record, logs its reason code in <code>rejections.parquet</code> and carries on. A rejected commitment or provision also rejects its facility: <code>LINKED_RECORD_REJECTED</code>. Accepted plus rejected must still equal what was loaded.</li>
+    <li><strong>Blocked:</strong> the whole run stops, exit code 2. Five rejection reasons always block: <code>MISSING_CCF</code>, <code>CCF_OUT_OF_RANGE</code>, <code>NEGATIVE_AMOUNT</code>, <code>DUPLICATE_COMMITMENT</code> and <code>LIMIT_BREACH</code>. So do hash, column, type and matrix errors.</li>
+  </ul>
+</section>
+
+%%TABLES%%
+
+<section id="scenarios">
+  <h2><span class="kicker">Required document</span><code class="h">scenarios.yaml</code></h2>
+  <p class="meta">Key: scenario, variable, country, year · 180 values · 2 scenarios × 5 variables × 6 countries × 3 years</p>
+  <p class="prose">Holds the economic paths. R4 turns them into Z. R2 converts every value to a decimal.</p>
+  <h3>Top-level keys</h3>
+  %%SCENARIO_TOP%%
+  <h3>Each entry in <code>scenarios</code></h3>
+  %%SCENARIO_RECORD%%
+  <h3>Each entry in <code>values</code></h3>
+  %%SCENARIO_VALUE%%
+  <h3>Each entry in <code>starting_values</code></h3>
+  %%SCENARIO_START%%
+  <p class="prose"><code>index_of</code> today maps <code>residential_price_change</code> to <code>residential_price_index</code>, and <code>cre_price_change</code> to <code>cre_price_index</code>. Both indices start at 100 in every country. The file also holds 2026 levels for <code>unemployment</code> (6.0%) and <code>reference_rate</code> (2.5%), which nothing reads.</p>
+  <h3>Current paths</h3>
+  %%PATHS%%
+  <p class="prose">All six countries have the same path today. <code>reference_rate</code> and <code>unemployment</code> are levels. The other three are annual changes.</p>
+</section>
+
+<section id="parameters">
+  <h2><span class="kicker">Required document</span><code class="h">parameter_set.yaml</code></h2>
+  <p class="meta">Key: <code>parameter_set_id</code> · one document · 7 segments · 4 variants</p>
+  <h3>Segment parameters: what each one means</h3>
+  %%SEGMENT_FIELDS%%
+  <h3>Segment parameters: current values</h3>
+  %%SEGMENTS%%
+  <h3>Z weights: current values</h3>
+  <p class="prose">A dash means the segment does not read that driver.</p>
+  %%DRIVERS%%
+  <h3>Master scale</h3>
+  %%SCALE%%
+  <h3>Variants</h3>
+  %%VARIANTS%%
+  <h3>All other settings</h3>
+  <p class="prose">In paths, <code>&lt;id&gt;</code> stands for any name, and the current value lists all values found. The <code>conventions</code> block describes behaviour fixed in code: changing it changes nothing.</p>
+  %%PARAMETERS%%
+</section>
+
+<section id="manifest">
+  <h2><span class="kicker">Control files</span><code class="h">manifest.json</code> and <code class="h">approval.json</code></h2>
+  <p class="prose">The generator or the package step writes both. You do not write them by hand.</p>
+  <h3><code>manifest.json</code>: required</h3>
+  %%MANIFEST%%
+  <h3><code>approval.json</code>: optional</h3>
+  <p class="prose">With no file, the run records the status <code>MISSING</code> and continues. The current set is <code>PENDING_OWNER_APPROVAL</code>. To record an approval: <code>uv run python -m foundation.synth approve &lt;folder&gt; --approver &lt;name&gt;</code>.</p>
+  %%APPROVAL%%
+</section>
+
+<section id="specification">
+  <h2><span class="kicker opt">Optional file</span>Run specification</h2>
+  <p class="prose">One YAML file per experiment, passed with <code>--specification</code>. It changes portfolios, models, scenarios and volumes without touching the input set. Unknown fields and duplicate keys block. A worked example is in <code>docs/run-workflow/walkthrough.yaml</code>.</p>
+  <h3>Top level</h3>
+  %%SPEC_TOP%%
+  <h3><code>run</code></h3>
+  %%SPEC_RUN%%
+  <h3><code>scenarios.&lt;name&gt;</code></h3>
+  %%SPEC_SCENARIO%%
+  <h3>Path rows: <code>overrides[]</code>, <code>values[]</code>, <code>additional_values[]</code></h3>
+  %%SPEC_PATH%%
+  <h3><code>models.&lt;id&gt;</code></h3>
+  %%SPEC_MODEL%%
+  <h3><code>segments.&lt;id&gt;</code></h3>
+  %%SPEC_SEGMENT%%
+  <h3><code>assignments[]</code></h3>
+  %%SPEC_ASSIGNMENT%%
+  <h3>Reporting, terminal policies and volumes</h3>
+  %%SPEC_OTHER%%
+</section>
+
+<section id="analysis">
+  <h2><span class="kicker opt">Optional file</span>Analysis file</h2>
+  <p class="prose">One YAML file for the preparation analyses, passed with <code>run.analysis</code> or <code>--analysis</code>. A section you leave out is reported as <code>NOT_PROVIDED</code>. An incomplete section blocks. These outputs never replace core losses. A worked example is in <code>docs/examples/</code>.</p>
+  <h3>Header</h3>
+  %%ANALYSIS_TOP%%
+  <h3>Sections</h3>
+  %%ANALYSIS%%
+</section>
+
+<section id="options">
+  <h2><span class="kicker ref">Command</span><code class="h">stress run</code> options</h2>
+  %%CLI%%
+</section>
+
+<footer>
+  <p>Full input hash: <code>%%FULL_HASH%%</code>. Companion pages: <code>docs/run-workflow/stress-run-workflow.html</code> for the steps of a run, and <code>docs/input-data/input-data-overview.html</code> for charts of the book, which still describe the older set <code>514ed0e86e3dc760</code>. Rebuild this page with <code>uv run python docs/run-inputs/sources/build_page.py inputs/&lt;hash&gt;</code>.</p>
+</footer>
+</div>

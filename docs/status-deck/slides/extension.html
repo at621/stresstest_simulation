@@ -1,0 +1,32 @@
+<section id="extension" data-transition="fade" style="background:#F7F6F1;color:#14263B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:104px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1.1;color:#14263B">New options plug into four steps</h2>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#ECE9DF;padding:32px;border-radius:12px">
+<p style="font-size:24px;font-weight:700;color:#17598F">R2</p>
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Run file</h3>
+<p style="font-size:26px;line-height:1.35;color:#46536A">One versioned YAML bound to an input-set hash. Unknown settings block. Its exact bytes are sealed with the run.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#ECE9DF;padding:32px;border-radius:12px">
+<p style="font-size:24px;font-weight:700;color:#17598F">R4</p>
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Macro models</h3>
+<p style="font-size:26px;line-height:1.35;color:#46536A">Each segment picks linear, lagged polynomial or a supplied score. One score still drives PD, LGD and prepayment.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#ECE9DF;padding:32px;border-radius:12px">
+<p style="font-size:24px;font-weight:700;color:#17598F">R7</p>
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Volumes</h3>
+<p style="font-size:26px;line-height:1.35;color:#46536A">Annual changes to performing drawn and undrawn stock, applied before migration. Stage 3 is kept as it is.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#ECE9DF;padding:32px;border-radius:12px">
+<p style="font-size:24px;font-weight:700;color:#17598F">R10</p>
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Reporting</h3>
+<p style="font-size:26px;line-height:1.35;color:#46536A">Reporting classes from configuration, any scenario name, and effective settings and model sources in every run.</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#14263B;padding:32px 36px;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#F7F6F1">The calculations stayed put</h3>
+<p style="font-size:26px;line-height:1.35;color:#C4CEDA">R5 cash flows and the R8 provision code are untouched, and R6 only gains scenario-specific terminal weights. A default run keeps 45 of its 48 original outputs byte-identical. The other three are the readiness file, the workbook and the summary.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1480px;font-size:24px;color:#5A6577">Architecture · Dynamic runs are internal projections and omit the EBA template replica</p>
+<p style="position:absolute;right:128px;bottom:64px;width:80px;font-size:24px;color:#5A6577;text-align:right">5</p>
+<aside>This is how the five new goals were added without forking the engine. The specification is resolved before R1, so its settings enter the run identity, and overrides apply to in-memory tables only: raw inputs stay intact. Without a specification the default path is the same static EBA calculation as before. The code diff confirms R5 and the R8 module are unchanged. R9 only got a data-type fix, and R7 gained an optional volume step in projection/dynamic.py. The design has a dated addendum for these extensions, and assumptions A37 to A40 and conflict C19 record them.</aside>
+</section>

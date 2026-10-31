@@ -1,0 +1,39 @@
+<section id="remaining" data-transition="fade" style="background:#F7F6F1;color:#14263B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:104px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:60px;font-weight:600;line-height:1.1;color:#14263B">Still to do before regulatory use</h2>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ECE9DF;padding:30px 32px;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Owner decisions</h3>
+<ul style="font-size:26px;line-height:1.35;color:#46536A">
+<li>Sign off the spec, input set and full-run results</li>
+<li>Approve parameters and the AT-48, 51 and 52 values</li>
+<li>Choose readings C13–C16, which together add €99.3m adverse</li>
+<li>Accept or plan the 8 unmet requirements</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ECE9DF;padding:30px 32px;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">External evidence</h3>
+<ul style="font-size:26px;line-height:1.35;color:#46536A">
+<li>Final 2027 EBA package and FAQs</li>
+<li>Official scenarios and ECB benchmarks</li>
+<li>Approved capital inputs and Article 47c NPE factors</li>
+<li>Approved template mappings</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ECE9DF;padding:30px 32px;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#14263B">Model and data work</h3>
+<ul style="font-size:26px;line-height:1.35;color:#46536A">
+<li>Estimate and backtest bank models</li>
+<li>Calibrate sector paths, driver moments and the Z scale</li>
+<li>Integrate a production recovery LGD model</li>
+<li>Replace the synthetic book with approved bank data</li>
+</ul>
+</div>
+</div>
+<div style="display:flex;gap:20px;align-items:center;background:#14263B;padding:26px 36px;border-radius:12px">
+<x-icon name="Warning" style="color:#E9A36F;width:44px;height:44px"></x-icon>
+<p style="flex:1;font-size:26px;line-height:1.35;color:#F7F6F1">A default run does not meet ECL-06 today: only the held S2 reading does. The engine stays blocked for regulatory use until these items close.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1480px;font-size:24px;color:#5A6577">To do · From docs/architecture.md §6 and the implementation plan</p>
+<p style="position:absolute;right:128px;bottom:64px;width:80px;font-size:24px;color:#5A6577;text-align:right">9</p>
+<aside>Nothing in this list is a coding task for the engine alone. The owner decisions are items 1, 7, 9 and 12 of architecture section 6. The eight unmet requirements with no decision are REG-03, SCP-05, DAT-07, SYN-02, SYN-03, PD-07, LGD-11 and EAD-07. The review found no final 2027 EBA package as of 30 October 2026, so the engine follows the June 2026 draft. Regulatory mode blocks on purpose, and readiness reports show which evidence is pending. Spec conflicts C9, C10 and C11 are also still waiting for the requirement text to be amended through O1.</aside>
+</section>
