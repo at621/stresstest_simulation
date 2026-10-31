@@ -253,6 +253,11 @@ def _selected(config: dict) -> str:
     return ",".join(RunConfig(**{k: v for k, v in config.items() if k in known}).selected_methods().values())
 
 
+def _sidecar(manifest: dict) -> str | None:
+    """The hash of a run's analysis sidecar, which survives the changed path of a rerun."""
+    return manifest["inputs"].get(f"{DATA_DIR}/analysis.yaml")
+
+
 def list_runs() -> pd.DataFrame:
     """Every run folder, oldest first. A folder without a manifest was never sealed."""
     rows = []
@@ -272,7 +277,8 @@ def list_runs() -> pd.DataFrame:
 
 
 def open_run(ref: str = "latest", variant: str = "core") -> Run:
-    """A sealed run by run ID, by folder path, or "latest" (the newest sealed run of a variant)."""
+    """A sealed run by run ID, by folder path, or "latest": the newest sealed run of a variant that
+    selects no reading of the draft."""
     if ref == "latest":
         runs = list_runs()
         runs = runs[(runs["status"] != "UNSEALED") & (runs["status"] != STATUS_BLOCKED)
@@ -301,8 +307,9 @@ def input_sets() -> pd.DataFrame:
 
 
 def reproduction(run: Run) -> pd.DataFrame:
-    """Every other sealed run of the same input set, scenarios and variant, and whether its output
-    hashes equal this run's. Equal code versions must give identical outputs (section 12.2)."""
+    """Every other sealed run of the same input set, scenarios, variant, selected readings and
+    sidecar, and whether its output hashes equal this run's. Equal code versions must give
+    identical outputs (section 12.2)."""
     rows = []
     for path in sorted(p for p in RUNS_DIR.iterdir() if p.is_dir() and p.name != run.run_id):
         if not _sealed(path):
@@ -310,7 +317,7 @@ def reproduction(run: Run) -> pd.DataFrame:
         other = read_manifest(path)
         same = (all(other["config"][k] == run.config[k] for k in ("variant", "scenarios"))
                 and _selected(other["config"]) == _selected(run.config)
-                and bool(other["config"].get("analysis")) == bool(run.config.get("analysis")))
+                and _sidecar(other) == _sidecar(run.manifest))
         if not same or other["input_set_hash"] != run.manifest["input_set_hash"]:
             continue
         differing = compare_outputs(other, run.manifest)

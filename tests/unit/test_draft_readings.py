@@ -2,6 +2,7 @@
 reading changes what it should and nothing else."""
 
 import argparse
+import importlib.util
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from stress.ecl import hold_s2
 from stress.projection import project_year
 from stress.report import WORKBOOK_FILE, ecl_bridge
 from tests import builders
-from tests.support import tolerance
+from tests.support import ROOT, tolerance
 
 
 def execute(inputs, runs, **options):
@@ -105,6 +106,16 @@ def test_held_s2_changes_only_s2_after_the_first_year(default_run, tmp_path):
     assert "Selected method" not in (base.reports_dir / "summary.md").read_text(encoding="utf-8")
 
 
+@pytest.mark.req("OPS-04")
+def test_notebooks_read_the_selected_reading_from_the_configuration():
+    spec = importlib.util.spec_from_file_location("nbtools", ROOT / "notebooks" / "nbtools.py")
+    nbtools = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nbtools)
+    older = {"inputs": "i", "scenarios": ["baseline"], "variant": "core", "mode": "synthetic"}
+    assert nbtools._selected(older) == "", "a manifest from before the options is the default"
+    assert nbtools._selected({**older, "s2_treatment": S2_HELD, "unknown_key": 1}) == S2_HELD
+
+
 @pytest.mark.control("Reproducibility")
 def test_a_selected_reading_reruns_from_its_manifest(default_run, tmp_path):
     inputs, _, _ = default_run
@@ -131,7 +142,8 @@ def test_a_selected_run_cannot_be_read_as_the_core_run(default_run, tmp_path):
 
 @pytest.mark.req("OPS-04")
 @pytest.mark.parametrize("option, words", [({"lgd_path": LGD_TROUGH}, "worst Z"),
-                                           ({"terminal_treatment": "parameters"}, "the parameters revert")])
+                                           ({"terminal_treatment": "parameters"},
+                                            "PD and LGD revert linearly, and Z still drives prepayment")])
 def test_the_checks_sheet_names_a_reading_that_changes_its_rows(default_run, tmp_path, option, words):
     inputs, _, _ = default_run
     ctx, _ = execute(inputs, tmp_path, **option)

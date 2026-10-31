@@ -231,7 +231,8 @@ def ecl_bridge(results: dict, tol: dict, amount: dict) -> pd.DataFrame:
     booked = rows.groupby(keys)[["held_on", "held_off", "allowance_on", "provision_off"]].sum()
     buckets = results["ecl_buckets"].rename(columns={"valuation_year": "year"}).groupby(keys)[
         ["ecl_on", "ecl_off"]].sum()
-    _require(buckets.index.sort_values().equals(booked.index.sort_values()), "ECL buckets for every scenario and year")
+    if not buckets.index.sort_values().equals(booked.index.sort_values()):
+        raise BlockingError(STEP, Block.RECONCILIATION, "ECL buckets do not cover every scenario and year of the provisions")
     out = buckets.join(booked).reset_index()
     _require(_close(out["ecl_on"] + out["held_on"], out["allowance_on"], tol), "ECL by bucket against provisions")
     _require(_close(out["ecl_off"] + out["held_off"], out["provision_off"], tol), "off-balance ECL by bucket")
@@ -433,7 +434,8 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     schedules = ("Contractual schedules from balance, rate and maturity; each ends at zero"
                  + ("; no run-off inside the horizon (C15)" if config.horizon_runoff == RUNOFF_REPLACED else ""))
     z_note = (("; adverse property-secured LGD takes the path's worst Z (C16)" if config.lgd_path == LGD_TROUGH else "")
-              + ("; after 2029 the parameters revert, not Z (C8)" if config.terminal_treatment != TERMINAL_Z else ""))
+              + (f"; after {ps['terminal_rule']['last_scenario_year']} PD and LGD revert linearly, and Z still "
+                 "drives prepayment (C8)" if config.terminal_treatment != TERMINAL_Z else ""))
     buckets = ("ECL by default bucket plus the held S2 amount equals the performing provisions (C14)"
                if config.s2_treatment == S2_HELD else "ECL by default bucket equals the performing provisions")
     rejected = "passed: no record rejected" if rej.empty else (

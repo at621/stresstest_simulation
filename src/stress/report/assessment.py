@@ -84,7 +84,7 @@ def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.D
     """Paragraph 69 and A31: GCA over collateral value, the value following the scenario's price
     index from the snapshot. GCA is static, so a loan's LTV is its opening LTV over that index."""
     in_book = facilities[facilities["facility_id"].isin(portfolio["facility_id"])]
-    secured = in_book.loc[usable_ltv(in_book), ["facility_id", "ltv", "collateral_type"]].copy()
+    secured = in_book.loc[usable_ltv(in_book, "report"), ["facility_id", "ltv", "collateral_type"]].copy()
     secured["variable"] = secured["collateral_type"].map(COLLATERAL_INDEX)
     if secured["variable"].isna().any():
         raise BlockingError("report", "MISSING_INPUT", "no price index for a collateral type")

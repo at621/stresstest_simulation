@@ -12,7 +12,7 @@ COLLATERAL_INDEX = {"residential_property": "residential_price_index", "resident
                     "office": "cre_price_index", "retail": "cre_price_index", "industrial": "cre_price_index"}
 
 
-def usable_ltv(facilities: pd.DataFrame) -> pd.Series:
+def usable_ltv(facilities: pd.DataFrame, step: str) -> pd.Series:
     """Which facilities have an LTV a calculation may use. Every other facility must truly have
     none: no collateral type and status not_applicable. Anything else blocks, so a gap never reads
     as unsecured and a number marked missing is never used. ``ltv_status`` carries the status."""
@@ -20,7 +20,7 @@ def usable_ltv(facilities: pd.DataFrame) -> pd.Series:
     absent = (facilities["ltv"].isna() & facilities["collateral_type"].isna()
               & facilities["ltv_status"].eq(ValueStatus.NOT_APPLICABLE))
     if not (usable | absent).all():
-        raise BlockingError("report", "MISSING_INPUT", "a facility in the book has no usable LTV")
+        raise BlockingError(step, "MISSING_INPUT", "a facility in the book has no usable LTV")
     return usable
 
 

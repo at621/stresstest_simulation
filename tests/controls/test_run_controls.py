@@ -274,7 +274,7 @@ def test_a_blocked_run_cannot_be_compared(mini, mini_tables, tmp_path):
 
 
 @pytest.mark.control("Version change")
-def test_a_run_blocked_after_writing_reports_cannot_be_compared(mini, mini_tables, tmp_path):
+def test_a_run_blocked_after_writing_reports_cannot_be_compared(mini, mini_tables, tmp_path, capsys):
     good, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
     mortgages = mini["facilities"]["segment"] == "P01"
     mini["facilities"].loc[mortgages[mortgages].index[0], "ltv"] = np.nan
@@ -282,6 +282,10 @@ def test_a_run_blocked_after_writing_reports_cannot_be_compared(mini, mini_table
     assert manifest["status"] == "BLOCKED" and manifest["blocked"]["step"] == "report"
     assert bad.reports_dir.is_dir(), "the core reports were written before the block"
     assert main(["compare", "--base", good.run_dir.as_posix(), "--new", bad.run_dir.as_posix()]) == EXIT_BLOCKED
+    capsys.readouterr()
+    assert main(["report", "--run", bad.run_dir.as_posix()]) == 0
+    shown = capsys.readouterr().out
+    assert "blocked at report" in shown and "cumulative charge" not in shown, "a partial summary is not a result"
 
 
 @pytest.mark.control("Version change")

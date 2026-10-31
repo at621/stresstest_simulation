@@ -43,7 +43,7 @@ def _exposures(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame, facili
     """S3 slices in the scope of paragraph 563, with their years as NPE at each year-end."""
     wanted = ["facility_id", "origination_date", "default_date", "ltv", "collateral_type"]
     in_book = facilities[facilities["facility_id"].isin(portfolio["facility_id"])]
-    usable_ltv(in_book)
+    usable_ltv(in_book, STEP)
     facts = portfolio[["facility_id", "portfolio", "country"]].merge(in_book[wanted], on="facility_id",
                                                                      validate="one_to_one")
     book = slices.loc[slices["stage"].eq(3), ["scenario", "year", "facility_id", "slice", "entry_year", "gca",

@@ -338,11 +338,11 @@ def cmd_report(args) -> int:
     manifest = lineage.read_manifest(run_dir)
     summary = run_dir / RESULTS_DIR / REPORTS_DIR / report.SUMMARY_FILE
     print(f"run {manifest['run_id']}: {manifest['status']}")
-    if summary.exists():
-        sys.stdout.write(summary.read_text(encoding="utf-8"))
-    elif "blocked" in manifest:
+    if "blocked" in manifest:  # before the summary: a run blocked at R10 can have written one
         b = manifest["blocked"]
         print(f"blocked at {b['step']}: {b['code']}: {b['message']}")
+    elif summary.exists():
+        sys.stdout.write(summary.read_text(encoding="utf-8"))
     return EXIT_OK
 
 
