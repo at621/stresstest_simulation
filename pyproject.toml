@@ -24,6 +24,7 @@ dev = [
     "ruff>=0.6",
     "import-linter>=2.0",
     "hypothesis>=6.170.1",
+    "matplotlib>=3.11.2",  # tests load notebooks/nbtools.py, and CI installs only this group
 ]
 notebooks = [
     "ipykernel>=7.4.0",

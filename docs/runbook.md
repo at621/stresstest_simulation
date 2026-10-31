@@ -48,8 +48,8 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 ### After changing the requirements or the parameter set
 
 1. Requirements changed: run `uv run python -m foundation.transcribe`. Check the diff of `docs/spec/`, then have the `change-reviewer` agent and the owner approve it (GOV-03).
-2. Parameter set or generator changed: run `uv run python -m foundation.synth`. It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
-3. Run `uv run pytest`. The test `test_generator_is_deterministic_and_matches_the_committed_set` fails until the new input set is in `inputs/`.
+2. Parameter set or generator changed: run `uv run python -m foundation.synth` on Windows, because a rebuild on Linux gives a different hash (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
+3. Run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces`, which runs on Windows only, fails until the new input set is in `inputs/`.
 4. Compare the old and new results with `uv run stress compare --base runs/<old> --new runs/<new>` (version-change control). It prints the impairment differences and keeps the full report in `runs/comparisons/<old>__<new>/`: `summary.md`, the differences in impairment, stage stocks and coverage, PD and LGD, and `comparison.json`, which ties them to both runs. Sealed runs are write-once, so the report sits beside them; `--out` chooses another folder outside them.
 
 ### Gates
