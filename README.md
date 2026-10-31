@@ -2,6 +2,15 @@
 
 Deterministic credit stress-test engine for EBA 2027 preparation. It projects stage migration, PD, LGD, EAD and provisions for a synthetic €11bn EUR, amortised-cost book over 2027–2029, in a baseline and an adverse scenario.
 
+**Goals:**
+
+1. **EBA 2027:** meet the exercise's requirements for projecting credit losses and provisions.
+2. **Dynamic assumptions:** enable projections in which the balance sheet changes under the scenario, as an alternative to the static EBA approach.
+3. **Multiple portfolios:** enable new portfolios to be added without new calculation logic.
+4. **Portfolio-specific macro models:** enable the use of a different macro model for each portfolio, as an option.
+5. **Clear inputs and configuration:** define every input and setting in one specification.
+6. **Ad hoc crisis scenarios:** enable new crisis scenarios to be defined and run without changing the solution.
+
 | | |
 |---|---|
 | **Design (leading)** | [docs/stress-engine-code-flow.html](docs/stress-engine-code-flow.html) |
