@@ -26,7 +26,7 @@ Held by the engine and its tests:
 
 - Every input enters through R2. No later step reads a file.
 - R5 is the only step that creates cash flows. They are contractual and the same in every scenario.
-- One Z per segment, country, year and scenario drives the PD matrix, LGD and prepayment. Nothing is stressed twice. The selectable parameter reversion after 2029 (C8) and trough reading of LGD (C16) are the only departures, and only when selected.
+- One Z per segment, country, year and scenario drives the PD matrix, LGD and prepayment. Nothing is stressed twice. The selectable parameter reversion after 2029 (C8), zero prepayment inside the horizon (C15) and trough reading of LGD (C16) are the only departures, and only when selected.
 - Missing is never zero. Every input value carries a status, and a missing value blocks the calculation that needs it.
 - Amounts are in EUR, and rates and probabilities are decimal fractions, held as float64 and unrounded until R10.
 - A run folder is write-once, and a rerun is a new folder. Baseline and adverse are never blended.

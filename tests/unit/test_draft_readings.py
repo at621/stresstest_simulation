@@ -3,6 +3,7 @@ reading changes what it should and nothing else."""
 
 import argparse
 import importlib.util
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -106,11 +107,35 @@ def test_held_s2_changes_only_s2_after_the_first_year(default_run, tmp_path):
     assert "Selected method" not in (base.reports_dir / "summary.md").read_text(encoding="utf-8")
 
 
-@pytest.mark.req("OPS-04")
-def test_notebooks_read_the_selected_reading_from_the_configuration():
+def load_nbtools():
     spec = importlib.util.spec_from_file_location("nbtools", ROOT / "notebooks" / "nbtools.py")
     nbtools = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(nbtools)
+    return nbtools
+
+
+@pytest.mark.control("Reproducibility")
+def test_reproduction_compares_only_runs_with_the_same_sidecar(tmp_path, monkeypatch):
+    nbtools = load_nbtools()
+    config = {"inputs": "i", "scenarios": ["baseline"], "variant": "core", "analysis": "somewhere"}
+
+    def manifest(name, sidecar):
+        return {"run_id": name, "status": "SYNTHETIC", "code_version": "c", "input_set_hash": "h", "config": config,
+                "outputs": {"results/x.parquet": "1"}, "inputs": {"data/analysis.yaml": sidecar}}
+
+    others = {"same": manifest("same", "a"), "other": manifest("other", "b")}
+    for name in others:
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "manifest.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(nbtools, "RUNS_DIR", tmp_path)
+    monkeypatch.setattr(nbtools, "read_manifest", lambda path: others[path.name])
+    run = SimpleNamespace(run_id="this", config=config, manifest=manifest("this", "a"))
+    assert list(nbtools.reproduction(run)["run_id"]) == ["same"]
+
+
+@pytest.mark.req("OPS-04")
+def test_notebooks_read_the_selected_reading_from_the_configuration():
+    nbtools = load_nbtools()
     older = {"inputs": "i", "scenarios": ["baseline"], "variant": "core", "mode": "synthetic"}
     assert nbtools._selected(older) == "", "a manifest from before the options is the default"
     assert nbtools._selected({**older, "s2_treatment": S2_HELD, "unknown_key": 1}) == S2_HELD
