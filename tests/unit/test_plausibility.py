@@ -69,7 +69,16 @@ def test_an_unknown_measure_or_source_blocks():
 
 
 @pytest.mark.req("RPT-05")
-def test_every_published_row_is_a_known_measure_with_a_named_source():
+def test_a_missing_path_blocks_rather_than_gives_a_zero_change():
+    impairment, stages, loaded, indices = tables()
+    empty = SimpleNamespace(scenario_values=loaded.scenario_values.iloc[:0], scenario_meta=loaded.scenario_meta)
+    spec = {"version": "t", "source": "t", "sources": {"s": "a publication"}, "rows": [row("gdp_cumulative", "Scenario")]}
+    with pytest.raises(BlockingError, match="no adverse path"):
+        plausibility_sheet(spec, impairment, stages, empty, indices, YEARS)
+
+
+@pytest.mark.req("RPT-05")
+def test_every_published_row_has_a_named_source_and_a_value():
     doc = yaml.safe_load(BENCHMARKS.read_text(encoding="utf-8"))
     assert {r["source"] for r in doc["rows"]} <= set(doc["sources"])
     assert all(isinstance(r["published"], float) for r in doc["rows"])

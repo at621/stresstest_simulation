@@ -20,7 +20,7 @@ def _slices(allowance: float) -> pd.DataFrame:
 def _bridge() -> pd.DataFrame:
     portfolio = pd.DataFrame({"facility_id": [FACILITY], "overlay_amount": [0.0]})
     return accounting.stock_to_flow(_slices(OPENING), _slices(CLOSING), portfolio, "adverse", 2027,
-                                    tolerance("aggregate"))
+                                    tolerance("amount"))
 
 
 @pytest.mark.req("ACC-01")
@@ -31,7 +31,7 @@ def test_float_rounding_does_not_block_a_correct_run():
 
 @pytest.mark.req("ACC-02")
 def test_a_movement_outside_the_charge_still_blocks(monkeypatch):
-    gap = 2 * tolerance("aggregate")["abs"]
+    gap = 2 * tolerance("amount")["abs"]
     monkeypatch.setattr(accounting, "charge", lambda opening, closing: closing - opening + gap)
     with pytest.raises(BlockingError) as caught:
         _bridge()

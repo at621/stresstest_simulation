@@ -2,12 +2,23 @@
 
 import pandas as pd
 
+from stress.contracts.errors import BlockingError
+from stress.contracts.status import ValueStatus
 from stress.contracts.tables import TableSpec
 
-# Paragraph 69: lending for house purchase follows residential prices, CRE loans follow CRE prices,
-# residential rental included (A31).
+# Paragraph 69 ties LTV to real estate prices. Lending for house purchase follows residential
+# prices and CRE loans follow CRE prices; residential rental under CRE is this project's reading (A31).
 COLLATERAL_INDEX = {"residential_property": "residential_price_index", "residential_rental": "cre_price_index",
                     "office": "cre_price_index", "retail": "cre_price_index", "industrial": "cre_price_index"}
+
+
+def require_ltv(facilities: pd.DataFrame) -> None:
+    """A facility with no LTV blocks unless the input says it does not apply: a gap never reads
+    as unsecured. ``facilities`` carries the value status as ``ltv_status``."""
+    gap = facilities["ltv"].isna() & (facilities["collateral_type"].notna()
+                                      | facilities["ltv_status"].ne(str(ValueStatus.NOT_APPLICABLE)))
+    if gap.any():
+        raise BlockingError("report", "MISSING_INPUT", "a facility in the book has no LTV")
 
 
 def price_growth(indices: pd.DataFrame) -> pd.DataFrame:
@@ -49,6 +60,7 @@ ANALYSIS_RATES = {
     "mapped_cells": ("value",),
     "plausibility": ("engine", "published", "multiple"),
     "ltv": ("average_ltv", "share_above_100"),
+    "ecl_bridge": (),
     "maturity": ("average_maturity",),
     "template_replica": ("tr12", "tr21", "pd12m_s1", "pd12m_s2", "lgd_s1", "lgd_s2", "lrlt_s2", "loss_rate_s1_next",
                          "gap_s1", "gap_s2", "gap_s3_new", "gap_s3_old"),

@@ -6,7 +6,7 @@
 | **Baseline** | `main` at `b59446e` (tag `v1.1.0`) |
 | **Reference run** | `20261019T0511Z-core-05ddae55`, input set `d62d0386f2c5256e` |
 | **Regulatory text** | EBA 2027 draft package of 11 June 2026. No final package was found at this date |
-| **Status** | Findings by Claude Code, now built on branches stacked on `improve/eba-draft-preparation`: see [Status of the findings](#status-of-the-findings). Not decided by the owner and not merged |
+| **Status** | Findings by Claude Code, now built on branches stacked on `improve/eba-draft-preparation`: see [Status of the findings](#status-of-the-findings). Reviewed by `change-reviewer` as code changes; the findings text below it was not. Not decided by the owner and not merged |
 
 ## Summary
 
@@ -38,7 +38,7 @@ Recommended order: fix finding 5 first, because it is small and safe. Then settl
 
 ## Status of the findings
 
-Updated on 31 October 2026. The default run is unchanged: cumulative charges stay €130.4m baseline and €635.0m adverse, and every earlier output reproduces. Anything that would change the default, or that departs from the design, is a selectable option or a recorded conflict, so the choice stays with the owner.
+Updated on 31 October 2026. The default run is unchanged: cumulative charges stay €130.4m baseline and €635.0m adverse, and every results table reproduces byte for byte. Reports were added, `analysis_readiness.csv` gained rows, and the summary and workbook carry the new code version. Anything that would change the default, or that departs from the design, is a selectable option or a recorded conflict, so the choice stays with the owner.
 
 | # | State | Branch | What exists now | Still open |
 |---|---|---|---|---|
@@ -46,11 +46,11 @@ Updated on 31 October 2026. The default run is unchanged: cumulative charges sta
 | 2 | Selectable reading | `improve/lgd-trough-reading` | `--lgd-path trough`: +€19.2m adverse, nil baseline (C16). Property-secured books only, so below the €40.3m measured on every book | The owner picks the reading. A model on price level and LTV stays with LGD-01 |
 | 3 | Recorded | `improve/review-conflicts` | Conflict C13 | The owner amends ECL-11, then O1 |
 | 4 | Selectable reading | `improve/s2-and-runoff-readings` | `--horizon-runoff replaced`: timing only (C15) | Decide with finding 1 |
-| 5 | Fixed | `improve/r9-bridge-rounding` | R9 compares at the §12.3 tolerance | Nothing |
-| 6 | Built | `improve/acceptance-through-runs`, `improve/ltv-maturity-report` | 32 of 36 acceptance tests reach a run or a step, and [their README](../../tests/acceptance/README.md) lists each route. RPT-06's LGD is reported | AT-28, 36 and 38 stay kernel-only with a reason. AT-01 is about the input set |
-| 7 | Built | `improve/traceability-and-sources` | [The matrix](../traceability/traceability-matrix.md): 68 tested, 27 built, 31 deferred, 7 process | Eight requirements are unmet with no decision recorded: REG-03, SCP-05, DAT-07, SYN-02, SYN-03, SCN-03, PD-07, LGD-11 |
+| 5 | Fixed | `improve/r9-bridge-rounding`, `improve/review-fixes` | R9 compares at the §12.3 amount tolerance | Nothing |
+| 6 | Built | `improve/acceptance-through-runs`, `improve/ltv-maturity-report` | 29 of 36 acceptance tests reach a sealed run and 3 reach a step, and [their README](../../tests/acceptance/README.md) lists each route. RPT-06's LGD is reported | AT-28, 36 and 38 stay kernel-only with a reason. AT-01 is about the input set |
+| 7 | Built | `improve/traceability-and-sources` | [The matrix](../traceability/traceability-matrix.md): 66 tested, 27 built, 33 deferred, 7 process | Nine requirements are unmet with no decision recorded: REG-03, SCP-05, DAT-07, SYN-02, SYN-03, SCN-03, PD-07, LGD-11, EAD-07 |
 | 8 | Built | `improve/compare-report` | Retained report in `runs/comparisons/` with stages, coverage, PD and LGD | Nothing |
-| 9 | Report built | `improve/template-replica` | Boxes 3–9 per segment beside the engine's stock, with the flow lines and Table 4 classes (A32) | The CRR conversion factors of ¶81 change parameters, so they are not built. The S1 gap beyond discounting is not split. P04's SME split |
+| 9 | Report built | `improve/template-replica` | Boxes 3–9 per segment beside the engine's stock, with the flow lines and Table 4 classes (A32) | The CRR conversion factors of ¶81 change parameters, so they are not built. P04's SME split. The S1 gap is split in A32 |
 | 10 | Built | `improve/ltv-maturity-report` | LTV under the scenario's prices, and average maturity (A31) | Nothing |
 | 11 | **Not built** | | Nothing | It needs the owner's decision on the Z key, a change to SCN-08 and synthetic GVA paths, so a new input set |
 | 12 | Built on a supplied calendar | `improve/npe-backstop` | Shortfall per exposure beside the capital bridge, which keeps its input (A33) | The text of Article 47c could not be retrieved, so only the unsecured 35% (footnote 75) is sourced. The capital team's approval |
@@ -60,7 +60,7 @@ Updated on 31 October 2026. The default run is unchanged: cumulative charges sta
 
 All three readings together give +€99.3m adverse and +€31.1m baseline. The first measure of finding 1 and the E1 + E3 total below used simple proxies, so they differ from these built readings: the held reading works per facility and values a replaced facility afresh, as ¶125 says.
 
-The branches stack in this order, each on the one before, from `improve/eba-draft-preparation`: `improve/r9-bridge-rounding`, `improve/compare-report`, `improve/ltv-maturity-report`, `improve/review-conflicts`, `improve/template-replica`, `improve/npe-backstop`, `improve/plausibility-sheet`, `improve/s2-and-runoff-readings`, `improve/lgd-trough-reading`, `improve/acceptance-through-runs`, `improve/traceability-and-sources`, `improve/review-status`.
+The branches stack in this order, each on the one before, from `improve/eba-draft-preparation`: `improve/r9-bridge-rounding`, `improve/compare-report`, `improve/ltv-maturity-report`, `improve/review-conflicts`, `improve/template-replica`, `improve/npe-backstop`, `improve/plausibility-sheet`, `improve/s2-and-runoff-readings`, `improve/lgd-trough-reading`, `improve/acceptance-through-runs`, `improve/traceability-and-sources`, `improve/review-status`, `improve/review-fixes`. The last holds what `change-reviewer` asked for across all of them, so merge the stack whole or take it with whichever branch it touches.
 
 ## How the findings were reached
 
@@ -137,7 +137,7 @@ Changes to requirement text go through the owner and O1, because `docs/spec/` is
 | Baseline on-balance S2 coverage | 5.7% | 4.6% | 3.7% |
 | Adverse S2 weighted remaining maturity, years | 5.95 | 5.08 | 4.30 |
 
-ECL-06 has no test. `TODO.md` records the baseline pattern as "the expected behaviour of a static balance sheet with replacement at maturity"; that note should be reopened.
+When this was written ECL-06 had no test; the held reading now does. `TODO.md` records the baseline pattern as "the expected behaviour of a static balance sheet with replacement at maturity"; that note should be reopened.
 
 **Effect.** Two measures bracket it:
 
@@ -331,7 +331,7 @@ This is not like for like: the book is deliberately riskier, with opening S3 nea
 Two calibration points add to this:
 
 - A19 records that driver volatility was loosened after a first result (7.6% of GCA) was judged too severe. Severity was therefore set partly from the outcome.
-- Z is not standardised. Every segment's |β| sum to 1, so Z has unit variance only if its drivers are perfectly correlated. With uncorrelated drivers its standard deviation would be 0.58 (P01), 0.71 (P02), 0.66 (P03), 0.62 (P04), 0.76 (P05), 0.83 (P06_GG) and 0.66 (P06_CI).
+- Z is not standardised. Every segment's |β| sum to 1, so Z has unit variance only if its drivers are perfectly correlated. With uncorrelated drivers its standard deviation would be 0.58 (P01), 0.71 (P02), 0.66 (P03), 0.62 (P04), 0.76 (P05), 0.82 (P06_GG) and 0.66 (P06_CI).
 
 **Next step.** Build a benchmark sheet by book. Set the driver moments from published or estimated data rather than from the result. Standardise Z, or record why not. The owner judges the outcome.
 

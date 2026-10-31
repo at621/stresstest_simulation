@@ -26,6 +26,7 @@ def test_pd_rises_as_z_falls(full_tables, core_run):
     pit = builders.result(ctx, "pit_matrices.parquet")
     one_year = pit[(pit["to_grade"] == grades[-1]) & (pit["from_grade"] != grades[-1])]
     one_year = one_year.drop_duplicates(["segment", "from_grade", "z"])
+    assert not one_year.empty
     for (segment, grade), rows in one_year.groupby(["segment", "from_grade"]):
         by_falling_z = rows.sort_values("z", ascending=False)["probability"].to_numpy()
         assert len(by_falling_z) > 1 and np.all(np.diff(by_falling_z) > 0), (segment, grade)

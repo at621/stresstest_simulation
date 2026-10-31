@@ -9,7 +9,7 @@ from tests.support import assert_close, oracle
 
 
 @pytest.mark.at("AT-04")
-def test_new_cohort_booked_once(reference_runs):
+def test_new_cohort_booked_once(reference_runs, core_run):
     case = oracle("AT-04")
     i = case["input"]
     booked = s3_new_booking([i["flow"]], [i["lgd"]])
@@ -24,7 +24,9 @@ def test_new_cohort_booked_once(reference_runs):
     year = int(prov["year"].min()) + 1
     cohort = new_s3_slice(year, 1)
     slices = builders.result(ctx, "slices.parquet")
-    for value in slices[(slices["facility_id"] == fid) & (slices["slice"] == cohort)]["gca"]:
+    flows = slices[(slices["facility_id"] == fid) & (slices["slice"] == cohort)]["gca"]
+    assert len(flows)
+    for value in flows:
         assert_close(value, i["flow"], case["tolerance"], "run flow")
     mine = prov[(prov["facility_id"] == fid) & (prov["slice"] == cohort)]
     assert set(mine["scenario"]) == {"baseline", "adverse"}
@@ -34,3 +36,13 @@ def test_new_cohort_booked_once(reference_runs):
         assert (rows["method"] == METHOD_S3_NEW_FLOOR).sum() == len(rows) - case["expected"]["bookings"] > 0
         for value in rows["allowance_on"]:
             assert_close(value, case["expected"]["allowance"], case["tolerance"], "run allowance")
+    real, _ = core_run
+    prov = builders.result(real, "provisions.parquet")
+    booked = prov[prov["method"] == METHOD_S3_NEW_BOOKING]
+    slices = builders.result(real, "slices.parquet")[["scenario", "year", "facility_id", "slice", "gca"]]
+    lgd = builders.result(real, "lgd_of_year.parquet")[["scenario", "year", "facility_id", "lgd"]]
+    rows = booked.merge(slices, on=["scenario", "year", "facility_id", "slice"]).merge(
+        lgd, on=["scenario", "year", "facility_id"])
+    assert len(rows) == len(booked) and set(rows["scenario"]) == {"baseline", "adverse"}
+    worst = (rows["allowance_on"] - rows["gca"] * rows["lgd"]).abs().max()
+    assert worst <= case["tolerance"]["abs"]

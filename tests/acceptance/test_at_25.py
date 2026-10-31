@@ -39,6 +39,7 @@ def test_marginal_cumulative_and_survival(reference_runs, core_run):
     real, _ = core_run
     keys = ["segment", "country", "scenario", "valuation_year", "cohort"]
     run = builders.result(real, "pd_curves.parquet").sort_values([*keys, "default_bucket"])
+    assert not run.empty
     tol = tolerance("probability_identity")["abs"]
     assert np.allclose(run["m"], run.groupby(keys)["s"].shift(1).fillna(1.0) * run["q"], rtol=0, atol=tol)
     assert np.allclose(run["s"], 1.0 - run["f"], rtol=0, atol=tol)

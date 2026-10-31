@@ -23,11 +23,14 @@ from stress.contracts.artifacts import canonical_hash, sha256_file, verified_man
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import INPUT_MANIFEST
 from stress.contracts.run import (
+    HORIZON_RUNOFFS,
+    LGD_PATHS,
     MODE_SYNTHETIC,
     MODES,
     RUN_CONFIG,
     RUN_LOG,
     RUN_MANIFEST,
+    S2_TREATMENTS,
     STATUS_BLOCKED,
     STATUS_SYNTHETIC,
     RunConfig,
@@ -98,6 +101,11 @@ def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> 
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, f"unknown mode {config.mode!r}")
     if config.terminal_treatment not in ("z", "parameters"):
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, "unknown terminal treatment")
+    for name, value, allowed in (("S2 treatment", config.s2_treatment, S2_TREATMENTS),
+                                 ("horizon run-off", config.horizon_runoff, HORIZON_RUNOFFS),
+                                 ("LGD path", config.lgd_path, LGD_PATHS)):
+        if value not in allowed:
+            raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, f"unknown {name} {value!r}")
     if config.mode != MODE_SYNTHETIC:
         raise BlockingError(
             STEP_OPEN, Block.REGULATORY_MODE,
@@ -127,7 +135,8 @@ def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> 
         "config": {**config.as_dict(), "inputs": input_hash},
         "input_set": input_hash, "code": version, "spec": spec_version,
     })[:8]
-    base = f"{now:%Y%m%dT%H%MZ}-{config.variant}-{run_hash}"
+    tag = "".join(f"+{value}" for value in config.selected_methods().values())  # never reads as the core run
+    base = f"{now:%Y%m%dT%H%MZ}-{config.variant}{tag}-{run_hash}"
     runs_dir.mkdir(parents=True, exist_ok=True)
     run_id = base
     counter = 2

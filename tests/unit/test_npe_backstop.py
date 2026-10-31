@@ -23,6 +23,7 @@ FACILITIES = pd.DataFrame({
     "origination_date": ["2022-01-01", "2022-01-01", "2020-01-01", "2018-01-01", "2018-01-01"],
     "default_date": [None, None, "2023-05-16", None, None],
     "ltv": [np.nan, np.nan, 0.5, np.nan, np.nan],
+    "ltv_status": ["not_applicable", "not_applicable", "supplied", "not_applicable", "not_applicable"],
     "collateral_type": [None, None, "residential_property", None, None]})
 INDICES = pd.DataFrame({"scenario": "adverse", "country": "DE", "variable": "residential_price_index",
                         "year": [2027, 2028, 2029], "annual_change": [-0.1, -0.1, 0.0], "index": [90.0, 81.0, 81.0]})
@@ -51,6 +52,35 @@ def test_shortfall_is_measured_per_exposure_and_an_excess_never_offsets_it():
     assert p01["secured_part"] == pytest.approx(100.0) and p01["unsecured_part"] == 0.0
     assert p01["minimum_coverage"] == pytest.approx(25.0) and p01["insufficient_coverage"] == pytest.approx(15.0)
     assert out.loc["Total", "insufficient_coverage"] == pytest.approx(65.0)
+
+
+@pytest.mark.req("CAP-09")
+def test_a_replacement_after_default_does_not_bring_a_slice_into_scope():
+    # D predates the window. It defaulted in 2027 as generation 0, and its contract date passed in 2029.
+    history = pd.DataFrame([{**s3("D", 0.0), "year": 2027}, {**s3("D", 0.0, generation=1), "year": 2029}])
+    assert npe_backstop(CALENDAR, history, PORTFOLIO, FACILITIES, INDICES).empty
+    replaced_first = history.assign(generation=[1, 1])
+    assert not npe_backstop(CALENDAR, replaced_first, PORTFOLIO, FACILITIES, INDICES).empty
+
+
+@pytest.mark.req("CAP-09")
+@pytest.mark.parametrize("change", [{"ltv": np.nan, "ltv_status": "not_applicable"}, {"ltv": np.nan,
+                                     "collateral_type": None, "ltv_status": "missing"}])
+def test_a_missing_ltv_blocks_rather_than_reads_as_unsecured(change):
+    gap = FACILITIES.copy()
+    for column, value in change.items():
+        gap.loc[gap["facility_id"] == "C", column] = value
+    with pytest.raises(BlockingError, match="no LTV"):
+        npe_backstop(CALENDAR, book(), PORTFOLIO, gap, INDICES)
+
+
+@pytest.mark.req("CAP-09")
+def test_a_facility_outside_the_book_cannot_stop_the_report():
+    rejected = pd.concat([FACILITIES, FACILITIES[FACILITIES["facility_id"] == "A"]], ignore_index=True)
+    assert not npe_backstop(CALENDAR, book(), PORTFOLIO, rejected.drop_duplicates(), INDICES).empty
+    duplicate = pd.concat([FACILITIES, FACILITIES.assign(facility_id="Z", ltv=np.nan,
+                                                         ltv_status="missing")], ignore_index=True)
+    assert not npe_backstop(CALENDAR, book(), PORTFOLIO, duplicate, INDICES).empty
 
 
 @pytest.mark.req("CAP-09")

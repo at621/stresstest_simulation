@@ -1,4 +1,4 @@
-"""AT-38, kernel-only (the capital bridge computes regulatory EAD inline, not here): the CCF bridge (EAD-07, MOD-02)."""
+"""AT-38, kernel-only (the capital bridge computes regulatory EAD inline, not here): the CCF bridge (EAD-07)."""
 
 import pytest
 

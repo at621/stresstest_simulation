@@ -42,8 +42,9 @@ def lgd(scenario="adverse") -> pd.DataFrame:
 
 
 def z() -> pd.DataFrame:
-    return pd.DataFrame({"segment": ["P03"], "country": ["DE"], "scenario": ["adverse"], "year": [2030],
-                         "adverse_weight": [5 / 6]})
+    # Baseline first: its weight of 1 must never stand in for the adverse one.
+    return pd.DataFrame({"segment": ["P03", "P03"], "country": ["DE", "DE"], "scenario": ["baseline", "adverse"],
+                         "year": [2030, 2030], "adverse_weight": [1.0, 5 / 6]})
 
 
 @pytest.mark.req("RPT-05")
@@ -77,7 +78,8 @@ def test_end_of_horizon_blends_the_two_loss_rates_as_boxes_4_and_5_write_them():
                       + [flows("baseline", y, s1s3=100 * i["baseline"]["pd"]) for y in YEARS], ignore_index=True)
     rates = pd.concat([lgd().assign(lgd=i["adverse"]["lgd"]), lgd("baseline").assign(lgd=i["baseline"]["lgd"])],
                       ignore_index=True)
-    weights = z().assign(adverse_weight=case["expected"]["weights"]["adverse"])
+    weights = z()
+    weights.loc[weights["scenario"] == "adverse", "adverse_weight"] = case["expected"]["weights"]["adverse"]
     out = template_replica(book, moved, rates, weights, PORTFOLIO, YEARS, tolerance("aggregate"))
     rate = out[(out["scenario"] == "adverse") & (out["year"] == 2029)]["loss_rate_s1_next"].iloc[0]
     assert rate == pytest.approx(case["expected"]["interpolated_loss_rate"], abs=case["tolerance"]["abs"])

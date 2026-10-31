@@ -101,6 +101,28 @@ def test_check_reports_a_stale_file_and_write_clears_it(repo):
 
 
 @pytest.mark.control("Repository rules")
+def test_a_left_over_temporary_folder_is_not_a_test(repo):
+    planted = repo / "tests" / ".ci-left-over" / "test_junk.py"
+    planted.parent.mkdir()
+    planted.write_text('import pytest\nNAME = "ECL-01"\n\n\n@pytest.mark.req(NAME)\ndef test_x():\n    pass\n',
+                       encoding="utf-8")
+    assert not [t for t in tr.scan_tests(repo) if "junk" in t.node], "a dot folder is skipped"
+
+
+@pytest.mark.control("Repository rules")
+@pytest.mark.parametrize("entry, message", [
+    ({"status": "deferred", "reason": "later", "decided_in": ["nobody decided this"]}, "not a recognised decision"),
+    ({"status": "deferred", "reason": "later", "decided_in": ["A99"]}, "is not in"),
+    ({"reason": "   "}, "has no reason"),
+    ({"reason": tr.UNMET}, "must be deferred"),
+])
+def test_a_status_entry_cannot_escape_its_rules(repo, entry, message):
+    set_status(repo, {"ECL-01": entry})
+    with pytest.raises(tr.TraceabilityError, match=message):
+        tr.check(repo)
+
+
+@pytest.mark.control("Repository rules")
 def test_a_requirement_with_no_status_fails(repo):
     set_status(repo, {})
     with pytest.raises(tr.TraceabilityError, match="REG-01"):

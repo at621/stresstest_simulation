@@ -43,6 +43,8 @@ CODE_SUFFIXES = (".py", ".yaml")
 STATUSES = ("tested", "built", "deferred", "process")
 HAND_STATUSES = ("deferred", "process")
 UNMET = "unmet: no decision recorded"
+DECISION = re.compile(r'[AC]\d+|architecture §6 item \d+|design preparation addendum'
+                      r'|design "Handled elsewhere or later": (After v1|Met by people and process)')
 NOT_APPROVED = "not approved"
 NOT_RECORDED = "not recorded"
 TITLE_LENGTH = 110
@@ -276,7 +278,9 @@ def marked_tests(path: Path, name: str) -> list[MarkedTest]:
 
 def scan_tests(root: Path) -> list[MarkedTest]:
     tests_dir = root / "tests"
-    paths = sorted(tests_dir.rglob("test_*.py"), key=lambda p: p.as_posix())
+    paths = sorted((p for p in tests_dir.rglob("test_*.py")  # dot folders are left-over test workspaces
+                    if not any(part.startswith(".") for part in p.relative_to(tests_dir).parts)),
+                   key=lambda p: p.as_posix())
     found = []
     for path in paths:
         found.extend(marked_tests(path, path.relative_to(tests_dir).as_posix()))
@@ -418,8 +422,10 @@ def load_status(root: Path, known: set[str], links: Links) -> dict[str, Entry]:
         if entry.status and entry.status not in HAND_STATUSES:
             problems.append(f"{where}: status {entry.status!r} is not allowed here: "
                             f"tested and built are derived, the YAML holds {HAND_STATUSES}")
-        if not entry.reason:
+        if not entry.reason.strip():
             problems.append(f"{where} has no reason")
+        if entry.reason == UNMET and entry.status != "deferred":
+            problems.append(f"{where} says {UNMET!r}, so it must be deferred")
         if entry.status == "deferred" and entry.reason != UNMET and not entry.decided_in:
             problems.append(f"{where} is deferred with no decision: name where it was decided, "
                             f"or give the reason {UNMET!r}")
@@ -432,6 +438,8 @@ def load_status(root: Path, known: set[str], links: Links) -> dict[str, Entry]:
         problems += [f"{where}: {t} is not a test" for t in entry.tests if t not in links.all_tests]
         problems += [f"{where}: {d} is not in {ASSUMPTIONS.name}" for d in entry.decided_in
                      if re.fullmatch(r"[AC]\d+", d) and d not in links.decision_numbers]
+        problems += [f"{where}: {d!r} is not a recognised decision" for d in entry.decided_in
+                     if not DECISION.fullmatch(d)]
         entries[requirement] = entry
     if problems:
         raise TraceabilityError("\n".join(problems))
@@ -705,6 +713,8 @@ def main(argv: list[str] | None = None) -> int:
             stale = check()
             for name in stale:
                 print(f"stale: {name}")
+            for requirement in needs_review():
+                print(f"review: {requirement} is unmet in {STATUS_FILE.name} but a test now names it")
             print("traceability files are current" if not stale else f"{len(stale)} file(s) differ")
             return 1 if stale else 0
         for name in write():

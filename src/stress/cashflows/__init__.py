@@ -122,6 +122,9 @@ def build_schedules(portfolio: pd.DataFrame, parameter_set: dict, variant: str,
     valuations = [start] + [int(y) for y in horizon["projection_years"]]
     last = int(parameter_set["terminal_rule"]["last_scenario_year"])
     profiles = variant_profiles(perf, parameter_set["variants"][variant])
+    if horizon_runoff == RUNOFF_REPLACED and not profiles.eq("bullet").all():
+        raise BlockingError(STEP, Block.INVALID_ARGUMENT, "paragraph 125 stops amortisation inside the horizon "
+                                                          "too, and that is built for bullet schedules only")
     codes = profiles.map(PROFILE_CODES).to_numpy()
     # D: the drawn measure with accrued interest counted exactly once (EAD-02, AT-37).
     drawn = np.where(perf["accrued_in_gca"].eq(True), perf["gca"],

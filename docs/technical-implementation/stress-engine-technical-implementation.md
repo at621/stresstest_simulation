@@ -799,9 +799,9 @@ Every report carries the run's status label.
 
 **Run comparison (`report/comparison.py`).** `compare` verifies both manifests and joins four reports of the two runs: impairment, stage stocks and coverage, one-year PD, and LGD by segment. Each gives base, new and difference; a row that only one run has keeps an empty difference. `write_report` keeps the tables, `summary.md` and `comparison.json` in `runs/comparisons/<base>__<new>/` (§12.2 version change). It holds no time, so the same two runs give the same bytes, and it refuses a folder inside a sealed run.
 
-**Selectable readings of the draft.** `--s2-treatment held` (`hold_s2`, C14), `--horizon-runoff replaced` (C15) and `--lgd-path trough` (`lgd_drivers`, C16) depart from the design only when requested. The defaults are the design's, and a run with one of them names it in its summary, its manifest and its readiness report.
+**Selectable readings of the draft.** `--s2-treatment held` (`hold_s2`, C14), `--horizon-runoff replaced` (C15) and `--lgd-path trough` (`lgd_drivers`, C16) depart from the design only when requested. The defaults are the design's. A run with one of them carries it in its run ID and names it in its headline, workbook, manifest and readiness report. `ecl_bridge` ties ECL by bucket, plus any held amount, to the booked provisions.
 
-**Capital kernels (`capital/`).** `methodological_floor` applies the starting-point floor separately to the IRB and STA REA contributions (CAP-03, AT-10). `output_floor` computes the bank-wide comparison max(UTREA, factor × STREA) (CAP-04, AT-11). Nothing in v1 feeds them portfolio REA.
+**Capital kernels (`capital/`).** `methodological_floor` applies the starting-point floor separately to the IRB and STA REA contributions (CAP-03, AT-10). `output_floor` computes the bank-wide comparison max(UTREA, factor × STREA) (CAP-04, AT-11). The optional capital bridge feeds them from supplied risk weights.
 
 ## 5.12 R11: seal the run (`lineage/`)
 

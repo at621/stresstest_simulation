@@ -7,6 +7,7 @@ import pytest
 from stress import cli
 from stress.contracts.run import LGD_TROUGH, RunConfig
 from stress.params import lgd_drivers
+from stress.params.lgd import lgd_from_z
 from tests import builders
 
 
@@ -22,6 +23,30 @@ def z_table() -> pd.DataFrame:
 
 
 PS = {"horizon": {"projection_years": [2027, 2028, 2029]}, "terminal_rule": {"last_scenario_year": 2029}}
+
+
+@pytest.mark.req("LGD-12")
+def test_the_trough_joins_the_linear_reversion_of_the_parameters(mini_tables, tmp_path):
+    inputs = builders.write(builders.copy_tables(mini_tables), tmp_path / "inputs")
+    config = RunConfig(str(inputs), ("baseline", "adverse"), "core", lgd_path=LGD_TROUGH,
+                       terminal_treatment="parameters")
+    ctx, manifest = cli.execute(config, tmp_path / "runs")
+    assert manifest["status"] == "SYNTHETIC", manifest.get("blocked")
+    z = builders.result(ctx, "drivers.parquet")
+    z = z[(z["segment"] == "P04")]
+    tables = builders.load(inputs)
+    facts = tables["facilities"].merge(tables["obligors"][["obligor_id", "country"]], on="obligor_id")
+    fac = facts[facts["segment"] == "P04"].iloc[0]
+    path = z[(z["country"] == fac["country"]) & (z["scenario"] == "adverse") & z["year"].between(2027, 2029)]
+    end = z[(z["country"] == fac["country"]) & (z["scenario"] == "baseline") & (z["year"] == 2029)]["z"].iloc[0]
+    w = tables["parameter_set"]["segments"]["P04"]["lgd_w"]
+    params = builders.result(ctx, "parameters.parquet")
+    rows = params[(params["facility_id"] == fac["facility_id"]) & (params["scenario"] == "adverse")
+                  & (params["bucket_year"] > 2029)]
+    assert len(rows)
+    a = np.clip(1 - (rows["bucket_year"].to_numpy() - 2029) / 6, 0, 1)
+    expected = (a * lgd_from_z(fac["ttc_lgd"], w, path["z"].min()) + (1 - a) * lgd_from_z(fac["ttc_lgd"], w, end))
+    assert np.allclose(rows["lgd"], expected, rtol=0, atol=1e-12), "the worst Z, not 2029's, is where it reverts from"
 
 
 def value(table, segment, scenario, year):
@@ -64,6 +89,9 @@ def test_the_trough_moves_only_secured_adverse_lgd(mini_tables, tmp_path):
     assert np.allclose(a.loc[p05, "lgd"], b.loc[p05, "lgd"], rtol=1e-12), "an unsecured book does not move"
     curves = [builders.result(c, "pd_curves.parquet")["m"].to_numpy() for c in (base, trough)]
     assert np.array_equal(*curves), "PD keeps its own Z"
+    params = [builders.result(c, "parameters.parquet") for c in (base, trough)]
+    for column in ("prepayment_rate", "not_prepaid_share", "ead_drawn", "ead_undrawn"):
+        assert np.array_equal(params[0][column].to_numpy(), params[1][column].to_numpy()), f"{column} keeps its Z"
     grades = [builders.result(c, "slices.parquet")["gca"].to_numpy() for c in (base, trough)]
     assert np.array_equal(*grades), "stages do not move"
     assert "LGD path trough" in (trough.reports_dir / "summary.md").read_text(encoding="utf-8")

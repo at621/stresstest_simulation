@@ -199,7 +199,8 @@ def sheet_results(wb: Workbook, imp: pd.DataFrame, by_stage: pd.DataFrame, scena
            "S3 = credit-impaired exposure; it never cures (EXP-02).")
     stage = by_stage.copy()
     stage["provisions"] = stage["allowance_on"] + stage["provision_off"]
-    gca = stage.groupby(["scenario", "year", "portfolio", "stage"])["gca"].sum().unstack("stage", fill_value=0.0)
+    gca = stage.groupby(["scenario", "year", "portfolio", "stage"])["gca"].sum().unstack(
+        "stage", fill_value=0.0).reindex(columns=[1, 2, 3], fill_value=0.0)  # a book can lack a stage
     gca.columns = [f"s{c}" for c in gca.columns]
     gca = gca.reset_index()
     total = gca.groupby(["scenario", "year"])[["s1", "s2", "s3"]].sum().reset_index()

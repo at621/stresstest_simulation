@@ -16,9 +16,10 @@ from stress.ecl import performing_ecl
 from stress.lineage import compare_outputs
 from stress.params.matrix import check_matrix, pit_matrix
 from stress.params.pd import check_curve, curve_from_conditional
+from stress.params.prepay import prepayment_rate
 from stress.projection import check_static
 from stress.report import compare_runs
-from stress.report.comparison import difference
+from stress.report.comparison import _by_stage, _changed, difference
 from tests import builders
 from tests.support import tolerance
 
@@ -230,11 +231,15 @@ def test_difference_report_is_retained_beside_the_runs(mini, mini_tables, tmp_pa
 
 
 @pytest.mark.control("Version change")
-def test_difference_report_never_enters_a_sealed_run(mini_tables, tmp_path):
-    ctx, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
+def test_difference_report_never_enters_a_sealed_folder(mini_tables, tmp_path):
+    inputs = builders.write(builders.copy_tables(mini_tables), tmp_path / "a")
+    ctx, _ = builders.run(inputs, tmp_path / "runs")
+    third, _ = builders.run(inputs, tmp_path / "others")
     run = ctx.run_dir.as_posix()
-    assert main(["compare", "--base", run, "--new", run, "--out", f"{run}/results/diff"]) == EXIT_BLOCKED
+    for folder in (f"{run}/results/diff", f"{third.reports_dir.as_posix()}", f"{inputs.as_posix()}/diff"):
+        assert main(["compare", "--base", run, "--new", run, "--out", folder]) == EXIT_BLOCKED
     assert not (ctx.results_dir / "diff").exists()
+    verified_manifest(third.run_dir)
 
 
 @pytest.mark.control("Version change")
@@ -243,6 +248,48 @@ def test_a_row_in_only_one_run_is_not_read_as_zero():
     new = pd.DataFrame({"year": [2027], "gca": [1.0]})
     joined = difference(base, new, ("year",), ("gca",))
     assert joined.loc[joined["year"] == 2028, "gca_diff"].isna().all()
+    assert _changed(joined) == (0, 1)
+    both = difference(base.assign(gca=[np.nan, 1.0]), base.assign(gca=[np.nan, 1.0]), ("year",), ("gca",))
+    assert _changed(both) == (0, 0), "a value missing from both runs is no difference"
+
+
+@pytest.mark.control("Version change")
+def test_the_stage_table_shows_a_gap_rather_than_a_smaller_stock():
+    keys = ("scenario", "year", "portfolio", "stage")
+    columns = ("gca", "allowance_on")
+    new = pd.DataFrame({"scenario": "adverse", "year": 2029, "portfolio": ["P01", "P05"], "stage": 3,
+                        "gca": [100.0, 300.0], "allowance_on": [10.0, 30.0]})
+    table = difference(new[new["portfolio"] == "P01"], new, keys, columns)
+    row = next(line for line in _by_stage({"stage_stocks": table}) if line.startswith("| adverse"))
+    assert row.count("n/a") == 2, "GCA and coverage of the base are unknown, not 100"
+
+
+@pytest.mark.control("Version change")
+def test_a_blocked_run_cannot_be_compared(mini, mini_tables, tmp_path):
+    good, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
+    mini["parameter_set"]["segments"]["P01"]["cpr_ttc"] = None
+    bad, manifest = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "runs")
+    assert manifest["status"] == "BLOCKED"
+    assert main(["compare", "--base", good.run_dir.as_posix(), "--new", bad.run_dir.as_posix()]) == EXIT_BLOCKED
+
+
+@pytest.mark.control("Z-score and prepayment")
+def test_the_run_prepays_on_the_z_of_each_bucket_year(core_run, full_tables):
+    ctx, _ = core_run
+    params = builders.result(ctx, "parameters.parquet")
+    params = params.loc[params["valuation_year"] == params["valuation_year"].min(),
+                        ["scenario", "facility_id", "bucket_year", "prepayment_rate"]]
+    obligors = full_tables["obligors"][["obligor_id", "country"]]
+    facts = full_tables["facilities"][["facility_id", "obligor_id", "segment"]].merge(obligors, on="obligor_id")
+    z = builders.result(ctx, "drivers.parquet").rename(columns={"year": "bucket_year"})
+    rows = params.merge(facts, on="facility_id").merge(z, on=["segment", "country", "scenario", "bucket_year"])
+    assert len(rows) == len(params) and set(rows["scenario"]) == {"baseline", "adverse"}
+    segments = full_tables["parameter_set"]["segments"]
+    expected = prepayment_rate(rows["segment"].map(lambda s: segments[s]["cpr_ttc"]).astype(float).to_numpy(),
+                               rows["segment"].map(lambda s: segments[s]["cpr_v"]).astype(float).to_numpy(),
+                               rows["z"].to_numpy())
+    assert np.allclose(rows["prepayment_rate"], expected, rtol=0, atol=tolerance("rate")["abs"])
+    assert rows.groupby("scenario")["prepayment_rate"].mean().nunique() == 2, "the scenario reaches prepayment"
 
 
 @pytest.mark.control("Z-score and prepayment")

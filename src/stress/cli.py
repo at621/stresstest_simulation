@@ -207,7 +207,8 @@ def pipeline(ctx) -> dict:
                                                    name, year, routed.grades, last,
                                                    s2_stayers=moved.s2_stayers if year > years[0] else None)
             with step("R9", f"{name} {year}"):
-                charges = accounting.stock_to_flow(state, provided.slices, routed.portfolio, name, year, tol)
+                charges = accounting.stock_to_flow(state, provided.slices, routed.portfolio, name, year,
+                                                   ps["tolerances"]["amount"])
             for key, table in (("slices", provided.slices), ("stage_flows", moved.stage_flows),
                                ("grade_flows", moved.grade_flows), ("provisions", provided.provisions),
                                ("ecl_buckets", provided.ecl_buckets), ("charges", charges)):
@@ -253,8 +254,9 @@ def preparation_analyses(loaded, routed, schedule, results, params, drivers) -> 
         tables["capital"], tables["regulatory_exposure"] = capital_bridge(
             spec["capital"], results["slices"], routed.portfolio, results["charges"])
     if "npe_backstop" in spec:
+        facilities = loaded.facilities.data.assign(ltv_status=loaded.facilities.status["ltv"])
         tables["npe_backstop"] = npe_backstop(spec["npe_backstop"], results["slices"], routed.portfolio,
-                                              loaded.facilities.data, drivers.indices)
+                                              facilities, drivers.indices)
     if "climate" in spec:
         tables["climate"] = climate_assessment(spec["climate"], routed.portfolio)
     if "challenge" in spec:
@@ -376,7 +378,7 @@ def cmd_compare(args) -> int:
     base, new = Path(args.base), Path(args.new)
     tables, base_manifest, new_manifest = report.comparison.compare(base, new)
     folder = Path(args.out) if args.out else report.comparison.default_folder(base, new)
-    report.comparison.write_report(tables, base_manifest, new_manifest, folder, (base, new))
+    report.comparison.write_report(tables, base_manifest, new_manifest, folder)
     with pd.option_context("display.width", 160, "display.max_rows", 200):
         print(tables["impairment"].to_string(index=False))
     print(f"difference report {folder.as_posix()}")

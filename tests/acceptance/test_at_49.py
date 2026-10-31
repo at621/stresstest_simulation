@@ -35,6 +35,17 @@ def test_lgd_shift(full_tables, core_run, reference_runs):
     by_rising_z = run.drop_duplicates(["facility_id", "z"]).sort_values(["facility_id", "z"])
     falls = by_rising_z.groupby("facility_id")["lgd"].diff().dropna()
     assert len(falls) and (falls < 0).all()
+    # S1 and S2 take theirs from the bucket records, each from the Z of the bucket's year.
+    params = builders.result(ctx, "parameters.parquet")
+    params = params.loc[params["valuation_year"] == params["valuation_year"].min(),
+                        ["scenario", "facility_id", "bucket_year", "lgd"]]
+    facts = full_tables["facilities"][["facility_id", "obligor_id", "segment", "ttc_lgd"]].merge(
+        full_tables["obligors"][["obligor_id", "country"]], on="obligor_id")
+    z = builders.result(ctx, "drivers.parquet").rename(columns={"year": "bucket_year"})
+    buckets = params.merge(facts, on="facility_id").merge(z, on=["segment", "country", "scenario", "bucket_year"])
+    assert len(buckets) == len(params) and set(buckets["scenario"]) == {"baseline", "adverse"}
+    weights = buckets["segment"].map(lambda s: full_tables["parameter_set"]["segments"][s]["lgd_w"])
+    assert np.allclose(buckets["lgd"], lgd_from_z(buckets["ttc_lgd"], weights, buckets["z"]), rtol=0, atol=tol)
     # A facility with w > 0 whose baseline Z is zero keeps its TTC LGD in a run.
     reference, _ = reference_runs["core"]
     i = oracle("AT-06")["input"]

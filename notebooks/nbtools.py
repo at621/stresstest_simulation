@@ -268,7 +268,7 @@ def open_run(ref: str = "latest", variant: str = "core") -> Run:
     if ref == "latest":
         runs = list_runs()
         runs = runs[(runs["status"] != "UNSEALED") & (runs["status"] != STATUS_BLOCKED)
-                    & (runs["variant"] == variant)]
+                    & (runs["variant"] == variant) & ~runs["run_id"].str.contains("+", regex=False)]
         if runs.empty:
             raise FileNotFoundError(f"no sealed {variant} run in {RUNS_DIR.as_posix()}")
         ref = runs.sort_values(["created_at", "run_id"]).iloc[-1]["run_id"]

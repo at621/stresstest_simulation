@@ -243,6 +243,8 @@ requirements:
       inline, not through `regulatory_bridge`.
 
   MOD-03:
+    code:
+      - {path: src/stress/params/assessment.py, contains: "def benchmark_selection"}
     reason: >-
       Built as a synthetic selector on supplied bundles, with the 10% pivot test and the whole-pivot
       fallback. Its choices are not substituted into core parameters, and regulatory mode stays
@@ -351,6 +353,11 @@ requirements:
 
   # --- EAD --------------------------------------------------------------------------------------------
 
+  EAD-01:
+    reason: >-
+      AT-37 proves the drawn inputs through a run. The input contract has no cancellation rights or
+      expected drawdown profile, so those parts of the requirement are not met.
+
   EAD-03:
     reason: >-
       `guarantee` is only a product label: the generator creates none, and the separate guarantee
@@ -362,9 +369,12 @@ requirements:
       book has no drawdown transfers, so nothing calls `permitted_transfer`.
 
   EAD-07:
-    reason: >-
-      AT-38 stays kernel-only. The optional capital analysis calculates regulatory EAD from
-      supplied CCFs, without the step-by-step bridge.
+    status: deferred
+    reason: "unmet: no decision recorded"
+    note: >-
+      AT-38 proves a helper nothing calls. The optional capital analysis calculates regulatory EAD
+      inline from supplied CCFs, and no run retains the bridge from accounting exposure through
+      adjustments, netting, CCF and CRM. The design's deferral list does not name this requirement.
 
   # --- ECL --------------------------------------------------------------------------------------------
 
@@ -379,10 +389,11 @@ requirements:
     decided_in: [C8]
 
   ECL-06:
+    status: deferred
     reason: >-
       The default still reprices S2 at each year-end, which is what this requirement warns against.
-      `--s2-treatment held` builds the reading of ¶76, ¶123 and ¶125, and that is what the tests
-      prove. Box 7 allows a yearly rate, so the owner settles which stands.
+      `--s2-treatment held` builds the reading of ¶76, ¶123 and ¶125 and its tests pass, but a default
+      run does not meet the requirement. Box 7 allows a yearly rate, so the owner settles which stands.
     decided_in: [C14]
 
   ECL-07:
@@ -392,8 +403,8 @@ requirements:
 
   ECL-09:
     reason: >-
-      Bucket-level ECL reconciles to the raw performing provisions, and raw and constrained values
-      are kept. Under the held reading of S2 the two differ by the held amount (C14).
+      ECL by bucket, plus any held S2 amount (C14), reconciles to the booked performing provisions,
+      and raw and constrained values are kept.
 
   ECL-10:
     reason: >-

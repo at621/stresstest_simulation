@@ -17,8 +17,8 @@ import pandas as pd
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
 from stress.contracts.preparation import ANALYSIS_RATES
-from stress.contracts.run import ADVERSE, LGD_ANNUAL, RUNOFF_CONTRACTUAL, S2_REPRICED, RunContext
-from stress.contracts.tables import Drivers, Parameters, RoutedPortfolio
+from stress.contracts.run import ADVERSE, RUNOFF_REPLACED, S2_HELD, RunContext
+from stress.contracts.tables import METHOD_S2_HELD, Drivers, Parameters, RoutedPortfolio
 from stress.report import comparison
 from stress.report.assessment import (
     average_maturity,
@@ -210,6 +210,25 @@ def impairment(results: dict, portfolio: pd.DataFrame, tol: dict) -> tuple[pd.Da
     return tab.reset_index(drop=True), by_stage
 
 
+def ecl_bridge(results: dict, tol: dict) -> pd.DataFrame:
+    """ECL-09: ECL by default bucket, plus what the held reading of S2 keeps (C14), equals the
+    booked performing provisions. Only a held slice may differ from its raw value."""
+    perf = results["provisions"][results["provisions"]["stage"] < 3]
+    held = perf["method"] == METHOD_S2_HELD
+    _require(_close(perf.loc[~held, ["allowance_on", "provision_off"]], perf.loc[~held, ["raw_on", "raw_off"]], tol),
+             "performing provisions against their raw value")
+    rows = perf.assign(held_on=(perf["allowance_on"] - perf["raw_on"]).where(held, 0.0),
+                       held_off=(perf["provision_off"] - perf["raw_off"]).where(held, 0.0))
+    keys = ["scenario", "year"]
+    booked = rows.groupby(keys)[["held_on", "held_off", "allowance_on", "provision_off"]].sum()
+    buckets = results["ecl_buckets"].rename(columns={"valuation_year": "year"}).groupby(keys)[
+        ["ecl_on", "ecl_off"]].sum()
+    out = buckets.join(booked, how="inner").reset_index()
+    _require(_close(out["ecl_on"] + out["held_on"], out["allowance_on"], tol), "ECL by bucket against provisions")
+    _require(_close(out["ecl_off"] + out["held_off"], out["provision_off"], tol), "off-balance ECL by bucket")
+    return out
+
+
 def check_static_books(results: dict, portfolio: pd.DataFrame, params: Parameters,
                        tol: dict) -> pd.DataFrame:
     """AT-44 per projected year: GCA, nominal undrawn and converted commitments per book, the
@@ -255,15 +274,8 @@ def summary_lines(ctx: RunContext, impairment_tab: pd.DataFrame, books: pd.DataF
     return lines
 
 
-def _method_lines(ctx: RunContext) -> list[str]:
-    """A selected reading of the draft is named in the headline: such a run is not the default."""
-    config = ctx.config
-    chosen = [f"{name} {value}" for name, value, default in (
-        ("S2 treatment", config.s2_treatment, S2_REPRICED),
-        ("horizon run-off", config.horizon_runoff, RUNOFF_CONTRACTUAL),
-        ("LGD path", config.lgd_path, LGD_ANNUAL),
-    ) if value != default]
-    return [f"**Selected method, not the design's default:** {'; '.join(chosen)}.", ""] if chosen else []
+def _selected(ctx: RunContext) -> str:
+    return "; ".join(f"{label} {value}" for label, value in ctx.config.selected_methods().items())
 
 
 def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFrame, books: pd.DataFrame,
@@ -278,7 +290,6 @@ def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFram
          f"{ctx.input_set_hash[:16]}; variant {ctx.variant}; code {ctx.code_version}. "
          "Amounts in EUR millions, rounded here only."),
         "",
-        *_method_lines(ctx),
         "## Headline",
         "",
         *[f"- {line}" for line in lines],
@@ -336,13 +347,7 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     start = starting_point(loaded, routed, results, tol)
     migration, cohorts, grades = stage_migration(results, port, tol)
     imp, by_stage = impairment(results, port, tol)
-    perf_prov = results["provisions"][results["provisions"]["stage"] < 3]
-    bucket_sum = results["ecl_buckets"].groupby(["scenario", "valuation_year"])[["ecl_on", "ecl_off"]].sum()
-    prov_sum = perf_prov.groupby(["scenario", "year"])[["raw_on", "raw_off"]].sum()  # raw: held S2 has no buckets
-    prov_sum.index.names = bucket_sum.index.names
-    joined = bucket_sum.join(prov_sum, how="inner")
-    _require(_close(joined["ecl_on"], joined["raw_on"], tol), "ECL by bucket against provisions")
-    _require(_close(joined["ecl_off"], joined["raw_off"], tol), "off-balance ECL by bucket")
+    bridge = ecl_bridge(results, tol)
 
     _write(ctx, "starting_point_reconciliation.csv", start)
     _write(ctx, "stage_migration.csv", migration)
@@ -361,6 +366,8 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
              "stage flows, charge bridge, ECL by bucket")
     lines = summary_lines(ctx, imp, books, migration, years)
     lines += data_gaps(routed, start)
+    if _selected(ctx):  # the headline reaches the console, the manifest and the summary
+        lines.append(f"Selected method, not the design's default: {_selected(ctx)}")
     write_summary(ctx, lines, imp, books, migration, start, routed.rejections, loaded)
     meta = workbook_meta(ctx, loaded, routed, results, years)
     write_workbook(ctx.reports_dir / WORKBOOK_FILE, meta, {
@@ -370,7 +377,9 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "rejections": routed.rejections,
     })
     extra = portfolio_diagnostics(port, loaded.obligors.data, loaded.facilities.data, results["slices"])
-    extra["ltv"] = stressed_ltv(port, loaded.facilities.data, results["slices"], drivers.indices)
+    extra["ecl_bridge"] = bridge
+    extra["ltv"] = stressed_ltv(port, loaded.facilities.data.assign(ltv_status=loaded.facilities.status["ltv"]),
+                                results["slices"], drivers.indices)
     extra["maturity"] = average_maturity(port, results["slices"], schedule)
     extra["template_replica"] = template_replica(results["slices"], results["stage_flows"], params.lgd_of_year,
                                                  drivers.z, port, years, tol)
@@ -411,6 +420,11 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     binding = int(prov.loc[prov["year"] == max(years), "floor_binding"].astype(bool).sum())
     n_fac = len(routed.portfolio)
     rows = loaded.load_controls["rows"]
+    config = ctx.config
+    schedules = ("Contractual schedules from balance, rate and maturity; each ends at zero"
+                 + ("; no run-off inside the horizon (C15)" if config.horizon_runoff == RUNOFF_REPLACED else ""))
+    buckets = ("ECL by default bucket plus the held S2 amount equals the performing provisions (C14)"
+               if config.s2_treatment == S2_HELD else "ECL by default bucket equals the performing provisions")
     rejected = "passed: no record rejected" if rej.empty else (
         f"{len(rej):,} rejection(s) on {rej.loc[rej['record_type'] == 'facility', 'record_id'].nunique():,} "
         "facilities; see the table below")
@@ -429,7 +443,7 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
          "MIG-07, SYN-PAR-08", f"passed: {n_fac:,} facilities accepted"),
         ("R4", ("Scenarios labelled SYNTHETIC; every driver value and Z coefficient present; "
          "adverse reverts toward baseline"), "SCN-04, SCN-08, ECL-10", "passed"),
-        ("R5", "Contractual schedules from balance, rate and maturity; each ends at zero", "EAD-10", "passed"),
+        ("R5", schedules, "EAD-10", "passed"),
         ("R6", ("Every PiT row sums to one; PD-03 identities on every curve; every LGD in [0, 1]; "
          "prepayment in EAD only"), "PD-10, PD-03, LGD-12, EAD-11", "passed"),
         ("R7", "Static balance: GCA and undrawn stay at end-2026 levels for every facility and year",
@@ -439,7 +453,7 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         ("R9", "No S3 slice releases provision; the bridge holds only the charge; FX is zero",
          "REG-05, ACC-01, ACC-02", "passed"),
         ("R10", "Closing stage stocks equal the incoming flows; outflows equal opening stocks", "MIG-02", "passed"),
-        ("R10", "ECL by default bucket equals the performing provisions", "ECL-09", "passed"),
+        ("R10", buckets, "ECL-09", "passed"),
         ("R10", "Charge = closing - opening in every year and book; static books per year", "ACC-01, AT-44", "passed"),
         ("R11", "Every output is hashed in manifest.json; `stress rerun --run <folder>` must reproduce them",
          "section 12.2 reproducibility", "checked by the rerun command"),
@@ -450,7 +464,8 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "input_set": ctx.input_set_hash[:16],
         "parameter_set_id": ps["parameter_set_id"],
         "parameter_set_status": ps["status"],
-        "variant": ctx.variant,
+        "variant": f"{ctx.variant}; selected method, not the design's default: {_selected(ctx)}"
+                   if _selected(ctx) else ctx.variant,
         "code_version": ctx.code_version,
         "spec_version": ctx.spec_version,
         "horizon": f"starting point {ps['horizon']['snapshot_date']}, projection {min(years)}-{max(years)}",

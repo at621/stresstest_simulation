@@ -30,7 +30,7 @@ runs/<run_id>/
 
 ## Run ID
 
-`<yyyymmddThhmmZ>-<variant>-<hash8>`, for example `20261017T1830Z-core-3f2a9c1b`. The hash covers the config, the input set, the code version and the spec version.
+`<yyyymmddThhmmZ>-<variant>-<hash8>`, for example `20261017T1830Z-core-3f2a9c1b`. The hash covers the config, the input set, the code version and the spec version. A run that selects a reading of the draft in place of the design's default carries it after the variant, for example `20261031T0900Z-core+held-3f2a9c1b`, so it cannot be read as the core run.
 
 ## Rules
 

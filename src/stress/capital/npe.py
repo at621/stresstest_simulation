@@ -1,4 +1,4 @@
-"""NPE backstop: the insufficient coverage of paragraphs 562-564, calculated from the run.
+"""NPE backstop (CAP-09): the insufficient coverage of paragraphs 562-564, calculated from the run.
 
 The capital bridge takes npl_deduction_change as a supplied input and stays as it is. This
 report calculates what that input should be, so the two can be compared. The calendar is a
@@ -15,7 +15,7 @@ import pandas as pd
 
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
-from stress.contracts.preparation import COLLATERAL_INDEX, price_growth
+from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, require_ltv
 from stress.contracts.tables import SLICE_S3_ORIGINAL
 
 STEP = "capital"
@@ -42,7 +42,9 @@ def _calendar(spec: dict) -> pd.DataFrame:
 def _exposures(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame, facilities: pd.DataFrame) -> pd.DataFrame:
     """S3 slices in the scope of paragraph 563, with their years as NPE at each year-end."""
     wanted = ["facility_id", "origination_date", "default_date", "ltv", "collateral_type"]
-    facts = portfolio[["facility_id", "portfolio", "country"]].merge(facilities[wanted], on="facility_id",
+    in_book = facilities[facilities["facility_id"].isin(portfolio["facility_id"])]
+    require_ltv(in_book)
+    facts = portfolio[["facility_id", "portfolio", "country"]].merge(in_book[wanted], on="facility_id",
                                                                      validate="one_to_one")
     book = slices.loc[slices["stage"].eq(3), ["scenario", "year", "facility_id", "slice", "entry_year", "gca",
                                               "allowance_on", "generation"]].merge(
@@ -59,7 +61,10 @@ def _exposures(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame, facili
     if dates.isna().any():
         raise BlockingError(STEP, "MISSING_INPUT", "an S3 exposure has no origination date")
     in_window = dates.between(pd.Timestamp(spec["scope_from"]), pd.Timestamp(spec["scope_to"]))
-    return book[in_window | book["generation"].gt(0)].copy()  # replacements count as newly originated
+    # Replaced first, then S3: a replacement counts only if it had happened when the slice defaulted.
+    at_entry = book.sort_values("year", kind="mergesort").groupby(["scenario", "facility_id", "slice"])[
+        "generation"].transform("first").reindex(book.index)
+    return book[in_window | at_entry.gt(0)].copy()
 
 
 def _split_by_collateral(book: pd.DataFrame, indices: pd.DataFrame) -> pd.DataFrame:

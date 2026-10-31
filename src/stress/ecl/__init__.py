@@ -319,7 +319,7 @@ def year_end_provisions(slices: pd.DataFrame, params: Parameters, z: pd.DataFram
              out["allowance_on"].sum() / 1_000_000, out["provision_off"].sum() / 1_000_000,
              by_stage.get(1, 0.0), by_stage.get(2, 0.0), by_stage.get(3, 0.0),
              "; S1 uses the interpolated next-year loss rate" if terminal else "",
-             f"{int(binding.sum()):,}", (out["masked_on"] + out["masked_off"]).sum() / 1_000_000)
+             f"{int(binding.sum()):,}", (out["masked_on"] + out["masked_off"])[out["stage"] == 3].sum() / 1_000_000)
     return YearProvisions(slices=new_slices.reset_index(drop=True),
                           provisions=provisions.reset_index(drop=True), ecl_buckets=buckets)
 

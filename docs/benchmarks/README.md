@@ -15,7 +15,7 @@ The comparison is not like for like. The synthetic book is deliberately riskier 
 These change results and need a new input set, so they are not built:
 
 - **Driver moments.** A19 records that driver volatility was loosened after a first result (7.6% of GCA) was judged too severe, so severity was set partly from the outcome. Set the moments from published or estimated data instead.
-- **Z scale.** Every segment's |β| sum to 1, so Z has unit variance only if its drivers are perfectly correlated. With uncorrelated drivers its standard deviation would be 0.58 to 0.83. Standardise Z, or record why not.
+- **Z scale.** Every segment's |β| sum to 1, so Z has unit variance only if its drivers are perfectly correlated. With uncorrelated drivers its standard deviation would be 0.58 to 0.82. Standardise Z, or record why not.
 
 ## Changing the file
 

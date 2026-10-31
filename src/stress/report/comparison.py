@@ -2,8 +2,8 @@
 
 Runs are write-once, so the report sits beside them: runs/comparisons/<base>__<new>/ unless
 --out says otherwise. It compares the reports of both runs and holds no time, so the same two
-runs give the same bytes. A row that only one run has keeps an empty difference: missing is
-never zero.
+runs give the same bytes under the same code. A row that only one run has keeps an empty
+difference: missing is never zero.
 """
 
 import json
@@ -13,7 +13,7 @@ import pandas as pd
 
 from stress.contracts.artifacts import sha256_file, verified_manifest
 from stress.contracts.errors import BlockingError
-from stress.contracts.run import COMPARISONS_DIR, REPORTS_DIR, RESULTS_DIR
+from stress.contracts.run import COMPARISONS_DIR, REPORTS_DIR, RESULTS_DIR, RUN_MANIFEST
 
 STEP = "compare"
 SUMMARY_FILE = "summary.md"
@@ -45,6 +45,9 @@ def difference(base: pd.DataFrame, new: pd.DataFrame, keys: tuple[str, ...],
 def compare(base: Path, new: Path) -> tuple[dict[str, pd.DataFrame], dict, dict]:
     """The difference tables and the manifests of two verified runs."""
     manifests = verified_manifest(base), verified_manifest(new)
+    for run, manifest in zip((base, new), manifests):
+        if not (run / RESULTS_DIR / REPORTS_DIR).is_dir():
+            raise BlockingError(STEP, "RUN_INTEGRITY", f"{run.name} sealed as {manifest['status']} with no reports")
     tables = {}
     for report, name, keys, columns in TABLES:
         left, right = (pd.read_csv(run / RESULTS_DIR / REPORTS_DIR / report) for run in (base, new))
@@ -65,9 +68,16 @@ def _rounded(table: pd.DataFrame) -> pd.DataFrame:
 
 
 def _changed(table: pd.DataFrame) -> tuple[int, int]:
-    """Rows that differ, and rows only one run has."""
-    diffs = table[[c for c in table.columns if c.endswith("_diff")]]
-    return int((diffs.abs() > 0).any(axis=1).sum()), int(diffs.isna().any(axis=1).sum())
+    """Rows that differ, and rows only one run has. A value missing from both is no difference."""
+    columns = [c.removesuffix("_diff") for c in table.columns if c.endswith("_diff")]
+    diffs = table[[f"{c}_diff" for c in columns]]
+    base = table[[f"{c}_base" for c in columns]].isna().to_numpy()
+    new = table[[f"{c}_new" for c in columns]].isna().to_numpy()
+    return int((diffs.abs() > 0).any(axis=1).sum()), int((base != new).any(axis=1).sum())
+
+
+def _million(value: float, sign: str = "") -> str:
+    return "n/a" if pd.isna(value) else f"{value / MILLION:{sign},.1f}"
 
 
 def _identity(base: dict, new: dict) -> list[str]:
@@ -80,7 +90,7 @@ def _identity(base: dict, new: dict) -> list[str]:
             ("Outputs digest", base["outputs_digest"][:16], new["outputs_digest"][:16])]
     shown = {"inputs", "input_set_hash", "scenarios", "variant"}
     for name in sorted((set(base["config"]) | set(new["config"])) - shown):
-        rows.append((name, base["config"].get(name), new["config"].get(name)))
+        rows.append((name, base["config"].get(name, "not recorded"), new["config"].get(name, "not recorded")))
     return ["| | Base | New |", "|---|---|---|", *[f"| {a} | {b} | {c} |" for a, b, c in rows]]
 
 
@@ -93,27 +103,27 @@ def _headline(tables: dict[str, pd.DataFrame]) -> list[str]:
           "|---|---:|---:|---:|---:|---:|---:|"]
     for r in final.itertuples(index=False):
         provisions = (r.closing_on_base + r.closing_off_base, r.closing_on_new + r.closing_off_new)
-        md.append(f"| {r.scenario} | {r.cumulative_charge_base / MILLION:,.1f} | "
-                  f"{r.cumulative_charge_new / MILLION:,.1f} | {r.cumulative_charge_diff / MILLION:+,.1f} | "
-                  f"{provisions[0] / MILLION:,.1f} | {provisions[1] / MILLION:,.1f} | "
-                  f"{(provisions[1] - provisions[0]) / MILLION:+,.1f} |")
+        md.append(f"| {r.scenario} | {_million(r.cumulative_charge_base)} | {_million(r.cumulative_charge_new)} | "
+                  f"{_million(r.cumulative_charge_diff, '+')} | {_million(provisions[0])} | "
+                  f"{_million(provisions[1])} | {_million(provisions[1] - provisions[0], '+')} |")
     return md
 
 
 def _coverage(allowance: float, gca: float) -> str:
-    return f"{allowance / gca:.2%}" if gca > 0 else "n/a"
+    return f"{allowance / gca:.2%}" if gca > 0 else "n/a"  # a gap is not above zero, so it stays n/a
 
 
 def _by_stage(tables: dict[str, pd.DataFrame]) -> list[str]:
     stages = tables["stage_stocks"]
     last = stages["year"].max()
-    sums = stages[stages["year"] == last].groupby(["scenario", "stage"])[
-        ["gca_base", "gca_new", "allowance_on_base", "allowance_on_new"]].sum().reset_index()
+    columns = ["gca_base", "gca_new", "allowance_on_base", "allowance_on_new"]
+    sums = stages[stages["year"] == last].groupby(["scenario", "stage"])[columns].agg(
+        lambda part: part.sum(skipna=False)).reset_index()  # a row in one run only is not a zero
     md = [f"## Stage stocks and on-balance coverage at end-{last}", "",
           "| Scenario | Stage | GCA base, EUR m | GCA new, EUR m | Coverage base | Coverage new |",
           "|---|---:|---:|---:|---:|---:|"]
     for r in sums.itertuples(index=False):  # coverage from summed parts, never an average of ratios
-        md.append(f"| {r.scenario} | S{r.stage} | {r.gca_base / MILLION:,.1f} | {r.gca_new / MILLION:,.1f} | "
+        md.append(f"| {r.scenario} | S{r.stage} | {_million(r.gca_base)} | {_million(r.gca_new)} | "
                   f"{_coverage(r.allowance_on_base, r.gca_base)} | {_coverage(r.allowance_on_new, r.gca_new)} |")
     return md
 
@@ -125,7 +135,7 @@ def _by_book(tables: dict[str, pd.DataFrame]) -> list[str]:
     table = books.pivot(index="portfolio", columns="scenario", values="cumulative_charge_diff") / MILLION
     md = [f"## Difference in cumulative charge by book to end-{last}, EUR m", "",
           "| Book | " + " | ".join(table.columns) + " |", "|---|" + "---:|" * len(table.columns)]
-    return md + [f"| {book} | " + " | ".join(f"{v:+,.2f}" for v in row) + " |"
+    return md + [f"| {book} | " + " | ".join("n/a" if pd.isna(v) else f"{v:+,.2f}" for v in row) + " |"
                  for book, row in zip(table.index, table.to_numpy())]
 
 
@@ -138,11 +148,16 @@ def summary(tables: dict[str, pd.DataFrame], base: dict, new: dict) -> str:
     return "\n".join([*md, ""])
 
 
-def write_report(tables: dict[str, pd.DataFrame], base: dict, new: dict, folder: Path,
-                 runs: tuple[Path, Path]) -> None:
+def _in_a_sealed_folder(folder: Path) -> bool:
+    """A sealed run and an input set each hold a manifest, and both are write-once."""
+    resolved = folder.resolve()
+    return any((path / RUN_MANIFEST).is_file() for path in (resolved, *resolved.parents))
+
+
+def write_report(tables: dict[str, pd.DataFrame], base: dict, new: dict, folder: Path) -> None:
     """The difference tables, a summary and a record that ties them to both runs."""
-    if any(folder.resolve().is_relative_to(run.resolve()) for run in runs):
-        raise BlockingError(STEP, "RUN_INTEGRITY", "a sealed run is write-once: choose a folder outside it")
+    if _in_a_sealed_folder(folder):
+        raise BlockingError(STEP, "RUN_INTEGRITY", "sealed folders are write-once: choose one outside them")
     folder.mkdir(parents=True, exist_ok=True)
     for name, table in tables.items():
         _rounded(table).to_csv(folder / f"{name}.csv", index=False, lineterminator="\n")

@@ -299,7 +299,8 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
     lgd_z = drivers.z
     if ctx.config.lgd_path == LGD_TROUGH:
         facilities = loaded.facilities.data
-        lgd_z = lgd_drivers(drivers.z, ps, set(facilities.loc[facilities["ltv"].notna(), "segment"]))
+        secured = facilities["ltv"].notna() & facilities["facility_id"].isin(routed.portfolio["facility_id"])
+        lgd_z = lgd_drivers(drivers.z, ps, set(facilities.loc[secured, "segment"]))
     version = store.source_version(ps, __version__)
     pit = pit_table(book, [(s, c, sc) for s, c in keys for sc in scenarios],
                     range(first, last_reported + 1), grades)

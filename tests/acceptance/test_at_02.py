@@ -32,6 +32,7 @@ def test_closing_stages_from_transition_rows(reference_runs, core_run):
     ids = [reference_runs["ids"][f"AT-02/{stage}"] for stage in case["input"]["opening"]]
     slices = builders.result(ctx, "slices.parquet")
     stock = slices[slices["facility_id"].isin(ids) & (slices["year"] == year)]
+    assert set(stock["scenario"]) == {"baseline", "adverse"}
     for (scenario, stage), gca in stock.groupby(["scenario", "stage"])["gca"].sum().items():
         assert_close(gca, case["expected"]["closing"][f"S{stage}"], case["tolerance"], f"run {scenario} S{stage}")
     # On the real book, closing stages reconcile to all incoming flows every year (MIG-02).

@@ -36,7 +36,7 @@ def _ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
 
 def _flow_amount(flow: pd.Series, rate: pd.Series) -> pd.Series:
     """A flow times its rate. No flow gives no provision, even where the rate does not exist."""
-    return (flow * rate).where(flow > 0, 0.0)
+    return (flow * rate).where(flow != 0, 0.0)
 
 
 def _weighted_lgd(book: pd.DataFrame, lgd: pd.DataFrame) -> pd.DataFrame:
@@ -94,8 +94,9 @@ def template_replica(slices: pd.DataFrame, flows: pd.DataFrame, lgd: pd.DataFram
     book = slices.assign(segment=slices["facility_id"].map(segment))
     last = max(years)
     p = _parameters(book, flows, lgd, years)
-    terminal = z[z["year"] == last + 1].groupby("segment")["adverse_weight"].first()
-    missing = set(p.index.get_level_values("segment")) - set(terminal.index)
+    terminal = z[(z["year"] == last + 1) & (z["scenario"] != BASELINE)].groupby("segment")["adverse_weight"].first()
+    stressed = p[p.index.get_level_values("scenario") != BASELINE]
+    missing = set(stressed.index.get_level_values("segment")) - set(terminal.index)
     if missing:
         raise BlockingError(STEP, "MISSING_INPUT", f"no terminal weight for {sorted(missing)}")
     p["loss_rate_s1_next"] = _next_loss_rate(p, terminal, last)
@@ -111,7 +112,7 @@ def template_replica(slices: pd.DataFrame, flows: pd.DataFrame, lgd: pd.DataFram
     p["prov_s2_s2"] = _flow_amount(stay_s2, p["lrlt_s2"])  # Box 7
     p["prov_s1_s3"] = _flow_amount(p["flow_s1_s3"], p["lgd_s1"])  # Box 8
     p["prov_s2_s3"] = _flow_amount(p["flow_s2_s3"], p["lgd_s2"])  # Box 8
-    new = (p["prov_s1_s3"] + p["prov_s2_s3"]).groupby(level=[0, 1]).cumsum()
+    new = (p["prov_s1_s3"] + p["prov_s2_s3"]).groupby(level=[0, 1]).cumsum(skipna=False)
     p["template_s1"] = p["prov_s1_s1"] + p["prov_s2_s1"]
     p["template_s2"] = p["prov_s1_s2"] + p["prov_s2_s2"]
     p["template_s3_new"] = new

@@ -13,7 +13,8 @@ STATUS_BLOCKED = "BLOCKED"
 BASELINE = "baseline"
 ADVERSE = "adverse"
 
-# Selectable readings of the draft. The first of each pair is the design's default (C14-C16).
+# Selectable readings of the draft. The first of each pair is the design's default (C8, C14-C16).
+TERMINAL_Z = "z"
 S2_REPRICED = "repriced"
 S2_HELD = "held"
 S2_TREATMENTS = (S2_REPRICED, S2_HELD)
@@ -41,11 +42,19 @@ class RunConfig:
     scenarios: tuple[str, ...]
     variant: str
     mode: str = MODE_SYNTHETIC
-    terminal_treatment: str = "z"
+    terminal_treatment: str = TERMINAL_Z
     analysis: str | None = None
     s2_treatment: str = S2_REPRICED
     horizon_runoff: str = RUNOFF_CONTRACTUAL
     lgd_path: str = LGD_ANNUAL
+
+    def selected_methods(self) -> dict[str, str]:
+        """Each reading of the draft this run selects in place of the design's default."""
+        readings = (("terminal treatment", self.terminal_treatment, TERMINAL_Z),
+                    ("S2 treatment", self.s2_treatment, S2_REPRICED),
+                    ("horizon run-off", self.horizon_runoff, RUNOFF_CONTRACTUAL),
+                    ("LGD path", self.lgd_path, LGD_ANNUAL))
+        return {label: value for label, value, default in readings if value != default}
 
     def as_dict(self) -> dict:
         return {

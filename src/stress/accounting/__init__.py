@@ -25,7 +25,7 @@ def stock_to_flow(opening: pd.DataFrame, closing: pd.DataFrame, portfolio: pd.Da
     The only movement in the bridge is the charge: no write-offs, transfers or sales are
     permitted in the static projection, FX is zero (EUR only) and the opening overlays are
     carried unchanged, so no overlay is counted twice (ACC-02, ACC-04). ``tol`` is the
-    section 12.3 reconciliation tolerance.
+    section 12.3 amount tolerance: the bridge is per facility, not an aggregate.
     """
     no_release(opening, closing, year)
     before = opening.groupby("facility_id")[["allowance_on", "provision_off"]].sum()
@@ -52,7 +52,7 @@ def stock_to_flow(opening: pd.DataFrame, closing: pd.DataFrame, portfolio: pd.Da
     # EUR 8.4m adjacent floats are wider than RELEASE_EPS. A real break exceeds the tolerance.
     bridge = (out["opening_on"] + out["charge_on"] + out["fx_movement"] + out["other_movement"]
               - out["closing_on"])
-    if (bridge.abs() > np.maximum(tol["abs"], tol["rel"] * out["closing_on"].abs())).any():
+    if (bridge.abs() > tol["abs"]).any():
         raise BlockingError(STEP, Block.NOT_PERMITTED_MOVEMENT, "allowance bridge does not close")
     return CHARGES.check(out, STEP).sort_values(list(CHARGES.key)).reset_index(drop=True)
 

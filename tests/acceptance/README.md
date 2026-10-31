@@ -2,13 +2,14 @@
 
 One test per acceptance case: `test_at_xx.py`, marked `at("AT-xx")`. Expected values and tolerances come from `docs/spec/oracles/AT-xx.yaml`.
 
-A green test should prove the engine, not a helper. R7 and R8 use their own vectorised code, so a kernel can stay right while the engine drifts from it. Each case is therefore asserted on the tables of a sealed run wherever the engine has an equivalent. A test that has a kernel assertion keeps it, then asserts the same case on the run.
+A green test should prove the engine, not a helper. R7 and R8 use their own vectorised code, so a kernel can stay right while the engine drifts from it. Each case is therefore asserted on the tables of a sealed run, or at least on the step the run calls, wherever the engine has an equivalent. Of the 36, 29 reach a sealed run, 3 reach a step, 3 stay kernel-only and 1 is about the input set. A test that has a kernel assertion keeps it, then asserts the same case on the run.
 
 ## How a case reaches a run
 
 - **Reference run** (`reference_runs`): `builders.reference_set` turns oracle inputs into facilities. Matrix rows give a grade exactly the case's PD or transitions, and rho = 0, w = 0 and no prepayment make PiT, LGD and EAD equal their TTC inputs, so the run reproduces the case's own numbers. Most cases share P03. Cases that read a whole segment or rewrite grade rows have their own, listed in `builders.REFERENCE_SEGMENTS`. A new facility reads only its own rows, so it does not disturb the others.
 - **Core run** (`core_run`): the full synthetic book, for a level or a rule that must hold on real data.
 - **Mini run**: the small input set, for a planted defect or a repayment variant.
+- **Step**: the case calls the step the run calls, on hand-built frames, because the route needs a sidecar or data the book does not have. This proves the step, not a sealed run.
 
 ## Cases
 
@@ -22,8 +23,8 @@ A green test should prove the engine, not a helper. R7 and R8 use their own vect
 | AT-06 | Pipeline | Reference | A segment with Z scaled to 0 on baseline and -1 on adverse in 2029 gives both scenarios' PD and LGD, and R8's end-2029 S1 provision carries the interpolated loss rate. |
 | AT-07 | Pipeline | Reference, core | `charges` shows the change in the stock, not the stock. On the real book, three years of charges add up to the change in the stock. |
 | AT-08 | Pipeline | Reference | R6's total EAD, against both named wrong answers. |
-| AT-10 | Pipeline | Capital bridge | `capital_bridge` floors IRB and STA separately on oracle REA. The bridge runs only with a capital sidecar, so the case calls the step directly. |
-| AT-11 | Pipeline | Capital bridge | `capital_bridge` compares UTREA with the floored STREA on the oracle's amounts, as the case above. |
+| AT-10 | Step | Capital bridge | `capital_bridge` floors IRB and STA separately on oracle REA. In a run the bridge needs a capital sidecar, so the case calls the step on hand-built frames. |
+| AT-11 | Step | Capital bridge | `capital_bridge` compares UTREA with the floored STREA on the oracle's amounts, as AT-10 does. |
 | AT-16 | Pipeline | Core | R4 writes every country's index level to `indices.parquet`. |
 | AT-18 | Pipeline | Reference, core | Of two S3 facilities whose raw total rises, R8 still floors the one that would release. On the real book, many S3 slices would release and none does. |
 | AT-21 | Pipeline | Core | `charges` and the starting-point report. |
@@ -31,7 +32,7 @@ A green test should prove the engine, not a helper. R7 and R8 use their own vect
 | AT-25 | Pipeline | Reference, core | A chain of matrix rows gives the case's curve in `pd_curves`. The PD-03 identities hold on every curve of the real book. |
 | AT-28 | Kernel-only | None | R8 takes a part year pro rata, `d × m`, by owner decision (A7, C10), so no run output carries this constant-hazard PD. A run would differ from the oracle by design. PD-06's text is the owner's to change (C10). |
 | AT-29 | Pipeline | Reference | `stage_flows` and the new S3 cohorts carry the defaults by origin stage. |
-| AT-33 | Pipeline | RPT-06 report | `default_weighted_lgd`, which every run calls, keeps a zero-EAD book as not applicable with zero loss. |
+| AT-33 | Step | RPT-06 report | `default_weighted_lgd`, which every run calls, keeps a zero-EAD book as not applicable with zero loss. The real book has no such facility, so the case calls the step on hand-built frames. |
 | AT-34 | Pipeline | Reference | R6's EAD split and R8's `allowance_on` and `provision_off`. |
 | AT-35 | Pipeline | Reference | The core and utilisation variants, as separate labelled runs. |
 | AT-36 | Kernel-only | None | The static book has no drawdown transfers: nothing calls `permitted_transfer`, and R7 blocks any movement of drawn or undrawn balances. |

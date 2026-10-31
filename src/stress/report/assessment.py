@@ -6,7 +6,7 @@ import pandas as pd
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
 from stress.contracts.inputs import SCENARIO_UNITS
-from stress.contracts.preparation import COLLATERAL_INDEX, price_growth
+from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, require_ltv
 from stress.contracts.run import ADVERSE
 
 
@@ -83,8 +83,9 @@ def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.D
                  indices: pd.DataFrame) -> pd.DataFrame:
     """Paragraph 69 and A31: GCA over collateral value, the value following the scenario's price
     index from the snapshot. GCA is static, so a loan's LTV is its opening LTV over that index."""
-    secured = facilities.loc[facilities["ltv"].notna() & facilities["facility_id"].isin(portfolio["facility_id"]),
-                             ["facility_id", "ltv", "collateral_type"]].copy()
+    in_book = facilities[facilities["facility_id"].isin(portfolio["facility_id"])]
+    require_ltv(in_book)
+    secured = in_book.loc[in_book["ltv"].notna(), ["facility_id", "ltv", "collateral_type"]].copy()
     secured["variable"] = secured["collateral_type"].map(COLLATERAL_INDEX)
     if secured["variable"].isna().any():
         raise BlockingError("report", "MISSING_INPUT", "no price index for a collateral type")
@@ -142,7 +143,10 @@ def plausibility_sheet(spec: dict, impairment: pd.DataFrame, by_stage: pd.DataFr
         return charges[charges["portfolio"] == scope].set_index("year")
 
     def path(variable: str) -> pd.Series:
-        return paths[paths["variable"] == variable].groupby("year")["value"].mean()
+        values = paths[paths["variable"] == variable].groupby("year")["value"].mean()
+        if values.empty:
+            raise BlockingError("report", "MISSING_INPUT", f"no adverse path for {variable}")
+        return values
 
     def price_fall(variable: str) -> float:
         return float(growth.loc[(growth["variable"] == variable) & (growth["year"] == last), "growth"].mean()) - 1.0

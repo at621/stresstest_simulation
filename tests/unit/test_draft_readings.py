@@ -6,13 +6,16 @@ import argparse
 import numpy as np
 import pandas as pd
 import pytest
+from openpyxl import load_workbook
 
 from stress import cli
 from stress.cashflows import build_schedules
-from stress.contracts.run import RUNOFF_REPLACED, S2_HELD, RunConfig
+from stress.contracts.errors import Block, BlockingError
+from stress.contracts.run import LGD_TROUGH, RUNOFF_REPLACED, S2_HELD, RunConfig
 from stress.contracts.tables import METHOD_S2_HELD, ROUTE_PERFORMING, SLICES
 from stress.ecl import hold_s2
 from stress.projection import project_year
+from stress.report import WORKBOOK_FILE, ecl_bridge
 from tests import builders
 from tests.support import tolerance
 
@@ -105,9 +108,69 @@ def test_held_s2_changes_only_s2_after_the_first_year(default_run, tmp_path):
 @pytest.mark.control("Reproducibility")
 def test_a_selected_reading_reruns_from_its_manifest(default_run, tmp_path):
     inputs, _, _ = default_run
-    ctx, _ = execute(inputs, tmp_path, s2_treatment=S2_HELD, horizon_runoff=RUNOFF_REPLACED)
+    ctx, _ = execute(inputs, tmp_path, s2_treatment=S2_HELD, horizon_runoff=RUNOFF_REPLACED, lgd_path=LGD_TROUGH)
     args = argparse.Namespace(run=str(ctx.run_dir), runs_dir=str(tmp_path / "replays"))
     assert cli.cmd_rerun(args) == cli.EXIT_OK
+
+
+@pytest.mark.req("OPS-04")
+def test_a_selected_run_cannot_be_read_as_the_core_run(default_run, tmp_path):
+    inputs, _, base = default_run
+    ctx, manifest = execute(inputs, tmp_path, s2_treatment=S2_HELD, horizon_runoff=RUNOFF_REPLACED)
+    assert "-core+held+replaced-" in ctx.run_id and "+" not in base.run_id
+    assert any("Selected method" in line and "S2 treatment held" in line for line in manifest["summary"]["headline"])
+    assert "horizon run-off replaced" in (ctx.reports_dir / "summary.md").read_text(encoding="utf-8")
+    book = load_workbook(ctx.reports_dir / WORKBOOK_FILE)
+    cells = {str(cell.value) for sheet in book.worksheets for line in sheet.iter_rows() for cell in line}
+    assert any("selected method" in text and "S2 treatment held" in text for text in cells)
+    assert any("no run-off inside the horizon" in text for text in cells)
+    assert any("plus the held S2 amount" in text for text in cells)
+    readiness = builders.report(ctx, "analysis_readiness.csv").set_index("gate")
+    assert readiness.loc["s2_treatment", "state"] == S2_HELD
+
+
+@pytest.mark.req("OPS-01")
+@pytest.mark.parametrize("option", [{"s2_treatment": "hold"}, {"horizon_runoff": "replacedd"}, {"lgd_path": "trough2"}])
+def test_an_unknown_reading_blocks_at_r1(default_run, tmp_path, option):
+    inputs, _, _ = default_run
+    with pytest.raises(BlockingError) as caught:
+        cli.execute(RunConfig(str(inputs), ("baseline", "adverse"), "core", **option), tmp_path)
+    assert caught.value.code == Block.INVALID_ARGUMENT
+    assert not list(tmp_path.iterdir()), "no run folder is opened"
+
+
+@pytest.mark.req("ECL-09")
+def test_buckets_and_the_held_amount_tie_to_the_booked_provisions(default_run, tmp_path):
+    inputs, _, base = default_run
+    ctx, _ = execute(inputs, tmp_path, s2_treatment=S2_HELD)
+    held = builders.report(ctx, "analysis_ecl_bridge.csv")
+    assert np.allclose(held["ecl_on"] + held["held_on"], held["allowance_on"], rtol=1e-6, atol=1.0)
+    assert np.allclose(held["ecl_off"] + held["held_off"], held["provision_off"], rtol=1e-6, atol=1.0)
+    assert (held.loc[held["year"] <= 2027, ["held_on", "held_off"]] == 0).all().all()
+    assert held.loc[held["year"] > 2027, "held_on"].abs().gt(0).any()
+    default = builders.report(base, "analysis_ecl_bridge.csv")
+    assert len(default) and (default[["held_on", "held_off"]] == 0).all().all()
+
+
+@pytest.mark.req("ECL-09")
+def test_a_performing_slice_may_differ_from_raw_only_when_held():
+    provisions = pd.DataFrame({"scenario": "adverse", "year": 2028, "stage": 2, "method": ["s2_lifetime"],
+                               "raw_on": [10.0], "raw_off": [0.0], "allowance_on": [20.0], "provision_off": [0.0]})
+    buckets = pd.DataFrame({"scenario": "adverse", "valuation_year": 2028, "ecl_on": [10.0], "ecl_off": [0.0]})
+    results = {"provisions": provisions, "ecl_buckets": buckets}
+    with pytest.raises(BlockingError, match="raw value"):
+        ecl_bridge(results, tolerance("aggregate"))
+    ok = ecl_bridge({**results, "provisions": provisions.assign(method=METHOD_S2_HELD)}, tolerance("aggregate"))
+    assert ok["held_on"].iloc[0] == 10.0
+
+
+@pytest.mark.req("ECL-03")
+def test_replaced_blocks_where_it_would_still_amortise(default_run, tmp_path):
+    inputs, _, _ = default_run
+    config = RunConfig(str(inputs), ("baseline", "adverse"), "annuity", horizon_runoff=RUNOFF_REPLACED)
+    _, manifest = cli.execute(config, tmp_path)
+    assert manifest["status"] == "BLOCKED" and manifest["blocked"]["code"] == Block.INVALID_ARGUMENT
+    assert "amortisation" in manifest["blocked"]["message"]
 
 
 @pytest.mark.req("ECL-03")

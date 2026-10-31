@@ -56,7 +56,7 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 
 - **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about three minutes), and blocks the stop until they pass.
 - **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks and refuses protected paths and run folders.
-- **Traceability:** after changing a test marker, an ID named in code or `docs/traceability/requirement-status.yaml`, run `uv run python -m tests.traceability` to regenerate [the matrix](traceability/traceability-matrix.md) and [the source register](source-register/source-register.md); a control test fails until they are current, and `--check` compares without writing.
+- **Traceability:** after changing a test marker, an ID named in code, an acceptance docstring, `docs/assumptions.md` or `docs/traceability/requirement-status.yaml`, run `uv run python -m tests.traceability` to regenerate [the matrix](traceability/traceability-matrix.md) and [the source register](source-register/source-register.md); a control test fails until they are current, and `--check` compares without writing.
 
 ### Draft preparation and replay
 
@@ -73,8 +73,10 @@ the existing product-loss-rate interpolation. Prepayment retains its Z conventio
 the two sealed runs to quantify the sensitivity; do not mix them into one reported scenario.
 
 `--s2-treatment held`, `--horizon-runoff replaced` and `--lgd-path trough` are selectable readings
-of the draft (C14–C16). The defaults stay the design's. A run with any of them is named in its
-`summary.md`, its manifest and `analysis_readiness.csv`. Compare it with a default run; do not report it as the core run.
+of the draft (C14–C16). The defaults stay the design's. A run with any of them carries a tag in its
+run ID, for example `-core+held-`, and is named in its headline, `summary.md`, workbook, manifest and
+`analysis_readiness.csv`. `--horizon-runoff replaced` works on bullet schedules only and blocks at R5
+on the `annuity` and `linear` variants. Compare it with a default run; do not report it as the core run.
 
 `stress report`, `compare` and `rerun` reject tampered sealed artifacts. Strict rerun first
 checks source contents and Python/package versions, then reads the verified saved `data/`

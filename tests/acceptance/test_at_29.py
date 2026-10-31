@@ -32,6 +32,7 @@ def test_new_defaults_from_origin_stage_pd(reference_runs):
     ids = [reference_runs["ids"][f"AT-29/{stage}"] for stage in case["input"]["opening"]]
     slices = builders.result(ctx, "slices.parquet")
     book = slices[slices["facility_id"].isin(ids) & (slices["year"] == year)]
+    assert set(book["scenario"]) == {"baseline", "adverse"}
     for _, rows in book.groupby("scenario"):
         for stage, flow in e["new_default_flows"].items():
             cohort = rows[rows["slice"] == new_s3_slice(year, int(stage[1]))]

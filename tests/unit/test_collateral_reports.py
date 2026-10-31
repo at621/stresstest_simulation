@@ -13,6 +13,7 @@ PORTFOLIO = pd.DataFrame({"facility_id": ["A", "B", "C"], "portfolio": ["P01", "
                           "country": ["DE", "DE", "DE"], "segment": ["P01", "P01", "P02"],
                           "gca": [100.0, 300.0, 50.0], "undrawn": [0.0, 0.0, 10.0]})
 FACILITIES = pd.DataFrame({"facility_id": ["A", "B", "C"], "ltv": [0.8, 0.96, np.nan],
+                           "ltv_status": ["supplied", "supplied", "not_applicable"],
                            "collateral_type": ["residential_property", "residential_property", None]})
 INDICES = pd.DataFrame({"scenario": ["adverse"] * 2, "country": ["DE"] * 2,
                         "variable": ["residential_price_index"] * 2, "year": [2027, 2028],
@@ -46,6 +47,14 @@ def test_ltv_blocks_rather_than_guess_an_index():
         stressed_ltv(PORTFOLIO, unknown, slices(2027), INDICES)
     with pytest.raises(BlockingError, match="price index"):
         stressed_ltv(PORTFOLIO, FACILITIES, slices(2029), INDICES)
+
+
+@pytest.mark.req("RPT-05")
+@pytest.mark.parametrize("change", [{"ltv": [0.8, np.nan, np.nan]},
+                                    {"ltv": [0.8, 0.96, np.nan], "ltv_status": ["supplied", "supplied", "missing"]}])
+def test_a_missing_ltv_blocks_rather_than_reads_as_unsecured(change):
+    with pytest.raises(BlockingError, match="no LTV"):
+        stressed_ltv(PORTFOLIO, FACILITIES.assign(**change), slices(2027), INDICES)
 
 
 @pytest.mark.req("RPT-05")
@@ -105,3 +114,6 @@ def test_reports_reach_a_full_run(core_run):
     assert maturity["average_maturity"].gt(0).all()
     lgd = builders.report(ctx, "analysis_loss_weighted_lgd.csv")
     assert lgd["loss_weighted_lgd"].between(0, 1).all() and lgd["denominator"].gt(0).all()
+    one_year = builders.report(ctx, "portfolio_pd.csv")
+    assert len(one_year) and one_year["denominator"].gt(0).all()
+    assert np.allclose(one_year["one_year_pd"], one_year["numerator"] / one_year["denominator"], rtol=1e-6)
