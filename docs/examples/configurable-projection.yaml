@@ -1,0 +1,91 @@
+# Illustrative synthetic experiment; these paths and coefficients are not estimates.
+schema_version: 1
+status: SYNTHETIC
+source: "Configurable projection demonstration, 31 October 2026"
+version: demo-v1
+input_set_hash: d62d0386f2c5256eb50fbc787678fdc420fc5bda42ab5f8100a147d097dc91ee
+run:
+  inputs: ../../inputs/d62d0386f2c5256e
+  scenarios: [baseline, adverse, energy_crisis]
+  variant: core
+  balance_sheet: dynamic
+scenarios:
+  energy_crisis:
+    inherits: adverse
+    narrative: "Illustrative energy shock: weaker activity and higher rates, with faster performing-book contraction."
+    overrides:
+      - {variable: gdp_growth, country: '*', year: 2027, value: -0.08, unit: decimal, value_type: growth}
+      - {variable: gdp_growth, country: '*', year: 2028, value: -0.04, unit: decimal, value_type: growth}
+      - {variable: reference_rate, country: '*', year: 2027, value: 0.06, unit: decimal, value_type: level}
+models:
+  consumer_nonlinear:
+    kind: polynomial
+    source: "Illustrative coefficients for demonstrating model routing"
+    version: demo-v1
+    terms:
+      activity: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: 0.6}
+      activity_squared: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: -0.08, power: 2}
+      unemployment: {variable: unemployment, mean: 0.07, sd: 0.025, beta: -0.3}
+segments:
+  P02:
+    macro_model: consumer_nonlinear
+terminal_policies:
+  energy_crisis: {method: flat}
+balance_sheet:
+  # Complete scenario/year/portfolio grid. Baseline unchanged; stress reduces drawn
+  # performing exposure and raises undrawn commitments. Defaulted cohorts are retained.
+  assumptions:
+    - {scenario: baseline, year: 2027, portfolio: P01, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2027, portfolio: P02, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2027, portfolio: P03, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2027, portfolio: P04, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2027, portfolio: P05, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2027, portfolio: P06, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2028, portfolio: P01, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2028, portfolio: P02, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2028, portfolio: P03, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2028, portfolio: P04, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2028, portfolio: P05, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2028, portfolio: P06, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2029, portfolio: P01, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2029, portfolio: P02, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2029, portfolio: P03, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2029, portfolio: P04, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2029, portfolio: P05, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: baseline, year: 2029, portfolio: P06, drawn_change: 0.0, undrawn_change: 0.0}
+    - {scenario: adverse, year: 2027, portfolio: P01, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2027, portfolio: P02, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2027, portfolio: P03, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2027, portfolio: P04, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2027, portfolio: P05, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2027, portfolio: P06, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2028, portfolio: P01, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2028, portfolio: P02, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2028, portfolio: P03, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2028, portfolio: P04, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2028, portfolio: P05, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2028, portfolio: P06, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2029, portfolio: P01, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2029, portfolio: P02, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2029, portfolio: P03, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2029, portfolio: P04, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2029, portfolio: P05, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: adverse, year: 2029, portfolio: P06, drawn_change: -0.03, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2027, portfolio: P01, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2027, portfolio: P02, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2027, portfolio: P03, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2027, portfolio: P04, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2027, portfolio: P05, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2027, portfolio: P06, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2028, portfolio: P01, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2028, portfolio: P02, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2028, portfolio: P03, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2028, portfolio: P04, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2028, portfolio: P05, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2028, portfolio: P06, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2029, portfolio: P01, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2029, portfolio: P02, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2029, portfolio: P03, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2029, portfolio: P04, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2029, portfolio: P05, drawn_change: -0.10, undrawn_change: 0.10}
+    - {scenario: energy_crisis, year: 2029, portfolio: P06, drawn_change: -0.10, undrawn_change: 0.10}

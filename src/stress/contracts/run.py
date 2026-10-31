@@ -47,13 +47,19 @@ class RunConfig:
     s2_treatment: str = S2_REPRICED
     horizon_runoff: str = RUNOFF_CONTRACTUAL
     lgd_path: str = LGD_ANNUAL
+    balance_sheet: str = "static"
+    specification: str | None = None
+    specification_hash: str | None = None
+    _specification_document: dict = field(default_factory=dict, repr=False)
+    _specification_bytes: bytes = field(default=b"", repr=False)
 
     def selected_methods(self) -> dict[str, str]:
         """Each reading of the draft this run selects in place of the design's default."""
         readings = (("terminal treatment", self.terminal_treatment, TERMINAL_Z),
                     ("S2 treatment", self.s2_treatment, S2_REPRICED),
                     ("horizon run-off", self.horizon_runoff, RUNOFF_CONTRACTUAL),
-                    ("LGD path", self.lgd_path, LGD_ANNUAL))
+                    ("LGD path", self.lgd_path, LGD_ANNUAL),
+                    ("balance sheet", self.balance_sheet, "static"))
         return {label: value for label, value, default in readings if value != default}
 
     def as_dict(self) -> dict:
@@ -67,6 +73,9 @@ class RunConfig:
             "s2_treatment": self.s2_treatment,
             "horizon_runoff": self.horizon_runoff,
             "lgd_path": self.lgd_path,
+            "balance_sheet": self.balance_sheet,
+            "specification": self.specification,
+            "specification_hash": self.specification_hash,
         }
 
 

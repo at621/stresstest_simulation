@@ -83,6 +83,9 @@ def write_table(ws: Worksheet, df: pd.DataFrame, cols: list[Col], top: int, left
     other sheets can reference the table.
     """
     letters = {c.key: get_column_letter(left + i) for i, c in enumerate(cols)}
+    tokens = {"{" + key + "}": letter for key, letter in letters.items()}
+    tokens["{r}"] = ""
+    pattern = re.compile("|".join(re.escape(key) for key in sorted(tokens, key=len, reverse=True)))
     row = top
     if any(c.group for c in cols):
         start = 0
@@ -91,7 +94,7 @@ def write_table(ws: Worksheet, df: pd.DataFrame, cols: list[Col], top: int, left
             while end + 1 < len(cols) and cols[end + 1].group == cols[start].group:
                 end += 1
             label = {"baseline": "Baseline", "adverse": "Adverse",
-                     "difference": "Adverse - baseline"}.get(cols[start].group, cols[start].group)
+                     "difference": "Comparison"}.get(cols[start].group, cols[start].group)
             cell = ws.cell(row=row, column=left + start, value=label or None)
             if end > start:
                 ws.merge_cells(start_row=row, start_column=left + start, end_row=row,
@@ -114,10 +117,12 @@ def write_table(ws: Worksheet, df: pd.DataFrame, cols: list[Col], top: int, left
     first = row + 1
     for n, data in enumerate(df.to_dict("records")):
         r = first + n
+        tokens["{r}"] = str(r)
         is_total = bool(total_rows.iloc[n]) if total_rows is not None else False
         for i, c in enumerate(cols):
             if c.formula is not None:
-                value = c.formula.format(r=r, **letters)
+                # Literal tokens: scenario IDs are labels, never Python format expressions.
+                value = pattern.sub(lambda match: tokens[match.group()], c.formula)
                 cell = _cell(ws, r, left + i, value, None if c.fmt == "text" else c.fmt, BLACK, is_total)
             else:
                 value = data[c.value]
@@ -194,7 +199,7 @@ def sheet_results(wb: Workbook, imp: pd.DataFrame, by_stage: pd.DataFrame, scena
                   years: list[int]) -> dict:
     """The main comparison: per portfolio and year, baseline next to adverse."""
     ws = wb.create_sheet("Results by portfolio")
-    _title(ws, "Results by portfolio: baseline and adverse side by side",
+    _title(ws, "Results by portfolio: scenarios side by side",
            "EUR millions at each year-end. Coverage = provisions / GCA. Cost of risk = charge / GCA. "
            "S3 = credit-impaired exposure; it never cures (EXP-02).")
     stage = by_stage.copy()
@@ -220,31 +225,33 @@ def sheet_results(wb: Workbook, imp: pd.DataFrame, by_stage: pd.DataFrame, scena
                     continue
                 m = m.iloc[0]
                 rec["gca"] = (m["s1"] + m["s2"] + m["s3"]) / MILLION
+                rec[f"{s}_gca"] = rec["gca"]
                 for k in ("s1", "s2", "s3", "provisions", "charge_total", "cumulative_charge"):
                     rec[f"{s}_{k}"] = m[k] / MILLION
             rows.append(rec)
     df = pd.DataFrame(rows)
     cols = [Col("portfolio", "Portfolio", "text", "portfolio", width=10),
-            Col("year", "Year", "text", "year", width=7),
-            Col("gca", "GCA (static)", value="gca", width=11)]
+            Col("year", "Year", "text", "year", width=7)]
     for s in scenarios:
         cols += [
+            Col(f"{s}_gca", "GCA", value=f"{s}_gca", group=s, width=11),
             Col(f"{s}_s2", "S2 GCA", value=f"{s}_s2", group=s),
             Col(f"{s}_s3", "S3 GCA", value=f"{s}_s3", group=s),
-            Col(f"{s}_s3r", "S3 ratio", "pct", formula=f"=IFERROR({{{s}_s3}}{{r}}/{{gca}}{{r}},0)", group=s, width=9),
+            Col(f"{s}_s3r", "S3 ratio", "pct", formula=f"=IFERROR({{{s}_s3}}{{r}}/{{{s}_gca}}{{r}},0)", group=s, width=9),
             Col(f"{s}_prov", "Provisions", value=f"{s}_provisions", group=s),
-            Col(f"{s}_cov", "Coverage", "pct", formula=f"=IFERROR({{{s}_prov}}{{r}}/{{gca}}{{r}},0)", group=s, width=9),
+            Col(f"{s}_cov", "Coverage", "pct", formula=f"=IFERROR({{{s}_prov}}{{r}}/{{{s}_gca}}{{r}},0)", group=s, width=9),
             Col(f"{s}_chg", "Charge in year", value=f"{s}_charge_total", group=s),
-            Col(f"{s}_cor", "Cost of risk", "bp", formula=f"=IFERROR({{{s}_chg}}{{r}}/{{gca}}{{r}}*10000,0)", group=s, width=10),
+            Col(f"{s}_cor", "Cost of risk", "bp", formula=f"=IFERROR({{{s}_chg}}{{r}}/{{{s}_gca}}{{r}}*10000,0)", group=s, width=10),
             Col(f"{s}_cum", "Cumulative charge", value=f"{s}_cumulative_charge", group=s),
         ]
     if len(scenarios) == 2:
         b, a = scenarios
+        difference = f"{a} - {b}"
         cols += [
-            Col("d_s3", "S3 GCA", formula=f"={{{a}_s3}}{{r}}-{{{b}_s3}}{{r}}", group="difference"),
-            Col("d_prov", "Provisions", formula=f"={{{a}_prov}}{{r}}-{{{b}_prov}}{{r}}", group="difference"),
-            Col("d_cov", "Coverage", "pct", formula=f"={{{a}_cov}}{{r}}-{{{b}_cov}}{{r}}", group="difference", width=9),
-            Col("d_cum", "Cumulative charge", formula=f"={{{a}_cum}}{{r}}-{{{b}_cum}}{{r}}", group="difference"),
+            Col("d_s3", "S3 GCA", formula=f"={{{a}_s3}}{{r}}-{{{b}_s3}}{{r}}", group=difference),
+            Col("d_prov", "Provisions", formula=f"={{{a}_prov}}{{r}}-{{{b}_prov}}{{r}}", group=difference),
+            Col("d_cov", "Coverage", "pct", formula=f"={{{a}_cov}}{{r}}-{{{b}_cov}}{{r}}", group=difference, width=9),
+            Col("d_cum", "Cumulative charge", formula=f"={{{a}_cum}}{{r}}-{{{b}_cum}}{{r}}", group=difference),
         ]
     table = write_table(ws, df, cols, top=4, total_rows=df["portfolio"] == "Total")
     ws.freeze_panes = ws.cell(row=table["first"], column=4)
@@ -374,7 +381,7 @@ def sheet_parameters(wb: Workbook, z: pd.DataFrame, pd_tab: pd.DataFrame, lgd_ta
     ws = wb.create_sheet("Parameters")
     _title(ws, "Scenario drivers and risk parameters",
            "Z > 0 is a better economy than average (SCN-08). One-year PD weighted by drawn exposure "
-           "(RPT-06); LGD weighted by GCA. Adverse Z reverts to baseline 2029 over six years (ECL-10).")
+           "(RPT-06); LGD weighted by reference GCA. Terminal policies are recorded in the effective specification.")
     # Z by segment, scenario and year (common paths: the same in every country).
     zz = z[z["year"] <= last_reported].groupby(["segment", "scenario", "year"])["z"].mean().unstack("year").reset_index()
     zz = zz.sort_values(["scenario", "segment"], key=lambda s: s.map(_order) if s.name == "scenario" else s)
@@ -395,7 +402,7 @@ def sheet_parameters(wb: Workbook, z: pd.DataFrame, pd_tab: pd.DataFrame, lgd_ta
         pcols += [Col(f"{s}{y}", str(y), "pct", f"{s}_{y}", width=8, group=s) for y in [years[0] - 1, *years] if f"{s}_{y}" in wide]
     if len(scenarios) == 2 and f"{scenarios[1]}_{years[0]}" in wide:
         b, a = scenarios
-        pcols.append(Col("mult", f"Adverse / baseline {years[0]}", "x",
+        pcols.append(Col("mult", f"{a} / {b} {years[0]}", "x",
                          formula=f"=IFERROR({{{a}{years[0]}}}{{r}}/{{{b}{years[0]}}}{{r}},0)", width=12, group="difference"))
     t = write_table(ws, wide, pcols, top=row, autofilter=False)
     row = t["last"] + 3
@@ -463,8 +470,8 @@ def sheet_notes(wb: Workbook, meta: dict) -> None:
         ("Status", f"{meta['status']}: a synthetic preparation run. Not an EBA submission, not a bank forecast (OPS-04)."),
         ("Units", "Amounts in EUR millions; rates and ratios as percentages. Values are unrounded; formats round the display only."),
         ("Colours", "Blue numbers are engine results written by the run. Black cells are Excel formulas over them."),
-        ("Baseline / adverse", "Two scenarios through the same code, never blended (REG-07). 'Adverse - baseline' columns are formulas."),
-        ("Static balance", "GCA and undrawn stay at end-2026 levels every year; matured facilities are replaced like for like (EXP-01, EXP-05)."),
+        ("Scenarios", "Named scenarios run through the same pipeline, never blended (REG-07). Comparison columns are formulas."),
+        ("Balance sheet", "Static: balances maintained. Dynamic: supplied performing-volume changes before migration; see exposure_movements.csv. S3 cohorts remain."),
         ("Charge", "Charge = closing - opening provisions in the year; a negative charge is a release. The 2027 opening is the frozen O4 allowance."),
         ("Coverage", "Provisions (on- plus off-balance) / GCA."),
         ("Cost of risk", "Charge in the year / GCA, in basis points."),
@@ -500,7 +507,7 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
         ws.cell(row=i, column=2, value=v).font = _font()
     top = 4 + len(info) + 2
     ws.cell(row=top - 1, column=1, value="Key results, whole book").font = _font(bold=True, size=11)
-    header = ["Metric", *scenarios] + (["Adverse - baseline"] if len(scenarios) == 2 else [])
+    header = ["Metric", *scenarios] + ([f"{scenarios[1]} - {scenarios[0]}"] if len(scenarios) == 2 else [])
     for j, h in enumerate(header, start=1):
         c = ws.cell(row=top, column=j, value=h)
         c.font = _font("FFFFFF", bold=True)
@@ -539,7 +546,7 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
         extra.append((j, get_column_letter(j), _range("Results by portfolio", results_t, f"{scen}_s3")))
     labels = [
         (f"Coverage {last} (provisions / GCA)", "pct", lambda col: f"=IFERROR({col}{rows[f'Closing provisions {last}']}/{col}{gca_row},0)"),
-        ("Average annual cost of risk", "bp",
+        ("Average annual cost of risk / opening GCA", "bp",
          lambda col: f"=IFERROR({col}{rows[f'Cumulative charge {first}-{last}']}/{len(years)}/{col}{gca_row}*10000,0)"),
     ]
     for k, (label, fmt, f) in enumerate(labels):
@@ -554,7 +561,13 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
     rows["s3"] = r
     ws.cell(row=r + 1, column=1, value=f"S3 ratio {last}").font = _font()
     for j, col, _ in extra:
-        _cell(ws, r + 1, j, f"=IFERROR({col}{r}/{col}{gca_row},0)", "pct")
+        scen = scenarios[j - 2]
+        closing_gca = _range("Results by portfolio", results_t, f"{scen}_gca")
+        denominator = f'SUMIFS({closing_gca},{res_port},"Total",{res_year},"{last}")'
+        _cell(ws, r + 1, j, f"=IFERROR({col}{r}/({denominator}),0)", "pct")
+        coverage_row = rows[f"Coverage {last} (provisions / GCA)"]
+        _cell(ws, coverage_row, j,
+              f"=IFERROR({col}{rows[f'Closing provisions {last}']}/({denominator}),0)", "pct")
     end = r + 1
     if len(scenarios) == 2:
         for rr in range(base_row, end + 1):

@@ -111,3 +111,19 @@ def approve(folder: Path, approver: str, on: str) -> None:
         "input_set_hash": manifest["input_set_hash"], "status": "APPROVED",
         "approved_by": approver, "approved_on": on,
     }, indent=2), encoding="utf-8", newline="\n")
+
+
+def package(source: Path, destination: Path) -> Path:
+    """Package user-prepared datasets without generating facilities or recalibrating models.
+
+    The engine performs financial/type validation at R2/R3. This step freezes exactly the
+    supplied tables and YAML, creates their manifest and records pending owner approval.
+    """
+    tables = {name: pd.read_parquet(source / filename) for name, filename in FILES.items()
+              if filename.endswith(".parquet")}
+    documents = {name: yaml.safe_load((source / filename).read_text(encoding="utf-8"))
+                 for name, filename in FILES.items() if filename.endswith(".yaml")}
+    ps = documents["parameter_set"]
+    meta = {"status": "SYNTHETIC", "spec_version": str(ps.get("spec_version", "unapproved")),
+            "parameter_set_id": ps["parameter_set_id"], "generator": {"method": "supplied_datasets", "version": "1"}}
+    return write_input_set(destination, tables, documents, meta)

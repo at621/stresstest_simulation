@@ -31,8 +31,8 @@ def stock_to_flow(opening: pd.DataFrame, closing: pd.DataFrame, portfolio: pd.Da
     before = opening.groupby("facility_id")[["allowance_on", "provision_off"]].sum()
     after = closing.groupby("facility_id")[["allowance_on", "provision_off"]].sum()
     ids = portfolio["facility_id"]
-    before = before.reindex(ids).fillna(0.0)
-    after = after.reindex(ids).fillna(0.0)
+    before = before.reindex(ids).fillna(0.0).astype(float)
+    after = after.reindex(ids).fillna(0.0).astype(float)
     overlay = portfolio.set_index("facility_id")["overlay_amount"].reindex(ids).fillna(0.0)
     out = pd.DataFrame({
         "scenario": scenario, "year": year, "facility_id": ids.to_numpy(),

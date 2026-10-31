@@ -158,6 +158,13 @@ SLICES = TableSpec(
 )
 SLICE_S3_ORIGINAL = "S3_orig"
 
+EXPOSURE_MOVEMENTS = TableSpec(
+    "exposure_movements", "exposure_movements.parquet",
+    key=("scenario", "year", "facility_id", "stage"),
+    columns=("portfolio", "opening_gca", "gca_change", "migration_gca",
+             "opening_undrawn", "undrawn_change", "migration_undrawn"),
+)
+
 
 def new_s3_slice(entry_year: int, origin_stage: int) -> str:
     return f"S3_new_{entry_year}_S{origin_stage}"

@@ -32,6 +32,27 @@ Ask Claude Code to add a line to `docs/spec/README.md`, a file under `inputs/<ha
 
 ## Engine runs
 
+### Configurable portfolios, models and crises
+
+Read the complete [input and run specification](eba-2027-review/input-and-run-specification.md).
+Start from `docs/examples/configurable-projection.yaml`: it combines a third named crisis,
+a nonlinear consumer model, a separate terminal policy and annual dynamic volume assumptions.
+Run it with `uv run stress run --specification docs/examples/configurable-projection.yaml`.
+Place calculation settings in the YAML; only `--quiet` and `--runs-dir` may accompany it.
+
+The file is bound to the immutable base input hash. Its exact bytes and resolved inputs are
+sealed with the run. `stress rerun --run runs/<run_id>` reads the sealed copy even after the
+original YAML is removed. Read `effective_specification.json`, `macro_models.csv`,
+`analysis_readiness.csv` and, for dynamic mode, `exposure_movements.csv` and `dynamic_books.csv`.
+Complete runoff is reported as zero stock. The static EBA template replica is not applicable
+to dynamic runs and is omitted. Default commands still use static exposure.
+
+New portfolios use the same five tables and two documents as existing ones. Prepare them,
+then run `uv run python -m foundation.synth package --source <prepared-directory> --out inputs`.
+Supply a reporting class for each new segment. The package command does not generate or
+recalibrate loans and does not grant approval. Model calibration, official inputs and final
+regulatory acceptance remain separate dependencies.
+
 ### A full run
 
 ```

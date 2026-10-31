@@ -39,6 +39,7 @@ from stress.contracts.inputs import (
 )
 from stress.contracts.run import RunContext
 from stress.contracts.status import ALL_STATUSES, STATUS_SUFFIX, ValueStatus
+from stress.ingest import specification
 
 STEP = "R2"
 LOG = logging.getLogger("stress.R2")
@@ -342,12 +343,14 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
             "ttc_pd_matrix": len(matrix), "scenario_values": len(scenario_values),
         },
     }
-    return LoadedInputs(
+    loaded = LoadedInputs(
         input_set_hash=ctx.input_set_hash, manifest=manifest, facilities=facilities,
         obligors=obligors, commitments=commitments, opening_provisions=provisions,
         ttc_pd_matrix=matrix, scenario_values=scenario_values, scenario_meta=scenario_meta,
         parameter_set=parameter_set, load_controls=controls, analysis=analysis, approval=approval,
     )
+    specification.apply(loaded, ctx)
+    return loaded
 
 
 def read_analysis(ctx: RunContext) -> dict:

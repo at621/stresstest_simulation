@@ -22,12 +22,19 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 | **Operating the engine** | [docs/runbook.md](docs/runbook.md) |
 | **Traceability matrix** | [docs/traceability/traceability-matrix.md](docs/traceability/traceability-matrix.md), regenerated with `uv run python -m tests.traceability` |
 
-**Status:** v1 is complete and runs end to end, in synthetic mode only; regulatory mode blocks the run. From here on, work goes into improvements, each on its own branch (see [Making changes](#making-changes)).
+The engine supports optional dynamic performing volumes, named crisis scenarios,
+per-segment linear/nonlinear/external-score macro models, and portfolio reporting mappings.
+Use the [input and run specification](docs/eba-2027-review/input-and-run-specification.md) as
+the operational reference. Static exposure is the default.
 
-Still open with the owner ([architecture §6](docs/architecture.md#6-open-items)):
-- Sign-off of the transcribed spec in `docs/spec/`, the input set `inputs/d62d0386f2c5256e/` (with the qualitative SICR triggers; it replaces `514ed0e86e3dc760`) and the full-run results.
-- The parameter values (N, ρ, k, β, μ, σ, w, CPR_TTC, v). Claude Code proposed them (requirements §1.5, [assumptions A2](docs/assumptions.md)).
-- The oracle values of AT-48, AT-51 and AT-52.
+```
+uv run stress run --specification docs/examples/configurable-projection.yaml
+uv run python -m foundation.synth package --source <prepared-directory> --out inputs
+```
+
+The example supplies illustrative assumptions, not forecasts or approved models. Dynamic growth
+scales existing facility prototypes; fresh origination vintages, sales, write-offs and cures are
+not implemented. Packaging preserves supplied datasets and records pending owner approval.
 
 ## How the engine works
 
@@ -115,8 +122,7 @@ uv run ruff check
 
 Calculation controls reject malformed booleans/dates, non-finite scenario values and invalid
 synthetic parameter domains. Facility ECL inputs must cover exactly the independent R5
-contractual schedule; a missing middle or final bucket blocks the run. See the
-[review implementation register](docs/implementation-status.md) for the current work.
+contractual schedule; a missing middle or final bucket blocks the run.
 
 Optional preparation analyses use the June 2026 EBA draft and explicit synthetic model inputs.
 The [runnable example](docs/examples/README.md) covers benchmark selection, recovery LGD,
@@ -137,7 +143,7 @@ uv run stress compare --base runs/<a> --new runs/<b>
 the saved `data/` files and checks source-content and runtime identity. CI runs the locked
 environment, regression suite, import boundaries, lint and generated-spec drift check.
 
-Since 18 October 2026 the input contract carries `credit_status_date`, so the engine blocks at R2 on the older input sets (`514ed0e86e3dc760`, `32415eb9d5bbcd74`), and `stress rerun` of a run made on them blocks too.
+Input sets must include `credit_status_date`. Runs and replays using input sets without this field block at R2; see the [runbook](docs/runbook.md) for input-set compatibility.
 
 To run it from Jupyter and see each step's intermediate results, open [notebooks/01_full_run_walkthrough.ipynb](notebooks/01_full_run_walkthrough.ipynb) with the `.venv` kernel, or start `uv run jupyter lab` (see [notebooks/README.md](notebooks/README.md)).
 

@@ -423,6 +423,9 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     ok["opening_provision_off"] = ok["facility_id"].map(good_prov["provision_off"]).astype(float)
     ok["overlay_amount"] = ok["facility_id"].map(good_prov["overlay_amount"]).astype(float)
     portfolio = PORTFOLIO.check(ok, STEP).sort_values("facility_id", kind="mergesort").reset_index(drop=True)
+    if portfolio.groupby("segment")["portfolio"].nunique().gt(1).any():
+        raise BlockingError(STEP, Block.PARAMETER_ALIGNMENT,
+                            "each segment must belong to exactly one portfolio")
 
     rejections = log.table()
     perf_count = int((portfolio["route"] == ROUTE_PERFORMING).sum())

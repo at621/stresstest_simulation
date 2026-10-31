@@ -80,7 +80,7 @@ def _with_total(frame: pd.DataFrame, keys: list[str], measures: list[str]) -> pd
 
 
 def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.DataFrame,
-                 indices: pd.DataFrame) -> pd.DataFrame:
+                 indices: pd.DataFrame, dynamic: bool = False) -> pd.DataFrame:
     """Paragraph 69 and A31: GCA over collateral value, the value following the scenario's price
     index from the snapshot. GCA is static, so a loan's LTV is its opening LTV over that index."""
     in_book = facilities[facilities["facility_id"].isin(portfolio["facility_id"])]
@@ -98,6 +98,11 @@ def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.D
     if book["growth"].isna().any():
         raise BlockingError("report", "MISSING_INPUT", "no price index for a projected year")
     level = book["ltv"] / book["growth"]
+    if dynamic:
+        total = slices.groupby(["scenario", "year", "facility_id"])["gca"].sum()
+        current = total.reindex(pd.MultiIndex.from_frame(book[["scenario", "year", "facility_id"]])).to_numpy()
+        original = book.facility_id.map(portfolio.set_index("facility_id")["gca"]).to_numpy()
+        level *= np.divide(current, original, out=np.zeros(len(book)), where=original > 0)
     book["ltv_numerator"] = book["gca"] * level
     book["gca_above_100"] = book["gca"].where(level > 1.0, 0.0)
     out = _with_total(book, ["scenario", "year", "portfolio"], ["gca", "ltv_numerator", "gca_above_100"])
@@ -198,6 +203,11 @@ def readiness(loaded, config) -> pd.DataFrame:
         ("lgd_path", config.lgd_path, "Annual default or worst-Z reading for property-secured books (C16)"),
         ("numerical_oracles", "OPEN", "Owner AT-48, AT-51 and AT-52 sign-off remains open"),
         ("submission", "BLOCKED", "Synthetic analyses do not enable regulatory mode"),
+        ("balance_sheet", config.balance_sheet, "Dynamic volumes are internal assumptions; EBA remains static"),
+        ("template_replica", "NOT_APPLICABLE" if config.balance_sheet == "dynamic" else "DIAGNOSTIC",
+         "Static template arithmetic does not certify a dynamic projection"),
+        ("experiment_approval", "PENDING" if loaded.specification else "NOT_APPLICABLE",
+         "Base input approval does not approve scenario, model or volume overrides"),
     ]
     for name in ("benchmarks", "recoveries", "capital", "climate", "template_mapping", "challenge",
                  "npe_backstop", "plausibility"):

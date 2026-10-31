@@ -64,7 +64,7 @@ FACILITIES = DatasetSpec(
         Column("facility_id", "str"),
         Column("obligor_id", "str"),
         Column("entity_id", "str"),
-        Column("portfolio", "str", description="P01-P06"),
+        Column("portfolio", "str", description="Reporting portfolio identifier; not a fixed enumeration"),
         Column("segment", "str", description="section 8.7 reference segment, one TTC matrix each"),
         Column("product", "str"),
         Column("ifrs_stage", "int"),
@@ -231,3 +231,4 @@ class LoadedInputs:
     load_controls: dict
     analysis: dict = field(default_factory=dict)
     approval: dict = field(default_factory=dict)
+    specification: dict = field(default_factory=dict)

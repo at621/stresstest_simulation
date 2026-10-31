@@ -1,5 +1,12 @@
 # Synthetic preparation example
 
+For the configurable core pipeline, run
+`uv run stress run --specification docs/examples/configurable-projection.yaml`.
+This maintained example adds a named crisis, nonlinear consumer model, per-scenario terminal
+policy and dynamic performing volumes. All numbers are illustrative. Its complete contract
+is in [the input and run specification](../eba-2027-review/input-and-run-specification.md).
+The preparation sidecar described below remains optional and separate.
+
 Generate a new sidecar package without changing the committed synthetic input set:
 
 ```powershell

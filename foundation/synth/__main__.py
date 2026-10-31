@@ -7,7 +7,7 @@ from pathlib import Path
 
 from foundation.synth import build
 from foundation.synth.config import SEED
-from foundation.synth.inputset import approve
+from foundation.synth.inputset import approve, package
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,8 +21,14 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("approve", help="record the owner's approval of an input set")
     a.add_argument("folder", type=Path)
     a.add_argument("--approver", required=True)
+    p = sub.add_parser("package", help="freeze seven supplied datasets; no synthetic generation")
+    p.add_argument("--source", type=Path, required=True)
+    p.add_argument("--out", type=Path, default=Path("inputs"))
     argv = sys.argv[1:] if argv is None else argv
     args = parser.parse_args(argv or ["build"])
+    if args.command == "package":
+        print(f"input set {package(args.source, args.out).as_posix()}")
+        return 0
     if args.command == "approve":
         approve(args.folder, args.approver, date.today().isoformat())
         print(f"approved {args.folder.as_posix()} by {args.approver}")

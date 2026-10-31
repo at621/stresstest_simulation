@@ -8,6 +8,10 @@ mappings. Those remain explicit dependencies. Existing synthetic conventions rem
 
 ## Delivery register
 
+The subsequent six-goal extension is recorded separately in the
+[configurable projection plan](eba-2027-review/implementation-plan.md). Its optional execution
+capabilities do not close the regulatory and empirical-model dependencies listed here.
+
 | Review item | Delivery | Verification / remaining dependency |
 |---|---|---|
 | 1–2 calculation and input controls | Implemented | Exact schedule coverage; strict types and finite domains; core comparison unchanged |

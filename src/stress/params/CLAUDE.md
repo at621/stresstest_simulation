@@ -5,6 +5,10 @@
 - PD curves hold whole years only. Never build part-year rows here: R8 takes a final bucket of d years pro rata (A7).
 - Every PiT row sums to 1 within 1e-10; block otherwise.
 - One Z per segment, country, year and scenario drives matrix, LGD and prepayment. Never apply a second stress to the same value.
+- Authorised configurable extension (31 October 2026): R4 can resolve linear, polynomial/lagged
+  or externally supplied models per segment. R6 consumes their single score without knowing
+  the model family. Scenario terminal weights may be flat or explicitly reverted; baseline
+  stays flat. ParameterRecords retain the original facility reference exposure basis.
 - `LGD[k] = Φ(Φ⁻¹(LGD_TTC) − w × Z[k])`. No cap, no add-on, no collateral data. An LGD_TTC of 0 or 1 passes through unchanged (LGD-12).
 - Prepayment is applied once, in `EAD_drawn[k] = B[k] × SP[k]` with `SP[1] = 1`. Never also in the default survival `S[k]`. The undrawn part is not prepaid (EAD-11).
 - EAD is conditional on default: never multiply it by PD or survival inside the EAD calculation. Store drawn, undrawn and total (EAD-02).

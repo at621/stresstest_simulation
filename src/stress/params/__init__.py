@@ -21,6 +21,7 @@ from stress.contracts.run import (
     RUNOFF_REPLACED,
     RunContext,
 )
+from stress.contracts.specification import terminal_weight
 from stress.contracts.tables import (
     BASIS_ACCOUNTING,
     COHORT_PERFORMING,
@@ -65,18 +66,20 @@ class PitBook:
     """PiT matrices M(y) per segment, country, scenario and year, cached by (segment, Z)."""
 
     def __init__(self, ttc: dict[str, np.ndarray], segments: dict, z: dict, tol: float,
-                 terminal_rule: dict | None = None):
+                 terminal_rule: dict | None = None, terminal_policies: dict | None = None):
         self.ttc = ttc
         self.segments = segments
         self.z = z
         self.tol = tol
         self.terminal_rule = terminal_rule
+        self.terminal_policies = terminal_policies or {}
         self._cache: dict[tuple[str, float], np.ndarray] = {}
 
     def get(self, segment: str, country: str, scenario: str, year: int) -> np.ndarray:
         if self.terminal_rule and year > self.terminal_rule["last_scenario_year"]:
             last = self.terminal_rule["last_scenario_year"]
-            weight = max(0.0, 1 - (year - last) / self.terminal_rule["reversion_years"])
+            weight = terminal_weight({"terminal_rule": self.terminal_rule,
+                                      "terminal_policies": self.terminal_policies}, scenario, year)
             base = self.get(segment, country, BASELINE, last)
             if scenario == BASELINE:
                 return base
@@ -213,7 +216,7 @@ def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: p
             zb = endpoints.xs(BASELINE, level="scenario").reindex(index).to_numpy()
             if not np.isfinite(za).all() or not np.isfinite(zb).all():
                 raise BlockingError(STEP, Block.MISSING_TERMINAL_INPUT, "missing parameter-reversion endpoint")
-            a = np.clip(1 - (rows["bucket_year"].to_numpy() - last) / rule["reversion_years"], 0, 1)
+            a = np.array([terminal_weight(ps, scenario, int(y)) for y in rows["bucket_year"]])
             reverted = (a * lgd_from_z(rows["ttc_lgd"], w, za)
                         + (1 - a) * lgd_from_z(rows["ttc_lgd"], w, zb))
             rows["lgd"] = np.where(rows["bucket_year"] > last, reverted, rows["lgd"])
@@ -290,7 +293,8 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
     perf = routed.portfolio[routed.portfolio["route"] == ROUTE_PERFORMING]
     lookup = z_lookup(drivers.z)
     book = PitBook(ttc, ps["segments"], lookup, tol,
-                   ps["terminal_rule"] if ctx.config.terminal_treatment == "parameters" else None)
+                   ps["terminal_rule"] if ctx.config.terminal_treatment == "parameters" else None,
+                   ps.get("terminal_policies"))
     keys = sorted({(s, c) for s, c in zip(routed.portfolio["segment"], routed.portfolio["country"])})
     first = int(ps["horizon"]["projection_years"][0])
     last_reported = int(ps["terminal_rule"]["last_scenario_year"]) + int(ps["terminal_rule"]["reversion_years"]) + 1

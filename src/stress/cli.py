@@ -53,6 +53,7 @@ from stress.contracts.tables import (
     CHARGES,
     DRIVER_CONTRIBUTIONS,
     ECL_BUCKETS,
+    EXPOSURE_MOVEMENTS,
     GRADE_FLOWS,
     INDICES,
     LGD_OF_YEAR,
@@ -74,6 +75,7 @@ from stress.params.assessment import (
     default_weighted_lgd,
     recovery_lgd,
 )
+from stress.projection.dynamic import adjust_performing, validate_assumptions
 from stress.validate.sicr import remaining_horizon_diagnostic
 
 EXIT_OK = 0
@@ -157,6 +159,9 @@ def pipeline(ctx) -> dict:
         routed = validate.validate_and_route(loaded, ctx)
         lineage.write_table(ctx, REJECTIONS.filename, routed.rejections)
         validate.raise_if_blocking(routed.rejections)
+        volume_assumptions = validate_assumptions(
+            loaded.specification, ctx.config.balance_sheet, routed.portfolio, ctx.scenarios,
+            [int(y) for y in ps["horizon"]["projection_years"]])
     ctx.lineage["rejections"] = {
         "records": len(routed.rejections),
         "facilities": int(routed.rejections.loc[routed.rejections["record_type"] == "facility",
@@ -183,6 +188,7 @@ def pipeline(ctx) -> dict:
     tol = ps["tolerances"]["aggregate"]
     start = int(ps["horizon"]["snapshot_year"])
     years = [int(y) for y in ps["horizon"]["projection_years"]]
+    movements = []
     last = int(ps["terminal_rule"]["last_scenario_year"])
     generations = schedule.drop_duplicates(["facility_id", "valuation_year"])
     held = ctx.config.s2_treatment == S2_HELD
@@ -199,7 +205,12 @@ def pipeline(ctx) -> dict:
             pit = params.pit[(params.pit["scenario"] == name) & (params.pit["year"] == year)]
             gen = generations[generations["valuation_year"] == year].set_index("facility_id")["generation"]
             with step("R7", f"{name} {year}"):
-                moved = projection.project_year(state, pit, routed.portfolio, routed.grades, year,
+                migration_opening = state
+                if ctx.config.balance_sheet == "dynamic":
+                    migration_opening, movement = adjust_performing(
+                        state, routed.portfolio, volume_assumptions, name, year)
+                    movements.append(movement)
+                moved = projection.project_year(migration_opening, pit, routed.portfolio, routed.grades, year,
                                                 name, gen, tol, track_s2=held)
             with step("R8", f"{name} {year}"):
                 # The first year books the scenario with perfect foresight; only then does S2 hold.
@@ -222,6 +233,9 @@ def pipeline(ctx) -> dict:
         "ecl_buckets": _sorted(pd.concat(out["ecl_buckets"], ignore_index=True), ECL_BUCKETS),
         "charges": _sorted(pd.concat(out["charges"], ignore_index=True), CHARGES),
     }
+    if movements:
+        results["exposure_movements"] = _sorted(pd.concat(movements, ignore_index=True), EXPOSURE_MOVEMENTS)
+        lineage.write_table(ctx, EXPOSURE_MOVEMENTS.filename, results["exposure_movements"])
     for key, spec in (("slices", SLICES), ("stage_flows", STAGE_FLOWS), ("grade_flows", GRADE_FLOWS),
                       ("provisions", PROVISIONS), ("ecl_buckets", ECL_BUCKETS), ("charges", CHARGES)):
         lineage.write_table(ctx, spec.filename, results[key])
@@ -267,6 +281,7 @@ def preparation_analyses(loaded, routed, schedule, results, params, drivers) -> 
 
 def execute(config: RunConfig, runs_dir: Path) -> tuple[object, dict]:
     """R1, the pipeline, then R11. A blocking error still seals the run, as BLOCKED."""
+    config = ingest.specification.resolve(config)
     try:
         ctx = lineage.open_run(config, runs_dir)  # R1
     except BlockingError as exc:
@@ -319,16 +334,27 @@ def _print_result(ctx, manifest: dict) -> int:
 
 
 def cmd_run(args) -> int:
+    if args.specification:
+        explicit = [name for name in ("inputs", "scenarios", "variant", "mode", "terminal_treatment",
+                                     "analysis", "s2_treatment", "horizon_runoff", "lgd_path", "balance_sheet")
+                    if getattr(args, name) is not None]
+        if explicit:
+            raise BlockingError("R2", "INVALID_SPECIFICATION",
+                                f"put calculation settings in the specification, not both sources: {explicit}")
     config = RunConfig(
-        inputs=Path(args.inputs).as_posix(),
-        scenarios=tuple(s.strip() for s in args.scenarios.split(",") if s.strip()),
-        variant=args.variant, mode=args.mode, terminal_treatment=args.terminal_treatment,
-        analysis=args.analysis, s2_treatment=args.s2_treatment, horizon_runoff=args.horizon_runoff,
-        lgd_path=args.lgd_path,
+        inputs=Path(args.inputs).as_posix() if args.inputs else "",
+        scenarios=tuple(s.strip() for s in (args.scenarios or "baseline,adverse").split(",") if s.strip()),
+        variant=args.variant or "core", mode=args.mode or MODE_SYNTHETIC,
+        terminal_treatment=args.terminal_treatment or "z",
+        analysis=args.analysis, s2_treatment=args.s2_treatment or S2_REPRICED,
+        horizon_runoff=args.horizon_runoff or RUNOFF_CONTRACTUAL,
+        lgd_path=args.lgd_path or LGD_ANNUAL,
+        specification=args.specification, balance_sheet=args.balance_sheet or "static",
     )
     try:
         ctx, manifest = execute(config, Path(args.runs_dir))
-    except BlockingError:  # blocked before a run folder exists (R1); already logged
+    except BlockingError as exc:  # preflight/R1: no run folder exists yet
+        LOG.error("%s", exc)
         return EXIT_BLOCKED
     return _print_result(ctx, manifest)
 
@@ -357,9 +383,13 @@ def cmd_rerun(args) -> int:
                        terminal_treatment=cfg.get("terminal_treatment", "z"),
                        s2_treatment=cfg.get("s2_treatment", S2_REPRICED),
                        horizon_runoff=cfg.get("horizon_runoff", RUNOFF_CONTRACTUAL),
-                       lgd_path=cfg.get("lgd_path", LGD_ANNUAL))
+                       lgd_path=cfg.get("lgd_path", LGD_ANNUAL),
+                       balance_sheet=cfg.get("balance_sheet", "static"))
     if cfg.get("analysis"):
         config.analysis = str(run_dir / "data" / "analysis.yaml")
+    if cfg.get("specification"):
+        config.specification = str(run_dir / "data" / "specification.yaml")
+        config.specification_hash = cfg["specification_hash"]
     runs_dir = Path(args.runs_dir) if args.runs_dir else run_dir.parent
     ctx, second = execute(config, runs_dir)
     differing = lineage.compare_outputs(first, second)
@@ -393,20 +423,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="run R1-R11 on one input set")
-    run.add_argument("--inputs", required=True, help="input set folder, inputs/<hash>")
-    run.add_argument("--scenarios", default="baseline,adverse",
+    run.add_argument("--inputs", help="input set folder, inputs/<hash>; may be supplied by the specification")
+    run.add_argument("--specification", help="versioned run specification; do not mix with calculation flags")
+    run.add_argument("--balance-sheet", choices=("static", "dynamic"))
+    run.add_argument("--scenarios",
                      help="comma-separated scenarios (default: baseline,adverse)")
-    run.add_argument("--variant", default="core", help="core, annuity, linear or utilisation")
-    run.add_argument("--terminal-treatment", choices=("z", "parameters"), default="z",
+    run.add_argument("--variant", help="core (default), annuity, linear or utilisation")
+    run.add_argument("--terminal-treatment", choices=("z", "parameters"),
                      help="synthetic Z reversion or June-2026 draft parameter reversion")
-    run.add_argument("--s2-treatment", choices=S2_TREATMENTS, default=S2_REPRICED,
+    run.add_argument("--s2-treatment", choices=S2_TREATMENTS,
                      help="repriced each year-end (default) or held once booked, the draft's paragraph 125")
-    run.add_argument("--horizon-runoff", choices=HORIZON_RUNOFFS, default=RUNOFF_CONTRACTUAL,
+    run.add_argument("--horizon-runoff", choices=HORIZON_RUNOFFS,
                      help="contractual run-off in every lifetime bucket (default), or replaced inside the horizon")
-    run.add_argument("--lgd-path", choices=LGD_PATHS, default=LGD_ANNUAL,
+    run.add_argument("--lgd-path", choices=LGD_PATHS,
                      help="LGD from each year's Z (default), or from the path's worst Z for property-secured books")
     run.add_argument("--analysis", help="optional versioned synthetic analysis YAML, captured at R2")
-    run.add_argument("--mode", default=MODE_SYNTHETIC, choices=MODES,
+    run.add_argument("--mode", choices=MODES,
                      help="synthetic (default); regulatory blocks in v1")
     run.add_argument("--runs-dir", default="runs", help="where run folders go (default: runs)")
     run.add_argument("-q", "--quiet", action="store_true",

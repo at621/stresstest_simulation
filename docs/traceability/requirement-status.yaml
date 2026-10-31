@@ -209,11 +209,14 @@ requirements:
 
   SCN-03:
     status: deferred
-    reason: "unmet: no decision recorded"
+    reason: >-
+      Optional sector drivers and NACE-based segment assignment are implemented (A38), but
+      complete exercise-specific sector paths and calibrated models have not been supplied.
     note: >-
-      Named in code only inside a range. Country GDP, unemployment, property prices and the
-      reference rate drive Z. Sector GDP/GVA and inflation do not: Z has no sector dimension, and
-      the review leaves that to the owner (finding 11).
+      The default remains the original country model. Configured segments can use GDP/GVA,
+      inflation or other supplied variables, including explicit lag history. No missing
+      sector path is inferred, and model estimation remains open.
+    decided_in: [A38]
 
   # --- Exposure and stage migration -------------------------------------------------------------------
 
@@ -234,6 +237,9 @@ requirements:
     reason: >-
       No estimated model exists. The TTC matrices and the Z shift are a synthetic preparation
       method (PD-04), so there is no estimation sample or out-of-time validation to specify.
+    note: >-
+      The configurable model registry executes linear, polynomial/lagged and externally
+      supplied scores independently per segment; this does not constitute estimation or validation.
     decided_in: ['design "Handled elsewhere or later": Met by people and process']
 
   MOD-02:

@@ -99,6 +99,10 @@ def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> 
     """R1: create runs/<run_id>/ with config.yaml. Blocks on regulatory mode (D9)."""
     if config.mode not in MODES:
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, f"unknown mode {config.mode!r}")
+    if config.balance_sheet not in ("static", "dynamic"):
+        raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, "unknown balance-sheet mode")
+    if not config.inputs:
+        raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, "--inputs or specification run.inputs is required")
     if config.terminal_treatment not in ("z", "parameters"):
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, "unknown terminal treatment")
     for name, value, allowed in (("S2 treatment", config.s2_treatment, S2_TREATMENTS),

@@ -25,6 +25,12 @@ Checked by `lint-imports`, configured in `pyproject.toml`:
 Held by the engine and its tests:
 
 - Every input enters through R2. No later step reads a file.
+- Optional specification resolution is an R2 preflight before R1 so the resolved settings enter
+  run identity. R2 captures those same bytes and applies overrides to in-memory tables only.
+- The configurable extension (31 October 2026, A37–A40) routes one model per segment and can
+  adjust performing drawn/undrawn volume before R7. S3 stocks/floors are retained. The R5
+  reference schedule remains common; R8 scales reference EAD to current slices. Dynamic is an
+  internal option, not a relaxation of the EBA static requirement. See the operational specification.
 - R5 is the only step that creates cash flows. They are contractual and the same in every scenario.
 - One Z per segment, country, year and scenario drives the PD matrix, LGD and prepayment. Nothing is stressed twice. The selectable parameter reversion after 2029 (C8), zero prepayment inside the horizon (C15) and trough reading of LGD (C16) are the only departures, and only when selected.
 - Missing is never zero. Every input value carries a status, and a missing value blocks the calculation that needs it.
@@ -92,6 +98,6 @@ v1 is complete. These items wait on the owner, and until they are settled the en
 8. **Draft preparation to production:** reconcile the final 2027 package when released, validate the selected terminal convention, supply approved model/benchmark and capital inputs, extend sovereign fallback where needed, establish the complete climate perimeter and approve official template mappings. The user authorised draft-based synthetic examples on 30 October 2026; this does not close model validation or owner numerical sign-offs. See the [implementation register](implementation-status.md).
 9. **Readings of the draft (C13–C16):** decide S2 repricing or held, run-off inside the horizon, and the LGD path. The defaults stay the design's, and the other readings are selectable. Together they add €99.3m adverse and €31.1m baseline. A default run does not meet ECL-06: only the held reading does. Whichever stands, record it in the design, and amend ECL-11 (C13) through O1.
 10. **NPE calendar (A33):** supply the factors of Article 47c, which could not be retrieved, and the capital team's approval (CAP-09). Only the unsecured 35% of the draft's footnote 75 is sourced.
-11. **Sector stress and calibration:** decide whether Z gains a sector dimension (SCN-03, SCN-08, review finding 11), and set the driver moments and the Z scale from data rather than from the result (A19, review finding 13). Both change results and need a new input set.
+11. **Sector stress and calibration:** explicit NACE-based segment assignment and supplied sector drivers are available in the configurable extension (A38). Supply and validate sector paths, driver moments and Z calibration from data (A19); none are empirically estimated by this extension. Overrides are hash-bound and sealed as an experiment.
 12. **Unmet requirements with no decision:** REG-03, SCP-05, DAT-07, SYN-02, SYN-03, SCN-03, PD-07, LGD-11 and EAD-07, in the [traceability matrix](traceability/traceability-matrix.md). Accept each, or plan it.
 13. **Reproducing on another machine (A36, C18):** decide whether a rerun has to reproduce only on the same machine or within a tolerance, and whether to make `largest_remainder` tie-safe so that every system can compare its book with the committed set.

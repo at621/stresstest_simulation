@@ -36,6 +36,14 @@ Recommended order: fix finding 5 first, because it is small and safe. Then settl
 | 14 | Not ready for the final package | None | Build before the final package |
 | 15 | Polish EUR exposures are not recorded as a conflict | None | Add to `docs/assumptions.md` |
 
+## Configurable extension
+
+The six-goal implementation requested on 31 October 2026 is tracked in the
+[detailed plan](implementation-plan.md) and [operational specification](input-and-run-specification.md).
+It adds optional dynamic volumes, configurable portfolio classifications, per-segment macro
+models, explicit sector assignment, and crisis authoring/replay. The numbered findings below
+retain their historical evidence; production inputs, calibration and owner decisions remain open.
+
 ## Status of the findings
 
 Updated on 31 October 2026. The default run is unchanged: cumulative charges stay €130.4m baseline and €635.0m adverse, and every results table reproduces byte for byte. Reports were added, `analysis_readiness.csv` gained rows, and the summary and workbook carry the new code version. Anything that would change the default, or that departs from the design, is a selectable option or a recorded conflict, so the choice stays with the owner.

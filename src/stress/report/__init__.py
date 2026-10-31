@@ -8,6 +8,7 @@ and the grade-level detail), parameters (Z, PiT matrices, PD curves, LGD by Z, E
 ECL by bucket) and impairment, plus summary.md. Every report carries the run's status label.
 """
 
+import json
 import logging
 from pathlib import Path
 
@@ -76,6 +77,17 @@ def _require(ok, what: str) -> None:
         raise BlockingError(STEP, Block.RECONCILIATION, f"{what} is outside the section 12.3 tolerance")
 
 
+def _json_values(value):
+    """Retain missing data as null; never emit the non-standard JSON NaN token."""
+    if isinstance(value, dict):
+        return {key: _json_values(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_values(item) for item in value]
+    if isinstance(value, (float, np.floating)) and not np.isfinite(value):
+        return None
+    return value
+
+
 # --- the four reports ---------------------------------------------------------------------------
 
 def starting_point(loaded: LoadedInputs, routed: RoutedPortfolio, results: dict,
@@ -136,7 +148,14 @@ def stage_migration(results: dict, portfolio: pd.DataFrame, tol: dict) -> tuple[
             _require(_close(inflow, rec[f"closing_{s}"], tol), f"stage migration {scen} {year} {port} {s}")
         for s in ("S1", "S2"):
             out = sum(v for k, v in rec.items() if k.startswith(f"flow_{s}_"))
-            _require(_close(out, rec[f"opening_{s}"], tol), f"stage outflows {scen} {year} {port} {s}")
+            movement = 0.0
+            if "exposure_movements" in results:
+                moves = results["exposure_movements"]
+                movement = moves.loc[(moves.scenario == scen) & (moves.year == year)
+                                     & (moves.portfolio == port) & (moves.stage == int(s[1])), "gca_change"].sum()
+                rec[f"volume_change_{s}"] = movement
+            _require(_close(out, rec[f"opening_{s}"] + movement, tol),
+                     f"stage outflows {scen} {year} {port} {s}")
         rows.append(rec)
     migration = pd.DataFrame(rows)
     s3 = slices[slices["stage"] == 3].copy()
@@ -181,6 +200,20 @@ def parameter_reports(ctx: RunContext, drivers: Drivers, params: Parameters, res
     lgd_tab["exposure_weighted_lgd"] = lgd_tab["numerator"] / lgd_tab["denominator"]
     out["lgd_by_z.csv"] = lgd_tab
     fp = params.facility.merge(portfolio[["facility_id", "portfolio"]], on="facility_id")
+    if "exposure_movements" in results:
+        actual = results["slices"].loc[results["slices"].stage.lt(3)].groupby(
+            ["scenario", "year", "facility_id"])[["gca", "undrawn"]].sum().rename(
+                columns={"gca": "actual_gca", "undrawn": "actual_undrawn"}).reset_index()
+        fp = fp.merge(actual, left_on=["scenario", "valuation_year", "facility_id"],
+                      right_on=["scenario", "year", "facility_id"], how="left", validate="many_to_one")
+        facts = portfolio.set_index("facility_id")
+        for actual_name, reference, columns in (("actual_gca", "gca", ("balance", "ead_drawn")),
+                                                ("actual_undrawn", "undrawn", ("ead_undrawn",))):
+            denominator = fp.facility_id.map(facts[reference]).to_numpy()
+            factor = np.divide(fp[actual_name].fillna(0).to_numpy(), denominator,
+                               out=np.zeros(len(fp)), where=denominator > 0)
+            fp[list(columns)] = fp[list(columns)].mul(factor, axis=0)
+        fp["ead_total"] = fp.ead_drawn + fp.ead_undrawn
     ead = fp.groupby(["scenario", "valuation_year", "portfolio", "default_bucket"]).agg(
         balance=("balance", "sum"), ead_drawn=("ead_drawn", "sum"), ead_undrawn=("ead_undrawn", "sum"),
         ead_total=("ead_total", "sum"), facilities=("facility_id", "size")).reset_index()
@@ -205,12 +238,16 @@ def impairment(results: dict, portfolio: pd.DataFrame, tol: dict) -> tuple[pd.Da
     slices = results["slices"]
     prov = slices.groupby(["scenario", "year"])[["allowance_on", "provision_off"]].sum()
     closing = charges.groupby(["scenario", "year"])[["closing_on", "closing_off"]].sum()
-    joined = prov.join(closing, how="inner")
+    joined = prov.reindex(closing.index, fill_value=0.0).join(closing)
     _require(_close(joined["allowance_on"], joined["closing_on"], tol), "allowance stock against charges")
+    _require(_close(joined["provision_off"], joined["closing_off"], tol), "off-balance stock against charges")
     by_stage = slices.merge(portfolio[["facility_id", "portfolio"]], on="facility_id").groupby(
         ["scenario", "year", "portfolio", "stage"]).agg(
         gca=("gca", "sum"), undrawn=("undrawn", "sum"), allowance_on=("allowance_on", "sum"),
         provision_off=("provision_off", "sum")).reset_index()
+    if "exposure_movements" in results:
+        grid = _book_grid(results, portfolio, stages=True)
+        by_stage = by_stage.set_index(list(grid.names)).reindex(grid, fill_value=0.0).reset_index()
     by_stage["coverage_numerator"] = by_stage["allowance_on"]
     by_stage["coverage_denominator"] = by_stage["gca"]
     by_stage["coverage_rate"] = by_stage["allowance_on"] / by_stage["gca"]
@@ -239,6 +276,18 @@ def ecl_bridge(results: dict, tol: dict, amount: dict) -> pd.DataFrame:
     return out
 
 
+def _book_grid(results, portfolio, stages=False):
+    """The expected reporting population includes fully extinguished dynamic books."""
+    dimensions = [sorted(results["charges"].scenario.unique()),
+                  sorted(set(results["slices"].year) | set(results["charges"].year)),
+                  sorted(portfolio.portfolio.unique())]
+    names = ["scenario", "year", "portfolio"]
+    if stages:
+        dimensions.append([1, 2, 3])
+        names.append("stage")
+    return pd.MultiIndex.from_product(dimensions, names=names)
+
+
 def check_static_books(results: dict, portfolio: pd.DataFrame, params: Parameters,
                        tol: dict) -> pd.DataFrame:
     """AT-44 per projected year: GCA, nominal undrawn and converted commitments per book, the
@@ -247,10 +296,19 @@ def check_static_books(results: dict, portfolio: pd.DataFrame, params: Parameter
     slices = results["slices"].merge(portfolio[["facility_id", "portfolio"]], on="facility_id")
     slices["converted"] = slices["undrawn"] * slices["facility_id"].map(ccf).fillna(0.0)
     books = slices.groupby(["scenario", "year", "portfolio"])[["gca", "undrawn", "converted"]].sum().reset_index()
+    if "exposure_movements" in results:
+        grid = _book_grid(results, portfolio)
+        books = books.set_index(list(grid.names)).reindex(grid, fill_value=0.0).reset_index()
     books["gca_plus_converted"] = books["gca"] + books["converted"]
     opening = portfolio.groupby("portfolio")[["gca", "undrawn"]].sum()
     for col in ("gca", "undrawn"):
-        _require(_close(books[col], books["portfolio"].map(opening[col]), tol), f"static {col}")
+        expected = books["portfolio"].map(opening[col]).to_numpy()
+        if "exposure_movements" in results:
+            change = results["exposure_movements"].groupby(["scenario", "year", "portfolio"])[f"{col}_change"].sum()
+            index = pd.MultiIndex.from_frame(books[["scenario", "year", "portfolio"]])
+            cumulative = change.reindex(index, fill_value=0.0).groupby(level=[0, 2]).cumsum()
+            expected = expected + cumulative.to_numpy()
+        _require(_close(books[col], expected, tol), f"exposure stock bridge {col}")
     return books
 
 
@@ -321,7 +379,9 @@ def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFram
         total = r.closing_S1 + r.closing_S2 + r.closing_S3
         md.append(f"| {r.scenario} | {r.year} | {r.closing_S1 / MILLION:,.1f} | {r.closing_S2 / MILLION:,.1f} | "
                   f"{r.closing_S3 / MILLION:,.1f} | {total / MILLION:,.1f} |")
-    md += ["", "## Static books per projected year (AT-44, EUR m)", "",
+    book_heading = ("Dynamic books per projected year (EUR m)" if ctx.config.balance_sheet == "dynamic"
+                    else "Static books per projected year (AT-44, EUR m)")
+    md += ["", f"## {book_heading}", "",
            "| Scenario | Year | GCA | Undrawn | Converted | GCA + converted |", "|---|---:|---:|---:|---:|---:|"]
     agg = books.groupby(["scenario", "year"])[["gca", "undrawn", "converted", "gca_plus_converted"]].sum().reset_index()
     for r in agg.itertuples(index=False):
@@ -338,7 +398,7 @@ def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFram
         "",
         ("Reports in this folder: starting_point_reconciliation.csv, stage_migration.csv, "
          "s3_cohorts.csv, grade_migration.csv, impairment.csv, impairment_by_stage.csv, "
-         "static_books.csv and the parameter reports (z_scores.csv, pit_matrices.csv, "
+         f"{ctx.config.balance_sheet}_books.csv and the parameter reports (z_scores.csv, pit_matrices.csv, "
          "pd_curves.csv, portfolio_pd.csv, lgd_by_z.csv, ead_profile.csv, ecl_by_bucket.csv)."),
         "",
     ]
@@ -365,20 +425,43 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     _write(ctx, "grade_migration.csv", grades)
     _write(ctx, "impairment.csv", imp)
     _write(ctx, "impairment_by_stage.csv", by_stage, rates=("coverage_rate",))
-    _write(ctx, "static_books.csv", books)
+    _write(ctx, "dynamic_books.csv" if ctx.config.balance_sheet == "dynamic" else "static_books.csv", books)
+    if "exposure_movements" in results:
+        _write(ctx, "exposure_movements.csv", results["exposure_movements"])
     rates = ("z", "probability", "conditional_pd", "marginal_pd", "survival", "cumulative_pd",
              "one_year_pd", "exposure_weighted_lgd", "value", "mean", "sd", "beta", "contribution",
              "adverse_weight", "annual_change", "index")
     param_tables = parameter_reports(ctx, drivers, params, results, port, loaded)
     for name, table in param_tables.items():
         _write(ctx, name, table, rates=rates)
-    LOG.info("reconciliations within the section 12.3 tolerances: starting point, static books, "
+    LOG.info("reconciliations within the section 12.3 tolerances: starting point, exposure stocks, "
              "stage flows, charge bridge, ECL by bucket")
     lines = summary_lines(ctx, imp, books, migration, years)
     lines += data_gaps(routed, start)
     if _selected(ctx):  # the headline reaches the console, the manifest and the summary
         lines.append(f"Selected method, not the design's default: {_selected(ctx)}")
     write_summary(ctx, lines, imp, books, migration, start, routed.rejections, loaded)
+    effective = {
+        "schema_version": 1, "input_set_hash": ctx.input_set_hash,
+        "run": {k: v for k, v in ctx.config.as_dict().items() if k not in ("inputs", "analysis", "specification")},
+        "parameter_set": ps, "scenarios": loaded.scenario_meta,
+        "scenario_values": loaded.scenario_values.to_dict(orient="records"),
+        "specification": {k: v for k, v in loaded.specification.items() if k != "run"},
+        "preparation_analysis": loaded.analysis,
+        "known_methodology_conflicts": ["C9", "C10", "C11", "C13", "C14", "C15", "C16"],
+        "parameter_exposure_basis": "opening facility reference; R8 scales each grade slice to its current drawn/undrawn stock",
+    }
+    (ctx.reports_dir / "effective_specification.json").write_text(
+        json.dumps(_json_values(effective), indent=2, sort_keys=True, default=str, allow_nan=False),
+        encoding="utf-8", newline="\n")
+    models = []
+    for segment, settings in ps["segments"].items():
+        model_id = settings.get("macro_model", "legacy_linear_z")
+        model = ps.get("macro_models", {}).get(model_id, {})
+        models.append({"segment": segment, "model_id": model_id,
+                       "kind": model.get("kind", "linear"), "version": model.get("version", ps["version"]),
+                       "source": model.get("source", ps["parameter_set_id"])})
+    _write(ctx, "macro_models.csv", pd.DataFrame(models))
     meta = workbook_meta(ctx, loaded, routed, results, years)
     write_workbook(ctx.reports_dir / WORKBOOK_FILE, meta, {
         "impairment": imp, "by_stage": by_stage, "migration": migration, "cohorts": cohorts,
@@ -389,10 +472,13 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     extra = portfolio_diagnostics(port, loaded.obligors.data, loaded.facilities.data, results["slices"])
     extra["ecl_bridge"] = bridge
     extra["ltv"] = stressed_ltv(port, loaded.facilities.data.assign(ltv_status=loaded.facilities.status["ltv"]),
-                                results["slices"], drivers.indices)
+                                results["slices"], drivers.indices, ctx.config.balance_sheet == "dynamic")
     extra["maturity"] = average_maturity(port, results["slices"], schedule)
-    extra["template_replica"] = template_replica(results["slices"], results["stage_flows"], params.lgd_of_year,
-                                                 drivers.z, port, years, tol)
+    if ctx.config.balance_sheet == "static":
+        extra["template_replica"] = template_replica(results["slices"], results["stage_flows"], params.lgd_of_year,
+                                                     drivers.z, port, years, tol,
+                                                     {s: p["template_class"] for s, p in ps["segments"].items()
+                                                      if "template_class" in p})
     if "plausibility" in loaded.analysis and ADVERSE in ctx.scenarios:
         extra["plausibility"] = plausibility_sheet(loaded.analysis["plausibility"], imp, by_stage, loaded,
                                                    drivers.indices, years)
@@ -471,6 +557,13 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         ("R11", "Every output is hashed in manifest.json; `stress rerun --run <folder>` must reproduce them",
          "section 12.2 reproducibility", "checked by the rerun command"),
     ]
+    if config.balance_sheet == "dynamic":
+        checks = [(step, ("Opening exposure + supplied volume changes = migration opening; "
+                          "credit migration conserves that exposure" if step == "R7" else description),
+                   refs, result) for step, description, refs, result in checks]
+        checks = [(step, description.replace("outflows equal opening stocks", "outflows equal opening stocks plus volume changes")
+                   .replace("static books per year", "dynamic exposure bridge per year"), refs, result)
+                  for step, description, refs, result in checks]
     terminal = ps["terminal_rule"]
     return {
         "status": ctx.status_label,
@@ -484,6 +577,7 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "horizon": f"starting point {ps['horizon']['snapshot_date']}, projection {min(years)}-{max(years)}",
         "years": years,
         "snapshot_date": str(ps["horizon"]["snapshot_date"]),
+        "balance_sheet": config.balance_sheet,
         "last_reported_year": int(terminal["last_scenario_year"]) + int(terminal["reversion_years"]) + 1,
         "portfolio_names": _portfolio_names(routed.portfolio),
         "checks": checks,

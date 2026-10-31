@@ -83,8 +83,8 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
 
     fac_ids = facts.index[facts["route"] == ROUTE_PERFORMING]
     pos = {f: i for i, f in enumerate(fac_ids)}
-    rows = perf_prev["facility_id"].map(pos).to_numpy()
-    cols = perf_prev["grade"].map(rank).to_numpy()
+    rows = perf_prev["facility_id"].map(pos).to_numpy(dtype=int)
+    cols = perf_prev["grade"].map(rank).to_numpy(dtype=int)
     gca = np.zeros((len(fac_ids), n))
     und = np.zeros((len(fac_ids), n))
     np.add.at(gca, (rows, cols), perf_prev["gca"].to_numpy())
@@ -166,6 +166,9 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
     carried = s3_prev[["facility_id", "slice", "stage", "grade", "entry_year", "origin_stage",
                        "gca", "undrawn", "allowance_on", "provision_off"]]
     slices = pd.concat([performing, *new_s3, carried], ignore_index=True)
+    # After complete dynamic runoff, empty frames must retain numeric amount types.
+    for amount in ("gca", "undrawn", "allowance_on", "provision_off"):
+        slices[amount] = slices[amount].astype(float)
     slices["origination_grade"] = slices["facility_id"].map(facts["origination_grade"])
     slices["scenario"] = scenario
     slices["year"] = year
@@ -188,7 +191,7 @@ def project_year(previous: pd.DataFrame, pit: pd.DataFrame, portfolio: pd.DataFr
     stock = slices.groupby("stage")["gca"].sum() / 1_000_000
     new = [frame["gca"].sum() / 1_000_000 for frame in new_s3]
     LOG.info("%s %d: GCA S1 %.1fm, S2 %.1fm, S3 %.1fm; new S3 %.1fm (from S1 %.1fm, from S2 %.1fm); "
-             "%s facilities replaced; static balance holds", scenario, year, stock.get(1, 0.0),
+             "%s facilities replaced; migration conserves exposure", scenario, year, stock.get(1, 0.0),
              stock.get(2, 0.0), stock.get(3, 0.0), sum(new), new[0], new[1],
              f"{int(slices.drop_duplicates('facility_id')['replaced'].sum()):,}")
     grade_flows = pd.concat(grade_flow_frames, ignore_index=True)

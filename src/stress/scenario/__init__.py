@@ -12,6 +12,7 @@ import pandas as pd
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import SYNTHETIC, LoadedInputs
 from stress.contracts.run import BASELINE, RunContext
+from stress.contracts.specification import invalid, terminal_weight
 from stress.contracts.tables import (
     DRIVER_CONTRIBUTIONS,
     INDICES,
@@ -21,7 +22,8 @@ from stress.contracts.tables import (
     Z_SOURCE_REVERSION,
     Drivers,
 )
-from stress.scenario.kernels import STEP, adverse_weight, compound_index, reverted_z, z_score
+from stress.scenario.kernels import STEP, compound_index, z_score
+from stress.scenario.models import evaluate_model
 
 LOG = logging.getLogger("stress.R4")
 
@@ -75,6 +77,17 @@ def build_drivers(loaded: LoadedInputs, ctx: RunContext) -> Drivers:
             drivers = ps["segments"][segment]["z_drivers"]
             for country in countries:
                 for year in years:
+                    model_id = ps["segments"][segment].get("macro_model")
+                    if model_id:
+                        model = ps.get("macro_models", {}).get(model_id)
+                        if model is None:
+                            invalid(f"unknown macro model {model_id} for {segment}")
+                        z, terms = evaluate_model(model, index, scenario, country, year)
+                        z_rows.append((segment, country, scenario, year, z, Z_SOURCE_PATH, 1.0))
+                        contrib_rows.extend((segment, country, scenario, year, *term) for term in terms)
+                        if year == last:
+                            z_last[(segment, country, scenario)] = z
+                        continue
                     x = {}
                     for name in drivers:
                         value, status = index.get((scenario, name, country, year), (None, "missing"))
@@ -93,9 +106,9 @@ def build_drivers(loaded: LoadedInputs, ctx: RunContext) -> Drivers:
                         z = z_last[(segment, country, BASELINE)]
                         z_rows.append((segment, country, scenario, year, z, Z_SOURCE_FLAT, 1.0))
                     else:
-                        a = adverse_weight(year, last, reversion)
-                        z = reverted_z(year, z_last[(segment, country, scenario)],
-                                       z_last[(segment, country, BASELINE)], last, reversion)
+                        a = terminal_weight(ps, scenario, year)
+                        z = (a * z_last[(segment, country, scenario)]
+                             + (1 - a) * z_last[(segment, country, BASELINE)])
                         source = Z_SOURCE_REVERSION if a > 0 else Z_SOURCE_FLAT
                         z_rows.append((segment, country, scenario, year, z, source, a))
     z_table = pd.DataFrame(z_rows, columns=list(Z_SCORES.all_columns))
@@ -106,8 +119,8 @@ def build_drivers(loaded: LoadedInputs, ctx: RunContext) -> Drivers:
         by_year = path.groupby("year")["z"].mean()
         LOG.info("%s Z by year (mean over %d segments): %s", scenario, len(ps["segments"]),
                  ", ".join(f"{y} {v:+.2f}" for y, v in by_year.items()))
-    LOG.info("Z extended to %d by the terminal rule: adverse reverts to baseline %d over %d years",
-             last_bucket, last, reversion)
+    LOG.info("Z extended to %d; default reversion to baseline %d over %d years; scenario policies: %s",
+             last_bucket, last, reversion, ps.get("terminal_policies", {}) or "none")
     indices = property_indices(loaded, requested, years)
     for (scenario, variable), part in indices[indices["year"] == last].groupby(["scenario", "variable"]):
         LOG.info("%s %s %d: %.3f", scenario, variable, last, part["index"].mean())

@@ -82,21 +82,23 @@ def _next_loss_rate(p: pd.DataFrame, weight: pd.Series, last: int) -> pd.Series:
         elif scenario == BASELINE:
             out[scenario, segment, year] = rate[scenario, segment, year]
         else:
-            a = weight[segment]
+            a = weight.loc[(scenario, segment)]
             out[scenario, segment, year] = a * rate[scenario, segment, year] + (1 - a) * rate[BASELINE, segment, year]
     return pd.Series(out).rename_axis(p.index.names)
 
 
 def template_replica(slices: pd.DataFrame, flows: pd.DataFrame, lgd: pd.DataFrame, z: pd.DataFrame,
-                     portfolio: pd.DataFrame, years: list[int], tol: dict) -> pd.DataFrame:
+                     portfolio: pd.DataFrame, years: list[int], tol: dict,
+                     template_classes: dict | None = None) -> pd.DataFrame:
     """Reported parameters, template provisions and the engine's on-balance stock per segment."""
     segment = portfolio.set_index("facility_id")["segment"]
     book = slices.assign(segment=slices["facility_id"].map(segment))
     last = max(years)
     p = _parameters(book, flows, lgd, years)
-    terminal = z[(z["year"] == last + 1) & (z["scenario"] != BASELINE)].groupby("segment")["adverse_weight"].first()
+    terminal = z[(z["year"] == last + 1) & (z["scenario"] != BASELINE)].groupby(
+        ["scenario", "segment"])["adverse_weight"].first()
     stressed = p[p.index.get_level_values("scenario") != BASELINE]
-    missing = set(stressed.index.get_level_values("segment")) - set(terminal.index)
+    missing = set(stressed.index.droplevel("year")) - set(terminal.index)
     if missing:
         raise BlockingError(STEP, "MISSING_INPUT", f"no terminal weight for {sorted(missing)}")
     p["loss_rate_s1_next"] = _next_loss_rate(p, terminal, last)
@@ -132,7 +134,7 @@ def template_replica(slices: pd.DataFrame, flows: pd.DataFrame, lgd: pd.DataFram
         p[f"gap_{name}"] = _ratio(p[f"template_{name}"], p[f"engine_{name}"]) - 1.0
     p["gap_s3_old"] = _ratio(p["old_s3_box_9"], p["engine_s3_old"]) - 1.0
     out = p.reset_index()
-    out["template_class"] = out["segment"].map(TEMPLATE_CLASS)
+    out["template_class"] = out["segment"].map({**TEMPLATE_CLASS, **(template_classes or {})})
     if out["template_class"].isna().any():
         raise BlockingError(STEP, "MISSING_INPUT", "a segment has no Table 4 class")
     return out
