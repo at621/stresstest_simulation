@@ -43,13 +43,13 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 1. The command prints the run ID, the status and two headline lines. Exit code 0 means the run is sealed SYNTHETIC. Exit code 2 means it blocked: the folder is still sealed, with status BLOCKED, and the step, reason code and message are in `manifest.json` under `blocked`.
 2. Open `runs/<run_id>/results/reports/stress_report.xlsx` for the results by portfolio, baseline against adverse. Read `runs/<run_id>/run.log` for what each step did and how long it took. `summary.md` (or `uv run stress report --run runs/<run_id>`) gives the headline in text.
 3. Check `rejections.parquet`: it is empty for the committed input set. Any row is a rejected record with its reason code.
-4. Run `uv run stress rerun --run runs/<run_id>`. It must report "reproduced". Exit code 3 lists the outputs whose hash differs.
+4. Run `uv run stress rerun --run runs/<run_id>` on the machine that made the run (C18). It must report "reproduced". Exit code 3 lists the outputs whose hash differs.
 
 ### After changing the requirements or the parameter set
 
 1. Requirements changed: run `uv run python -m foundation.transcribe`. Check the diff of `docs/spec/`, then have the `change-reviewer` agent and the owner approve it (GOV-03).
-2. Parameter set or generator changed: run `uv run python -m foundation.synth` on Windows, because a rebuild on Linux gives a different hash (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
-3. Run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces`, which runs on Windows only, fails until the new input set is in `inputs/`.
+2. Parameter set or generator changed: run `uv run python -m foundation.synth` on the machine that built the current input set. The hash depends on the operating system and the CPU's BLAS kernel, and a rebuild elsewhere can give a different book, not only different bytes (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
+3. Run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces` fails until the new input set is in `inputs/`. It runs on Windows only and passes only under the kernel that built the set, so CI cannot catch a missing rebuild.
 4. Compare the old and new results with `uv run stress compare --base runs/<old> --new runs/<new>` (version-change control). It prints the impairment differences and keeps the full report in `runs/comparisons/<old>__<new>/`: `summary.md`, the differences in impairment, stage stocks and coverage, PD and LGD, and `comparison.json`, which ties them to both runs. Sealed runs are write-once, so the report sits beside them; `--out` chooses another folder outside them.
 
 ### Gates

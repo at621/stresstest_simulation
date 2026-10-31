@@ -1,7 +1,7 @@
 """Input sets built by the tests.
 
-``full_input_set`` runs O2-O4 into a temporary folder (deterministic, so it has the same hash
-as the committed set). ``mini`` takes a few facilities of every segment and stage from it;
+``full_input_set`` runs O2-O4 into a temporary folder (deterministic on one machine, so it has
+the committed set's hash only where that was built: A36). ``mini`` takes a few facilities of every segment and stage from it;
 tests then change one field to plant a defect and write the result as a new hashed input set.
 """
 

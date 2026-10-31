@@ -1,6 +1,8 @@
 """Unit tests of the one-off steps O1-O4."""
 
+import json
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -9,6 +11,7 @@ import yaml
 from foundation import matrices as o2
 from foundation.transcribe import check
 from foundation.transcribe.markdown import check_transcribed, numbers
+from stress.ingest import check_hashes
 from tests import builders
 from tests.support import INPUTS_DIR, SPEC_DIR, spec_yaml
 
@@ -85,13 +88,21 @@ def test_generator_is_deterministic(full_inputs, tmp_path):
 
 
 @pytest.mark.req("SYN-PAR-08")
-@pytest.mark.skipif(sys.platform != "win32", reason="the committed set was built on Windows (A36)")
+@pytest.mark.skipif(sys.platform != "win32", reason="the hash depends on the system and the BLAS kernel (A36)")
 def test_the_committed_set_is_what_the_generator_produces(full_inputs):
-    # The committed input set is the one O2-O4 produce now, byte for byte.
+    # The committed input set is the one O2-O4 produce now, byte for byte, under the kernel that built it.
     committed = INPUTS_DIR / full_inputs.name
     assert committed.exists(), f"inputs/ holds no set with the hash O2-O4 produce now ({full_inputs.name})"
     for name in ("facilities.parquet", "opening_provisions.parquet", "parameter_set.yaml"):
         assert (committed / name).read_bytes() == (full_inputs / name).read_bytes(), name
+
+
+@pytest.mark.req("OPS-01")
+def test_the_committed_set_passes_r2_on_every_system():
+    folder = INPUTS_DIR / "d62d0386f2c5256e"
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    assert folder.name == manifest["input_set_hash"][:16]
+    check_hashes(SimpleNamespace(input_dir=folder, input_set_hash=manifest["input_set_hash"]), manifest)
 
 
 @pytest.mark.req("SYN-PAR-09")

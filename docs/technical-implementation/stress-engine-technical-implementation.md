@@ -158,7 +158,7 @@ These rules come from `docs/architecture.md` §2. The code and its tests enforce
 | `amount` | absolute EUR 0.01 | Individual test-case amounts |
 | `aggregate` | max(EUR 1, 1e-8 × amount) | Reconciliations |
 
-**Determinism and hashing.** The engine uses no random numbers; the only randomness is in O3, with a fixed seed. Every step hands over its tables sorted by key, the CLI sorts concatenated results again with a stable sort, and Parquet is written with fixed settings. The run ID and times are kept out of all stored rows (A4), so a rerun writes byte-identical outputs. Hashes are SHA-256 throughout, at three levels:
+**Determinism and hashing.** The engine uses no random numbers; the only randomness is in O3, with a fixed seed. Every step hands over its tables sorted by key, the CLI sorts concatenated results again with a stable sort, and Parquet is written with fixed settings. The run ID and times are kept out of all stored rows (A4), so a rerun on the same machine writes byte-identical outputs (C18). Hashes are SHA-256 throughout, at three levels:
 
 - **Input set:** the hash of the sorted (file, file hash) pairs, of which the folder name keeps the first 16 hex characters.
 - **Run:** every input copy and output file hashed in the manifest.
@@ -892,7 +892,7 @@ The suite has 121 tests in three folders. Hypothesis property tests and parametr
 
 | Fixture | What it provides |
 |---|---|
-| `full_inputs` | O2–O4 rebuilt into a temporary folder. The generator is deterministic, so this has the same hash as the committed input set. |
+| `full_inputs` | O2–O4 rebuilt into a temporary folder. The generator is deterministic on one machine, so this has the committed input set's hash only where that set was built (A36). |
 | `core_run` | One full core run of both scenarios on the full synthetic book |
 | `mini` | A few facilities per segment and stage plus one revolver per book with commitments. Tests change one field to plant a defect and write a new hashed input set. |
 | `reference_runs` | Two P03 S1 revolvers carrying the AT-34 and AT-42 inputs, run in the `core` and `utilisation` variants |
@@ -920,7 +920,7 @@ AT-48, AT-51 and AT-52 test the rule each case states. Their numerical expectati
 | File | What it proves |
 |---|---|
 | `test_kernels.py` (25) | Z is zero at the means and linear; a missing driver value blocks; reversion weights and path; indices compound; schedule identities; like-for-like replacement; PiT validity, Z = 0 and ρ = 0 returning the TTC matrix, and the one-grade closed form of the D column; PD-03 identities; curves from matrix products; stub PD; LGD bounds; not-prepaid share; EAD bounds and the CCF contract; stage flows conserve the book; stage of rank, with and without a qualitative trigger; floors never release; ECL as a sum of products; charge as stock change; REA floor kernels |
-| `test_foundation.py` (7) | O1 files are current; transcription rejects numbers not in the source; calibration hits every stage target; the reported stage is the PD test or a trigger; the generator is deterministic and matches the committed set; opening allowances follow the generator formula; the parameter set documents its status |
+| `test_foundation.py` (9) | O1 files are current; transcription rejects numbers not in the source; calibration hits every stage target; the reported stage is the PD test or a trigger; the generator is deterministic; it reproduces the committed set, on Windows only; the committed set passes R2's hash check; opening allowances follow the generator formula; the parameter set documents its status |
 | `test_run_frame.py` (7) | Duplicate or missing key blocks; value status distinguishes missing, zero and supplied; run ID and write-once; a sealed run is labelled and read-only; a tampered input blocks; a scenario value without unit blocks; raw files are kept unchanged |
 | `test_reporting.py` (4) | The run log records every step; a blocked run's log names the reason; the Excel report matches the engine; the workbook is byte-reproducible |
 | `test_terminal_s1.py` (1) | The run interpolates the 2030 S1 loss rate |

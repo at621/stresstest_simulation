@@ -137,7 +137,7 @@ A run takes about 25 seconds and writes `runs/<run_id>/` (see [runs/README.md](r
 - **`results/reports/stress_report.xlsx`**: the Excel report. Sheets: Summary (key results and charts), Portfolios (the book at end-2026), Results by portfolio (baseline and adverse side by side, with differences), Impairment, Stage migration, Coverage by stage, S3 cohorts, Parameters, Starting point, Checks and Notes. Amounts are in EUR millions. Engine results are written as values (blue) and every derived figure is an Excel formula (black).
 - **`run.log`**: every step's facts, checks and timings. The console shows the same lines while the run works; use `-q` for warnings only. Variants: `core` (bullet, fixed CCF), `annuity`, `linear` and `utilisation` (the AT-35 CCF sensitivity). Exit codes: 0 sealed, 2 blocked (the folder is sealed with status BLOCKED and the reason), 3 rerun not reproduced.
 
-To rebuild the one-off material: `uv run python -m foundation.transcribe` (O1, `--check` to compare) and `uv run python -m foundation.synth` (O2–O4, writes a new `inputs/<hash>/` when anything changes).
+To rebuild the one-off material: `uv run python -m foundation.transcribe` (O1, `--check` to compare) and `uv run python -m foundation.synth` (O2–O4, writes a new `inputs/<hash>/` when anything changes, and that includes the machine: see A36 in [docs/assumptions.md](docs/assumptions.md)).
 
 ## Making changes
 
