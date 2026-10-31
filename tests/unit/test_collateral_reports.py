@@ -51,9 +51,11 @@ def test_ltv_blocks_rather_than_guess_an_index():
 
 @pytest.mark.req("RPT-05")
 @pytest.mark.parametrize("change", [{"ltv": [0.8, np.nan, np.nan]},
-                                    {"ltv": [0.8, 0.96, np.nan], "ltv_status": ["supplied", "supplied", "missing"]}])
-def test_a_missing_ltv_blocks_rather_than_reads_as_unsecured(change):
-    with pytest.raises(BlockingError, match="no LTV"):
+                                    {"ltv": [0.8, 0.96, np.nan], "ltv_status": ["supplied", "supplied", "missing"]},
+                                    {"ltv": [0.8, 0.96, np.nan], "ltv_status": ["supplied", "missing", "not_applicable"]},
+                                    {"ltv": [0.8, 0.96, 0.5], "ltv_status": ["supplied", "supplied", "not_applicable"]}])
+def test_an_ltv_that_cannot_be_used_blocks(change):
+    with pytest.raises(BlockingError, match="no usable LTV"):
         stressed_ltv(PORTFOLIO, FACILITIES.assign(**change), slices(2027), INDICES)
 
 

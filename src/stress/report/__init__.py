@@ -17,7 +17,14 @@ import pandas as pd
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
 from stress.contracts.preparation import ANALYSIS_RATES
-from stress.contracts.run import ADVERSE, RUNOFF_REPLACED, S2_HELD, RunContext
+from stress.contracts.run import (
+    ADVERSE,
+    LGD_TROUGH,
+    RUNOFF_REPLACED,
+    S2_HELD,
+    TERMINAL_Z,
+    RunContext,
+)
 from stress.contracts.tables import METHOD_S2_HELD, Drivers, Parameters, RoutedPortfolio
 from stress.report import comparison
 from stress.report.assessment import (
@@ -210,20 +217,22 @@ def impairment(results: dict, portfolio: pd.DataFrame, tol: dict) -> tuple[pd.Da
     return tab.reset_index(drop=True), by_stage
 
 
-def ecl_bridge(results: dict, tol: dict) -> pd.DataFrame:
+def ecl_bridge(results: dict, tol: dict, amount: dict) -> pd.DataFrame:
     """ECL-09: ECL by default bucket, plus what the held reading of S2 keeps (C14), equals the
-    booked performing provisions. Only a held slice may differ from its raw value."""
+    booked performing provisions in every scenario and year. Only a held slice may differ from
+    its raw value, and that check is per slice, so it takes the amount tolerance."""
     perf = results["provisions"][results["provisions"]["stage"] < 3]
     held = perf["method"] == METHOD_S2_HELD
-    _require(_close(perf.loc[~held, ["allowance_on", "provision_off"]], perf.loc[~held, ["raw_on", "raw_off"]], tol),
-             "performing provisions against their raw value")
+    gap = perf.loc[~held, ["allowance_on", "provision_off"]].to_numpy() - perf.loc[~held, ["raw_on", "raw_off"]].to_numpy()
+    _require(np.abs(gap) <= amount["abs"], "performing provisions against their raw value")
     rows = perf.assign(held_on=(perf["allowance_on"] - perf["raw_on"]).where(held, 0.0),
                        held_off=(perf["provision_off"] - perf["raw_off"]).where(held, 0.0))
     keys = ["scenario", "year"]
     booked = rows.groupby(keys)[["held_on", "held_off", "allowance_on", "provision_off"]].sum()
     buckets = results["ecl_buckets"].rename(columns={"valuation_year": "year"}).groupby(keys)[
         ["ecl_on", "ecl_off"]].sum()
-    out = buckets.join(booked, how="inner").reset_index()
+    _require(buckets.index.sort_values().equals(booked.index.sort_values()), "ECL buckets for every scenario and year")
+    out = buckets.join(booked).reset_index()
     _require(_close(out["ecl_on"] + out["held_on"], out["allowance_on"], tol), "ECL by bucket against provisions")
     _require(_close(out["ecl_off"] + out["held_off"], out["provision_off"], tol), "off-balance ECL by bucket")
     return out
@@ -347,7 +356,7 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     start = starting_point(loaded, routed, results, tol)
     migration, cohorts, grades = stage_migration(results, port, tol)
     imp, by_stage = impairment(results, port, tol)
-    bridge = ecl_bridge(results, tol)
+    bridge = ecl_bridge(results, tol, ps["tolerances"]["amount"])
 
     _write(ctx, "starting_point_reconciliation.csv", start)
     _write(ctx, "stage_migration.csv", migration)
@@ -423,6 +432,8 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     config = ctx.config
     schedules = ("Contractual schedules from balance, rate and maturity; each ends at zero"
                  + ("; no run-off inside the horizon (C15)" if config.horizon_runoff == RUNOFF_REPLACED else ""))
+    z_note = (("; adverse property-secured LGD takes the path's worst Z (C16)" if config.lgd_path == LGD_TROUGH else "")
+              + ("; after 2029 the parameters revert, not Z (C8)" if config.terminal_treatment != TERMINAL_Z else ""))
     buckets = ("ECL by default bucket plus the held S2 amount equals the performing provisions (C14)"
                if config.s2_treatment == S2_HELD else "ECL by default bucket equals the performing provisions")
     rejected = "passed: no record rejected" if rej.empty else (
@@ -442,10 +453,10 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         ("R3", "Every accepted facility's grade explains its reported stage under the SICR rule",
          "MIG-07, SYN-PAR-08", f"passed: {n_fac:,} facilities accepted"),
         ("R4", ("Scenarios labelled SYNTHETIC; every driver value and Z coefficient present; "
-         "adverse reverts toward baseline"), "SCN-04, SCN-08, ECL-10", "passed"),
+         f"adverse reverts toward baseline{z_note}"), "SCN-04, SCN-08, ECL-10", "passed"),
         ("R5", schedules, "EAD-10", "passed"),
         ("R6", ("Every PiT row sums to one; PD-03 identities on every curve; every LGD in [0, 1]; "
-         "prepayment in EAD only"), "PD-10, PD-03, LGD-12, EAD-11", "passed"),
+         f"prepayment in EAD only{z_note}"), "PD-10, PD-03, LGD-12, EAD-11", "passed"),
         ("R7", "Static balance: GCA and undrawn stay at end-2026 levels for every facility and year",
          "EXP-01, EAD-05, REG-02", "passed"),
         ("R8", "S3 allowances floored per exposure, never on the total",

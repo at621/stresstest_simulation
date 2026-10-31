@@ -6,7 +6,7 @@ import pandas as pd
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
 from stress.contracts.inputs import SCENARIO_UNITS
-from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, require_ltv
+from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, usable_ltv
 from stress.contracts.run import ADVERSE
 
 
@@ -84,8 +84,7 @@ def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.D
     """Paragraph 69 and A31: GCA over collateral value, the value following the scenario's price
     index from the snapshot. GCA is static, so a loan's LTV is its opening LTV over that index."""
     in_book = facilities[facilities["facility_id"].isin(portfolio["facility_id"])]
-    require_ltv(in_book)
-    secured = in_book.loc[in_book["ltv"].notna(), ["facility_id", "ltv", "collateral_type"]].copy()
+    secured = in_book.loc[usable_ltv(in_book), ["facility_id", "ltv", "collateral_type"]].copy()
     secured["variable"] = secured["collateral_type"].map(COLLATERAL_INDEX)
     if secured["variable"].isna().any():
         raise BlockingError("report", "MISSING_INPUT", "no price index for a collateral type")

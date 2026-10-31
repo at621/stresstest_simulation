@@ -15,7 +15,7 @@ import pandas as pd
 
 from stress.contracts.checks import number, required
 from stress.contracts.errors import BlockingError
-from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, require_ltv
+from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, usable_ltv
 from stress.contracts.tables import SLICE_S3_ORIGINAL
 
 STEP = "capital"
@@ -43,7 +43,7 @@ def _exposures(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame, facili
     """S3 slices in the scope of paragraph 563, with their years as NPE at each year-end."""
     wanted = ["facility_id", "origination_date", "default_date", "ltv", "collateral_type"]
     in_book = facilities[facilities["facility_id"].isin(portfolio["facility_id"])]
-    require_ltv(in_book)
+    usable_ltv(in_book)
     facts = portfolio[["facility_id", "portfolio", "country"]].merge(in_book[wanted], on="facility_id",
                                                                      validate="one_to_one")
     book = slices.loc[slices["stage"].eq(3), ["scenario", "year", "facility_id", "slice", "entry_year", "gca",

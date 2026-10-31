@@ -70,17 +70,14 @@ def test_a_missing_ltv_blocks_rather_than_reads_as_unsecured(change):
     gap = FACILITIES.copy()
     for column, value in change.items():
         gap.loc[gap["facility_id"] == "C", column] = value
-    with pytest.raises(BlockingError, match="no LTV"):
+    with pytest.raises(BlockingError, match="no usable LTV"):
         npe_backstop(CALENDAR, book(), PORTFOLIO, gap, INDICES)
 
 
 @pytest.mark.req("CAP-09")
-def test_a_facility_outside_the_book_cannot_stop_the_report():
-    rejected = pd.concat([FACILITIES, FACILITIES[FACILITIES["facility_id"] == "A"]], ignore_index=True)
-    assert not npe_backstop(CALENDAR, book(), PORTFOLIO, rejected.drop_duplicates(), INDICES).empty
-    duplicate = pd.concat([FACILITIES, FACILITIES.assign(facility_id="Z", ltv=np.nan,
-                                                         ltv_status="missing")], ignore_index=True)
-    assert not npe_backstop(CALENDAR, book(), PORTFOLIO, duplicate, INDICES).empty
+def test_a_rejected_facility_cannot_stop_the_report():
+    rejected = FACILITIES[FACILITIES["facility_id"] == "A"].assign(facility_id="Z", ltv=np.nan, ltv_status="missing")
+    assert not npe_backstop(CALENDAR, book(), PORTFOLIO, pd.concat([FACILITIES, rejected]), INDICES).empty
 
 
 @pytest.mark.req("CAP-09")

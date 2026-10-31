@@ -12,6 +12,7 @@ recompute or edit it.
     run.report("stage_migration")                     # results/reports/stage_migration.csv
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -246,6 +247,12 @@ def _sealed(path: Path) -> bool:
     return (path / RUN_MANIFEST).is_file()
 
 
+def _selected(config: dict) -> str:
+    """The readings of the draft a run selected. An older manifest lacks the newer options."""
+    known = {field.name for field in dataclasses.fields(RunConfig)}
+    return ",".join(RunConfig(**{k: v for k, v in config.items() if k in known}).selected_methods().values())
+
+
 def list_runs() -> pd.DataFrame:
     """Every run folder, oldest first. A folder without a manifest was never sealed."""
     rows = []
@@ -256,6 +263,7 @@ def list_runs() -> pd.DataFrame:
         m = read_manifest(path)
         rows.append({
             "run_id": m["run_id"], "status": m["status"], "variant": m["config"]["variant"],
+            "selected": _selected(m["config"]),
             "scenarios": ",".join(m["config"]["scenarios"]), "input_set": m["input_set_hash"][:16],
             "code_version": m["code_version"], "created_at": m["created_at"],
             "outputs_digest": m["outputs_digest"][:16],
@@ -268,7 +276,7 @@ def open_run(ref: str = "latest", variant: str = "core") -> Run:
     if ref == "latest":
         runs = list_runs()
         runs = runs[(runs["status"] != "UNSEALED") & (runs["status"] != STATUS_BLOCKED)
-                    & (runs["variant"] == variant) & ~runs["run_id"].str.contains("+", regex=False)]
+                    & (runs["variant"] == variant) & (runs["selected"] == "")]
         if runs.empty:
             raise FileNotFoundError(f"no sealed {variant} run in {RUNS_DIR.as_posix()}")
         ref = runs.sort_values(["created_at", "run_id"]).iloc[-1]["run_id"]
@@ -300,7 +308,9 @@ def reproduction(run: Run) -> pd.DataFrame:
         if not _sealed(path):
             continue
         other = read_manifest(path)
-        same = all(other["config"][k] == run.config[k] for k in ("variant", "scenarios"))
+        same = (all(other["config"][k] == run.config[k] for k in ("variant", "scenarios"))
+                and _selected(other["config"]) == _selected(run.config)
+                and bool(other["config"].get("analysis")) == bool(run.config.get("analysis")))
         if not same or other["input_set_hash"] != run.manifest["input_set_hash"]:
             continue
         differing = compare_outputs(other, run.manifest)

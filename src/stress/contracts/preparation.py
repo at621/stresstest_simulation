@@ -3,7 +3,7 @@
 import pandas as pd
 
 from stress.contracts.errors import BlockingError
-from stress.contracts.status import ValueStatus
+from stress.contracts.status import USABLE_STATUSES, ValueStatus
 from stress.contracts.tables import TableSpec
 
 # Paragraph 69 ties LTV to real estate prices. Lending for house purchase follows residential
@@ -12,13 +12,16 @@ COLLATERAL_INDEX = {"residential_property": "residential_price_index", "resident
                     "office": "cre_price_index", "retail": "cre_price_index", "industrial": "cre_price_index"}
 
 
-def require_ltv(facilities: pd.DataFrame) -> None:
-    """A facility with no LTV blocks unless the input says it does not apply: a gap never reads
-    as unsecured. ``facilities`` carries the value status as ``ltv_status``."""
-    gap = facilities["ltv"].isna() & (facilities["collateral_type"].notna()
-                                      | facilities["ltv_status"].ne(str(ValueStatus.NOT_APPLICABLE)))
-    if gap.any():
-        raise BlockingError("report", "MISSING_INPUT", "a facility in the book has no LTV")
+def usable_ltv(facilities: pd.DataFrame) -> pd.Series:
+    """Which facilities have an LTV a calculation may use. Every other facility must truly have
+    none: no collateral type and status not_applicable. Anything else blocks, so a gap never reads
+    as unsecured and a number marked missing is never used. ``ltv_status`` carries the status."""
+    usable = facilities["ltv"].notna() & facilities["ltv_status"].isin(USABLE_STATUSES)
+    absent = (facilities["ltv"].isna() & facilities["collateral_type"].isna()
+              & facilities["ltv_status"].eq(ValueStatus.NOT_APPLICABLE))
+    if not (usable | absent).all():
+        raise BlockingError("report", "MISSING_INPUT", "a facility in the book has no usable LTV")
+    return usable
 
 
 def price_growth(indices: pd.DataFrame) -> pd.DataFrame:

@@ -797,7 +797,7 @@ Every report carries the run's status label.
 | Checks | Every control applied, step by step, with its outcome, and rejected records by reason |
 | Notes | Status, input set, parameter set, variant, versions, horizon and portfolio names |
 
-**Run comparison (`report/comparison.py`).** `compare` verifies both manifests and joins four reports of the two runs: impairment, stage stocks and coverage, one-year PD, and LGD by segment. Each gives base, new and difference; a row that only one run has keeps an empty difference. `write_report` keeps the tables, `summary.md` and `comparison.json` in `runs/comparisons/<base>__<new>/` (§12.2 version change). It holds no time, so the same two runs give the same bytes, and it refuses a folder inside a sealed run.
+**Run comparison (`report/comparison.py`).** `compare` verifies both manifests and joins four reports of the two runs: impairment, stage stocks and coverage, one-year PD, and LGD by segment. Each gives base, new and difference; a row that only one run has keeps an empty difference. `write_report` keeps the tables, `summary.md` and `comparison.json` in `runs/comparisons/<base>__<new>/` (§12.2 version change). It holds no time, so the same two runs give the same bytes under the same code. It refuses a BLOCKED run, and a folder inside any sealed run or input set.
 
 **Selectable readings of the draft.** `--s2-treatment held` (`hold_s2`, C14), `--horizon-runoff replaced` (C15) and `--lgd-path trough` (`lgd_drivers`, C16) depart from the design only when requested. The defaults are the design's. A run with one of them carries it in its run ID and names it in its headline, workbook, manifest and readiness report. `ecl_bridge` ties ECL by bucket, plus any held amount, to the booked provisions.
 

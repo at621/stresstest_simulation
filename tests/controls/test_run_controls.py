@@ -19,7 +19,7 @@ from stress.params.pd import check_curve, curve_from_conditional
 from stress.params.prepay import prepayment_rate
 from stress.projection import check_static
 from stress.report import compare_runs
-from stress.report.comparison import _by_stage, _changed, difference
+from stress.report.comparison import _by_book, _by_stage, _changed, _headline, _identity, difference
 from tests import builders
 from tests.support import tolerance
 
@@ -267,10 +267,36 @@ def test_the_stage_table_shows_a_gap_rather_than_a_smaller_stock():
 @pytest.mark.control("Version change")
 def test_a_blocked_run_cannot_be_compared(mini, mini_tables, tmp_path):
     good, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
-    mini["parameter_set"]["segments"]["P01"]["cpr_ttc"] = None
+    mini["parameter_set"]["segments"]["P01"]["cpr_ttc"] = None  # blocks at R3, before any report
     bad, manifest = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "runs")
     assert manifest["status"] == "BLOCKED"
     assert main(["compare", "--base", good.run_dir.as_posix(), "--new", bad.run_dir.as_posix()]) == EXIT_BLOCKED
+
+
+@pytest.mark.control("Version change")
+def test_a_run_blocked_after_writing_reports_cannot_be_compared(mini, mini_tables, tmp_path):
+    good, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
+    mortgages = mini["facilities"]["segment"] == "P01"
+    mini["facilities"].loc[mortgages[mortgages].index[0], "ltv"] = np.nan
+    bad, manifest = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "runs")
+    assert manifest["status"] == "BLOCKED" and manifest["blocked"]["step"] == "report"
+    assert bad.reports_dir.is_dir(), "the core reports were written before the block"
+    assert main(["compare", "--base", good.run_dir.as_posix(), "--new", bad.run_dir.as_posix()]) == EXIT_BLOCKED
+
+
+@pytest.mark.control("Version change")
+def test_the_summary_says_what_it_cannot_know():
+    keys = ("scenario", "year", "portfolio")
+    columns = ("closing_on", "closing_off", "charge_total", "cumulative_charge")
+    both = pd.DataFrame([{"scenario": "adverse", "year": 2029, "portfolio": p, **dict.fromkeys(columns, 1.0)}
+                         for p in ("Total", "P01")])
+    table = difference(both, both.iloc[:0], keys, columns)
+    assert all("n/a" in line for line in _headline({"impairment": table})[-1:])
+    assert all("n/a" in line for line in _by_book({"impairment": table})[-1:])
+    base = {"run_id": "a", "status": "SYNTHETIC", "input_set_hash": "h", "code_version": "c", "spec_version": "1",
+            "outputs_digest": "d", "config": {"variant": "core", "lgd_path": "trough"}}
+    old = {**base, "config": {"variant": "core"}}
+    assert any("not recorded" in line and "trough" in line for line in _identity(old, base))
 
 
 @pytest.mark.control("Z-score and prepayment")

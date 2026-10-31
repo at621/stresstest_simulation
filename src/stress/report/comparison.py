@@ -13,7 +13,14 @@ import pandas as pd
 
 from stress.contracts.artifacts import sha256_file, verified_manifest
 from stress.contracts.errors import BlockingError
-from stress.contracts.run import COMPARISONS_DIR, REPORTS_DIR, RESULTS_DIR, RUN_MANIFEST
+from stress.contracts.inputs import INPUT_MANIFEST
+from stress.contracts.run import (
+    COMPARISONS_DIR,
+    REPORTS_DIR,
+    RESULTS_DIR,
+    RUN_MANIFEST,
+    STATUS_BLOCKED,
+)
 
 STEP = "compare"
 SUMMARY_FILE = "summary.md"
@@ -46,8 +53,8 @@ def compare(base: Path, new: Path) -> tuple[dict[str, pd.DataFrame], dict, dict]
     """The difference tables and the manifests of two verified runs."""
     manifests = verified_manifest(base), verified_manifest(new)
     for run, manifest in zip((base, new), manifests):
-        if not (run / RESULTS_DIR / REPORTS_DIR).is_dir():
-            raise BlockingError(STEP, "RUN_INTEGRITY", f"{run.name} sealed as {manifest['status']} with no reports")
+        if manifest["status"] == STATUS_BLOCKED:  # a run blocked at R10 has some reports, so look at its status
+            raise BlockingError(STEP, "RUN_INTEGRITY", f"{run.name} sealed as BLOCKED, so it has no results to compare")
     tables = {}
     for report, name, keys, columns in TABLES:
         left, right = (pd.read_csv(run / RESULTS_DIR / REPORTS_DIR / report) for run in (base, new))
@@ -151,7 +158,8 @@ def summary(tables: dict[str, pd.DataFrame], base: dict, new: dict) -> str:
 def _in_a_sealed_folder(folder: Path) -> bool:
     """A sealed run and an input set each hold a manifest, and both are write-once."""
     resolved = folder.resolve()
-    return any((path / RUN_MANIFEST).is_file() for path in (resolved, *resolved.parents))
+    return any((path / name).is_file() for path in (resolved, *resolved.parents)
+               for name in (RUN_MANIFEST, INPUT_MANIFEST))
 
 
 def write_report(tables: dict[str, pd.DataFrame], base: dict, new: dict, folder: Path) -> None:

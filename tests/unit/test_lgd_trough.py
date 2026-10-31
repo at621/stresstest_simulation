@@ -37,14 +37,17 @@ def test_the_trough_joins_the_linear_reversion_of_the_parameters(mini_tables, tm
     tables = builders.load(inputs)
     facts = tables["facilities"].merge(tables["obligors"][["obligor_id", "country"]], on="obligor_id")
     fac = facts[facts["segment"] == "P04"].iloc[0]
-    path = z[(z["country"] == fac["country"]) & (z["scenario"] == "adverse") & z["year"].between(2027, 2029)]
-    end = z[(z["country"] == fac["country"]) & (z["scenario"] == "baseline") & (z["year"] == 2029)]["z"].iloc[0]
+    rule = tables["parameter_set"]["terminal_rule"]
+    last = rule["last_scenario_year"]
+    first = tables["parameter_set"]["horizon"]["projection_years"][0]
+    path = z[(z["country"] == fac["country"]) & (z["scenario"] == "adverse") & z["year"].between(first, last)]
+    end = z[(z["country"] == fac["country"]) & (z["scenario"] == "baseline") & (z["year"] == last)]["z"].iloc[0]
     w = tables["parameter_set"]["segments"]["P04"]["lgd_w"]
     params = builders.result(ctx, "parameters.parquet")
     rows = params[(params["facility_id"] == fac["facility_id"]) & (params["scenario"] == "adverse")
-                  & (params["bucket_year"] > 2029)]
+                  & (params["bucket_year"] > last)]
     assert len(rows)
-    a = np.clip(1 - (rows["bucket_year"].to_numpy() - 2029) / 6, 0, 1)
+    a = np.clip(1 - (rows["bucket_year"].to_numpy() - last) / rule["reversion_years"], 0, 1)
     expected = (a * lgd_from_z(fac["ttc_lgd"], w, path["z"].min()) + (1 - a) * lgd_from_z(fac["ttc_lgd"], w, end))
     assert np.allclose(rows["lgd"], expected, rtol=0, atol=1e-12), "the worst Z, not 2029's, is where it reverts from"
 
@@ -64,6 +67,16 @@ def test_a_secured_adverse_book_keeps_its_worst_z_then_reverts_from_it():
     assert value(out, "P02", "adverse", 2028) == value(z, "P02", "adverse", 2028), "an unsecured book keeps its Z"
     assert value(out, "P01", "baseline", 2028) == value(z, "P01", "baseline", 2028), "baseline prices do not fall"
     assert z["z"].tolist() == z_table()["z"].tolist(), "the Z of PD and prepayment is left alone"
+
+
+@pytest.mark.req("LGD-12")
+def test_a_number_marked_missing_is_not_read_as_an_ltv(mini, tmp_path):
+    mortgages = mini["facilities"]["segment"] == "P01"
+    mini["facilities"].loc[mortgages[mortgages].index[0], "ltv__status"] = "missing"
+    config = RunConfig(str(builders.write(mini, tmp_path / "inputs")), ("baseline", "adverse"), "core",
+                       lgd_path=LGD_TROUGH)
+    _, manifest = cli.execute(config, tmp_path / "runs")
+    assert manifest["status"] == "BLOCKED" and "no usable LTV" in manifest["blocked"]["message"]
 
 
 @pytest.mark.req("LGD-12")

@@ -403,8 +403,8 @@ requirements:
 
   ECL-09:
     reason: >-
-      ECL by bucket, plus any held S2 amount (C14), reconciles to the booked performing provisions,
-      and raw and constrained values are kept.
+      ECL by bucket, plus any held S2 amount (C14), reconciles to the booked performing provisions
+      in every scenario and year, and raw and constrained values are kept.
 
   ECL-10:
     reason: >-

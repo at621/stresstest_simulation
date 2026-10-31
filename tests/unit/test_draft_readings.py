@@ -129,6 +129,17 @@ def test_a_selected_run_cannot_be_read_as_the_core_run(default_run, tmp_path):
     assert readiness.loc["s2_treatment", "state"] == S2_HELD
 
 
+@pytest.mark.req("OPS-04")
+@pytest.mark.parametrize("option, words", [({"lgd_path": LGD_TROUGH}, "worst Z"),
+                                           ({"terminal_treatment": "parameters"}, "the parameters revert")])
+def test_the_checks_sheet_names_a_reading_that_changes_its_rows(default_run, tmp_path, option, words):
+    inputs, _, _ = default_run
+    ctx, _ = execute(inputs, tmp_path, **option)
+    checks = load_workbook(ctx.reports_dir / WORKBOOK_FILE)["Checks"]
+    rows = [[str(cell.value) for cell in row] for row in checks.iter_rows()]
+    assert {row[0] for row in rows if any(words in cell for cell in row)} == {"R4", "R6"}
+
+
 @pytest.mark.req("OPS-01")
 @pytest.mark.parametrize("option", [{"s2_treatment": "hold"}, {"horizon_runoff": "replacedd"}, {"lgd_path": "trough2"}])
 def test_an_unknown_reading_blocks_at_r1(default_run, tmp_path, option):
@@ -144,8 +155,9 @@ def test_buckets_and_the_held_amount_tie_to_the_booked_provisions(default_run, t
     inputs, _, base = default_run
     ctx, _ = execute(inputs, tmp_path, s2_treatment=S2_HELD)
     held = builders.report(ctx, "analysis_ecl_bridge.csv")
-    assert np.allclose(held["ecl_on"] + held["held_on"], held["allowance_on"], rtol=1e-6, atol=1.0)
-    assert np.allclose(held["ecl_off"] + held["held_off"], held["provision_off"], rtol=1e-6, atol=1.0)
+    tol = tolerance("aggregate")
+    assert np.allclose(held["ecl_on"] + held["held_on"], held["allowance_on"], rtol=tol["rel"], atol=tol["abs"])
+    assert np.allclose(held["ecl_off"] + held["held_off"], held["provision_off"], rtol=tol["rel"], atol=tol["abs"])
     assert (held.loc[held["year"] <= 2027, ["held_on", "held_off"]] == 0).all().all()
     assert held.loc[held["year"] > 2027, "held_on"].abs().gt(0).any()
     default = builders.report(base, "analysis_ecl_bridge.csv")
@@ -154,20 +166,34 @@ def test_buckets_and_the_held_amount_tie_to_the_booked_provisions(default_run, t
 
 @pytest.mark.req("ECL-09")
 def test_a_performing_slice_may_differ_from_raw_only_when_held():
+    excess = 2 * tolerance("amount")["abs"]
     provisions = pd.DataFrame({"scenario": "adverse", "year": 2028, "stage": 2, "method": ["s2_lifetime"],
-                               "raw_on": [10.0], "raw_off": [0.0], "allowance_on": [20.0], "provision_off": [0.0]})
+                               "raw_on": [10.0], "raw_off": [0.0], "allowance_on": [10.0 + excess], "provision_off": [0.0]})
     buckets = pd.DataFrame({"scenario": "adverse", "valuation_year": 2028, "ecl_on": [10.0], "ecl_off": [0.0]})
     results = {"provisions": provisions, "ecl_buckets": buckets}
     with pytest.raises(BlockingError, match="raw value"):
-        ecl_bridge(results, tolerance("aggregate"))
-    ok = ecl_bridge({**results, "provisions": provisions.assign(method=METHOD_S2_HELD)}, tolerance("aggregate"))
-    assert ok["held_on"].iloc[0] == 10.0
+        ecl_bridge(results, tolerance("aggregate"), tolerance("amount"))
+    ok = ecl_bridge({**results, "provisions": provisions.assign(method=METHOD_S2_HELD)}, tolerance("aggregate"),
+                    tolerance("amount"))
+    assert ok["held_on"].iloc[0] == pytest.approx(excess)
+
+
+@pytest.mark.req("ECL-09")
+def test_a_year_with_no_buckets_blocks_rather_than_drops_out():
+    provisions = pd.DataFrame({"scenario": "adverse", "year": [2027, 2028], "stage": 2, "method": "s2_lifetime",
+                               "raw_on": [10.0, 10.0], "raw_off": [0.0, 0.0], "allowance_on": [10.0, 10.0],
+                               "provision_off": [0.0, 0.0]})
+    buckets = pd.DataFrame({"scenario": "adverse", "valuation_year": [2027], "ecl_on": [10.0], "ecl_off": [0.0]})
+    for table in (buckets, buckets.iloc[:0]):
+        with pytest.raises(BlockingError, match="every scenario and year"):
+            ecl_bridge({"provisions": provisions, "ecl_buckets": table}, tolerance("aggregate"), tolerance("amount"))
 
 
 @pytest.mark.req("ECL-03")
-def test_replaced_blocks_where_it_would_still_amortise(default_run, tmp_path):
+@pytest.mark.parametrize("variant", ["annuity", "linear"])
+def test_replaced_blocks_where_it_would_still_amortise(default_run, tmp_path, variant):
     inputs, _, _ = default_run
-    config = RunConfig(str(inputs), ("baseline", "adverse"), "annuity", horizon_runoff=RUNOFF_REPLACED)
+    config = RunConfig(str(inputs), ("baseline", "adverse"), variant, horizon_runoff=RUNOFF_REPLACED)
     _, manifest = cli.execute(config, tmp_path)
     assert manifest["status"] == "BLOCKED" and manifest["blocked"]["code"] == Block.INVALID_ARGUMENT
     assert "amortisation" in manifest["blocked"]["message"]

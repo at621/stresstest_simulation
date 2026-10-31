@@ -13,6 +13,7 @@ import pandas  # not "pd": the submodule stress.params.pd would shadow it
 from stress import __version__
 from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import DEFAULT_GRADE, LoadedInputs
+from stress.contracts.preparation import usable_ltv
 from stress.contracts.run import (
     BASELINE,
     LGD_TROUGH,
@@ -298,9 +299,9 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
             require_years(lookup, segment, country, scenario, range(first, int(schedule["bucket_year"].max()) + 1))
     lgd_z = drivers.z
     if ctx.config.lgd_path == LGD_TROUGH:
-        facilities = loaded.facilities.data
-        secured = facilities["ltv"].notna() & facilities["facility_id"].isin(routed.portfolio["facility_id"])
-        lgd_z = lgd_drivers(drivers.z, ps, set(facilities.loc[secured, "segment"]))
+        facilities = loaded.facilities.data.assign(ltv_status=loaded.facilities.status["ltv"])
+        in_book = facilities[facilities["facility_id"].isin(routed.portfolio["facility_id"])]
+        lgd_z = lgd_drivers(drivers.z, ps, set(in_book.loc[usable_ltv(in_book), "segment"]))
     version = store.source_version(ps, __version__)
     pit = pit_table(book, [(s, c, sc) for s, c in keys for sc in scenarios],
                     range(first, last_reported + 1), grades)
