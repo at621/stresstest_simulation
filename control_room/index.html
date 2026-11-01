@@ -1,0 +1,1603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stress Control Room</title>
+<link rel="icon" href="data:,">
+<style>
+/* One page, no external requests, four steps: files and configuration, what is in them, run, outcomes.
+   Page tokens follow docs/run-workflow; scenario and stage colours follow notebooks/nbtools.py. */
+:root {
+  color-scheme: light;
+  --bg: #f3f5f8; --surface: #ffffff; --surface-2: #e9edf2; --fg: #17202b; --muted: #566272; --line: #d0d7e0;
+  --run: #2652c4; --run-hover: #1f46a8; --run-ink: #ffffff; --run-soft: #e8eefb; --run-line: #9cb1e8;
+  --warn: #9a5900; --warn-soft: #faf0df; --warn-line: #e0b26f;
+  --block: #b3302d; --block-soft: #fbe8e7; --block-line: #e7aaa7;
+  --ok: #276f50; --ok-soft: #e3f3ea; --ok-line: #a4d4bb;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
+  --stage-1: #86b6ef; --stage-2: #2a78d6; --stage-3: #104281;
+  --grid: #e6e9ee; --axis: #c3cad3;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+    --run: #4f76e8; --run-hover: #6387ee; --run-ink: #ffffff; --run-soft: #18223a; --run-line: #3d5698;
+    --warn: #e6a94f; --warn-soft: #2c2215; --warn-line: #7d5b2a;
+    --block: #ff8a83; --block-soft: #3a1c1c; --block-line: #7d3a37;
+    --ok: #74d3a3; --ok-soft: #16302a; --ok-line: #2f6b52;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+    --stage-1: #184f95; --stage-2: #3987e5; --stage-3: #9ec5f4;
+    --grid: #232c37; --axis: #3a4552;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
+  --run: #4f76e8; --run-hover: #6387ee; --run-ink: #ffffff; --run-soft: #18223a; --run-line: #3d5698;
+  --warn: #e6a94f; --warn-soft: #2c2215; --warn-line: #7d5b2a;
+  --block: #ff8a83; --block-soft: #3a1c1c; --block-line: #7d3a37;
+  --ok: #74d3a3; --ok-soft: #16302a; --ok-line: #2f6b52;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  --stage-1: #184f95; --stage-2: #3987e5; --stage-3: #9ec5f4;
+  --grid: #232c37; --axis: #3a4552;
+}
+* { box-sizing: border-box; }
+html { overflow-y: scroll; }  /* a short step must not shift the navigation */
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13.5px/1.45 var(--sans); }
+a { color: var(--run); }
+h1, h2, h3, p { margin: 0; }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+code { background: var(--surface-2); padding: 0 4px; border-radius: 3px; overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; border-radius: 3px; }
+button, select, input, textarea { font: inherit; color: inherit; }
+.page { max-width: 1480px; margin: 0 auto; padding: 10px 16px 56px; }
+.small { font-size: 12px; }
+.quiet { color: var(--muted); }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-bottom: 8px; }
+.top h1 { font-size: 17px; line-height: 1.2; font-weight: 600; }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 1px 9px; cursor: pointer; font-size: 12px; color: var(--muted); }
+.ghost:hover { background: var(--surface-2); color: var(--fg); }
+.notice { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 7px 11px; font-size: 12.5px; margin: 0 0 8px; }
+.notice.warn { border-color: var(--warn-line); background: var(--warn-soft); }
+.notice.block { border-color: var(--block-line); background: var(--block-soft); }
+.notice.ok { border-color: var(--ok-line); background: var(--ok-soft); }
+.notice code { background: var(--surface); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); font-size: 11.5px; line-height: 18px; white-space: nowrap; color: var(--muted); }
+
+/* where we are: the four steps, and what to do now */
+.where { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 6px 0 8px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.where-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+.track { flex: 1 1 560px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.track .line { flex: 1 1 10px; min-width: 6px; height: 2px; background: var(--line); border-radius: 1px; }
+.track .line.done { background: var(--ok); }
+.track button { flex: 0 0 178px; width: 178px; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 0 8px; align-items: center; text-align: left; padding: 2px 6px 2px 2px; border: 0; background: transparent; border-radius: 8px; cursor: pointer; min-width: 0; }
+.track button:hover:not(:disabled) { background: var(--surface-2); }
+.track button:disabled { cursor: not-allowed; }
+.track .n { grid-row: 1 / 3; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 13px; background: var(--surface-2); color: var(--muted); }
+.track button[aria-current="step"] .n { background: var(--run); color: var(--run-ink); }
+.track button.done .n { background: var(--ok); color: var(--surface); }
+.track .t { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track button:disabled .t { color: var(--muted); }
+.track .s { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track button[aria-current="step"] .s { color: var(--run); }
+#now-action { flex: 0 0 210px; height: 36px; margin-left: auto; }
+#now-action .primary { width: 100%; height: 100%; padding: 0 8px; }
+.now { margin-top: 6px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.now[hidden] { display: none; }
+.now.block { border-color: var(--block-line); background: var(--block-soft); }
+.now.ok { border-color: var(--ok-line); background: var(--ok-soft); }
+.now .text { flex: 1 1 320px; font-size: 13.5px; overflow-wrap: anywhere; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; margin-bottom: 10px; }
+.card > h2 { font-size: 14px; font-weight: 600; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.card > h2 .end { margin-left: auto; display: flex; gap: 6px; align-items: center; font-weight: 400; font-size: 12px; }
+.card h3 { font-size: 13.5px; line-height: 1.35; font-weight: 600; }
+.card .sub { color: var(--muted); font-size: 12px; margin-bottom: 7px; }
+.facts { display: flex; flex-wrap: wrap; gap: 3px 6px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+.footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; margin: 4px 0 14px; }
+.footer .left { margin-right: auto; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.grid-2 > .card, .grid-3 > .card, .grid-4 > .card { margin-bottom: 0; }
+.stacked { margin-bottom: 10px; }
+
+/* controls */
+.field { display: grid; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
+.field select, .field input[type=text], .search, input.path { width: 100%; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); font-size: 12.5px; }
+.field.changed select { border-color: var(--warn-line); background: var(--warn-soft); }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 16px; border: 0; border-radius: 8px; background: var(--run); color: var(--run-ink); font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.primary:hover:not(:disabled) { background: var(--run-hover); }
+.primary:disabled { background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
+.primary.big { padding: 9px 22px; font-size: 14.5px; }
+.action { display: inline-block; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 2px 9px; font-size: 12px; color: var(--fg); text-decoration: none; cursor: pointer; white-space: nowrap; }
+.action:hover:not(:disabled) { border-color: var(--run-line); background: var(--run-soft); }
+.action:disabled { color: var(--muted); cursor: not-allowed; }
+.link { background: none; border: 0; padding: 0; color: var(--run); cursor: pointer; font-size: 12px; text-decoration: underline; }
+table.slots td { padding: 6px 12px 6px 0; vertical-align: top; }
+table.slots tr:first-child td { padding-top: 4px; }
+table.slots td.num { padding-top: 7px; }
+.slot-name { font-weight: 600; }
+.good { color: var(--ok); }
+.bad { color: var(--block); overflow-wrap: anywhere; }
+.slot-do { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.drop { outline: 2px dashed var(--run); outline-offset: -4px; }
+.setting { display: grid; grid-template-columns: minmax(180px, 320px) minmax(0, 1fr); gap: 3px 18px; padding: 7px 0; border-top: 1px solid var(--grid); align-items: start; }
+.setting:first-child { border-top: 0; }
+.setting .q { font-weight: 600; font-size: 13px; }
+.setting .h { color: var(--muted); font-size: 12px; }
+.setting select { max-width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); font-size: 13px; }
+.choice { display: grid; gap: 3px; font-size: 13px; }
+.choice label { display: flex; gap: 6px; align-items: baseline; }
+.choice label.off { color: var(--muted); }
+.standard { color: var(--muted); font-size: 11.5px; }
+table.scenario-list td { padding: 5px 12px 5px 0; }
+table.scenario-list input.name { width: 210px; font: 500 13px var(--sans); }
+table.scenario-list input.narrative { width: 100%; min-width: 200px; }
+.scenario-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 8px; }
+.scenario-grid .scenario { margin-bottom: 0; }
+details.method { margin-top: 2px; border-top: 1px solid var(--grid); padding: 7px 0 5px; }
+details.method > summary { cursor: pointer; }
+details.method > summary b { font-weight: 600; font-size: 13px; }
+details.method > summary .quiet { font-size: 12px; margin-left: 8px; }
+.signoff { margin-top: 8px; }
+.inrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.inrow input.path { flex: 1 1 320px; width: auto; font-family: var(--mono); font-size: 12px; }
+input.num { width: 72px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; }
+input.num::placeholder { color: var(--muted); opacity: 1; }
+input.num.changed { border-color: var(--warn-line); background: var(--warn-soft); }
+input.num.bad { border-color: var(--block-line); background: var(--block-soft); }
+input.name { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg); font: 500 13px var(--mono); width: 170px; }
+input.narrative { flex: 1 1 240px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg); font-size: 12.5px; min-width: 0; }
+.inline { padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); font-size: 12px; color: var(--fg); }
+.checks { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 12.5px; }
+.checks label { display: inline-flex; gap: 5px; align-items: center; }
+
+/* tables */
+.scroll-x { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); padding: 3px 10px 3px 0; white-space: nowrap; }
+td { border-bottom: 1px solid var(--grid); padding: 3px 10px 3px 0; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.cell, th.cell { text-align: right; padding-right: 6px; }
+td.nowrap { white-space: nowrap; }
+th.scen { border-bottom-color: var(--axis); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; }
+tr.pick { cursor: pointer; }
+tr.pick:hover td { background: var(--surface-2); }
+tr.picked td { background: var(--run-soft); }
+tr.drivers td { background: var(--surface-2); padding: 6px 8px; }
+.drivers table { width: auto; }
+td.z { font-variant-numeric: tabular-nums; text-align: right; padding-right: 8px; }
+td.z.stress { color: var(--block); }
+td.z.lift { color: var(--ok); }
+table.preview { font: 11.5px/1.4 var(--mono); }
+table.preview th, table.preview td { padding: 2px 10px 2px 0; white-space: nowrap; }
+.heat td, .heat th { text-align: center; padding: 2px 3px; border-bottom: 0; font-variant-numeric: tabular-nums; font-size: 11px; }
+.heat th:first-child, .heat td:first-child { text-align: left; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0 6px; }
+pre.text { font: 11px/1.45 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 8px; max-height: 360px; overflow: auto; margin: 0; white-space: pre; }
+textarea.yaml { width: 100%; height: 280px; font: 11px/1.4 var(--mono); background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical; white-space: pre; }
+details.twin { margin-top: 4px; font-size: 12px; }
+details.twin > summary { cursor: pointer; color: var(--muted); width: max-content; }
+details.file { border-top: 1px solid var(--grid); padding: 5px 0; }
+details.file > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; list-style: none; }
+details.file > summary::-webkit-details-marker { display: none; }
+details.file > summary b { font-family: var(--mono); font-weight: 600; }
+details.file > summary .quiet { font-size: 12px; }
+details.file > .body { padding: 6px 0 4px; }
+
+/* scenario cards */
+.scenario { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.scenario.derived { border-color: var(--run-line); }
+.scenario .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 6px; }
+.scenario .head b { font-size: 13px; }
+.scenario .head .end { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.scenario table { width: auto; }
+.scenario th, .scenario td { padding: 2px 10px 2px 0; }
+
+/* the verdict and the run */
+.verdict { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.verdict.ok { border-color: var(--ok-line); background: var(--ok-soft); }
+.verdict.warn { border-color: var(--warn-line); background: var(--warn-soft); }
+.verdict.block { border-color: var(--block-line); background: var(--block-soft); }
+.verdict .head { display: flex; gap: 6px; align-items: baseline; font-weight: 600; font-size: 14px; }
+.verdict .line { font-size: 12.5px; margin-top: 2px; overflow-wrap: anywhere; }
+.verdict ul { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
+details.diff { font-size: 12px; margin-bottom: 8px; }
+details.diff summary { cursor: pointer; color: var(--warn); }
+.command { font: 12px/1.5 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 7px 9px; overflow-wrap: anywhere; margin: 6px 0 8px; min-height: 24px; }
+.error-line { font-size: 12px; color: var(--block); margin: 6px 0; overflow-wrap: anywhere; }
+.pips { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 3px; margin: 8px 0 4px; max-width: 760px; }
+.pip { height: 8px; border-radius: 4px; background: var(--surface-2); }
+.pip.done { background: var(--ok); }
+.pip.active { background: var(--run); animation: pulse 1.1s ease-in-out infinite; }
+.pip.failed { background: var(--block); }
+@keyframes pulse { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .pip.active { animation: none; } }
+.job-state { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
+.job-log { font: 11px/1.45 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 6px 8px; margin: 5px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.oneoff { font-size: 12.5px; margin-top: 6px; }
+
+/* results */
+.kpi .row { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; column-gap: 7px; align-items: baseline; }
+.kpi .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.kpi .name { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi .amount { font-size: 15px; font-weight: 600; }
+.kpi .extra { grid-column: 2 / 4; font-size: 11px; color: var(--muted); text-align: right; }
+.actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.key.line { height: 2px; width: 14px; border-radius: 1px; }
+svg { display: block; }
+svg text { font-family: var(--sans); }
+.tick { fill: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.value-label { fill: var(--fg); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.end-label { fill: var(--fg); font-size: 11px; }
+.gridline { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.axisline { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.mark { cursor: default; }
+.mark:hover, .mark:focus-visible { filter: brightness(1.08); outline: none; }
+.barrow { display: grid; grid-template-columns: minmax(90px, 190px) minmax(0, 1fr); gap: 2px 10px; padding: 4px 0; border-radius: 4px; }
+.barrow:hover { background: var(--surface-2); }
+.barrow .who { min-width: 0; font-size: 12px; line-height: 1.3; }
+.barrow .who b { font-weight: 600; display: block; }
+.barrow .who span { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.bars { display: grid; gap: 2px; align-content: center; }
+.lane { position: relative; width: calc(100% - 52px); height: 12px; }
+.bar { position: absolute; left: 0; top: 1px; height: 10px; border-radius: 0 4px 4px 0; min-width: 1px; }
+.lane em { position: absolute; top: -2px; margin-left: 5px; font-style: normal; font-size: 11px; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16); min-width: 130px; }
+#tip[hidden] { display: none; }
+#tip .title { color: var(--muted); margin-bottom: 2px; }
+#tip .line { display: grid; grid-template-columns: 12px auto 1fr; gap: 6px; align-items: center; }
+#tip .line i { height: 2px; border-radius: 1px; }
+#tip .line b { font-weight: 600; font-variant-numeric: tabular-nums; }
+#tip .line span { color: var(--muted); }
+
+@media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1040px) { .track { flex-basis: 100%; } .track button { flex: 1 1 0; width: auto; } .track .line { flex: 0 1 8px; } }
+@media (max-width: 680px) { .page { padding: 10px 12px 48px; } .grid-2, .grid-3, .grid-4, .setting { grid-template-columns: minmax(0, 1fr); } .track { align-items: stretch; } .track .line { display: none; } .track button { align-content: start; grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; padding: 2px; } .track .n { grid-row: auto; } .track .t { white-space: normal; font-size: 11.5px; line-height: 1.2; } .track .s { max-width: 100%; font-size: 10.5px; } #now-action { flex: 1 1 100%; } }
+@media (max-width: 680px) { table.slots thead { display: none; } table.slots, table.slots tbody, table.slots tr, table.slots td { display: block; } table.slots tr { padding: 6px 0; border-bottom: 1px solid var(--grid); } table.slots td, table.slots td.num { padding: 1px 0; border: 0; text-align: left; } table.slots td.num:empty { display: none; } .slot-do { justify-content: flex-start; margin-top: 3px; } }
+@media (forced-colors: active) { .bar, .key, .dot { forced-color-adjust: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <h1>Stress engine control room</h1>
+  </header>
+  <div class="where">
+    <div class="where-row"><nav class="track" aria-label="Steps" id="stepper"></nav><div id="now-action"></div></div>
+    <div class="now" id="now" hidden><div class="text" id="now-text" role="status"></div></div>
+  </div>
+  <div id="page-error"></div>
+
+  <section id="step-1">
+    <div class="card" id="files-card"><h2>Files <span class="end" id="files-tools"></span></h2><div id="files-body"></div><div id="files-note"></div></div>
+    <div class="card"><h2>Scenarios <span class="end" id="scenarios-tools"></span></h2><div id="scenarios-body"></div></div>
+    <div class="card"><h2>Run settings <span class="end"><button class="link" type="button" id="reset-settings" hidden>Back to standard</button></span></h2><div id="settings-body"></div></div>
+    <div class="card"><h2>Sanity checks</h2><div id="verdict-1"></div></div>
+  </section>
+
+  <section id="step-2" hidden>
+    <div id="contents-body"></div>
+    <div class="card" id="effective-card"><h2>Macro index Z by segment and year</h2><div id="effective-body"></div></div>
+  </section>
+
+  <section id="step-3" hidden>
+    <div class="card"><h2>What will run</h2><div id="plan-body"></div></div>
+    <div class="card"><h2>Progress</h2><div id="job-body"><p class="quiet small">Not started yet.</p></div></div>
+  </section>
+
+  <section id="step-4" hidden>
+    <div class="card"><h2>Which run <span class="end"><label class="field" style="display:inline-grid"><select id="run-select" aria-label="which run"></select></label></span></h2><div id="result-head"></div></div>
+    <div id="result-body"></div>
+    <div class="card"><h2>All runs</h2><div id="runs-body"></div></div>
+  </section>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+'use strict';
+const $ = (selector, root = document) => root.querySelector(selector);
+
+// Everything from a file reaches the page as text: el() never builds markup from strings.
+function el(tag, attrs = {}, ...kids) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === 'class') node.className = value;
+    else if (key === 'style') node.style.cssText = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else if (key in node) node[key] = value;
+    else node.setAttribute(key, value === true ? '' : value);
+  }
+  node.append(...kids.flat(Infinity).filter(kid => kid !== null && kid !== undefined && kid !== false));
+  return node;
+}
+
+const one = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const whole = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 });
+const gone = '–';  // a value that does not exist is never shown as zero
+const absent = v => v === null || v === undefined;
+const amount = v => (absent(v) ? gone : (v < 0 ? '−' : '') + one.format(Math.abs(v)));
+const eur = v => (absent(v) ? gone : `${v < 0 ? '−' : ''}€${one.format(Math.abs(v))}m`);
+const signedEur = v => `${v > 0 ? '+' : v < 0 ? '−' : '±'}€${one.format(Math.abs(v))}m`;
+const pct = (v, digits = 1) => (absent(v) ? gone : `${(100 * v).toFixed(digits)}%`);
+const ratio = (a, b) => (b ? a / b : null);
+const count = v => (absent(v) ? gone : whole.format(v));
+const plural = (n, word) => `${count(n)} ${word}${n === 1 ? '' : 's'}`;
+const fixed = v => (absent(v) ? '' : String(+Number(v).toPrecision(10)));
+const kb = bytes => (absent(bytes) ? gone : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function stamp(iso) {
+  const d = new Date(iso);
+  return `${d.getDate()} ${months[d.getMonth()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+const today = () => new Date().toISOString().slice(0, 10);
+const longStamp = iso => { const d = new Date(iso); return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const defaultName = () => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `setup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; };
+
+async function api(path, body) {
+  const options = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  const response = await fetch(path, options);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || `${response.status}`);
+  return payload;
+}
+
+function table(headers, rows, numeric = () => false, cls = null) {
+  return el('table', { class: cls }, el('thead', {}, el('tr', {}, headers.map((h, i) => (h instanceof HTMLElement ? h : el('th', { class: numeric(i) ? 'num' : null }, h))))), el('tbody', {}, rows));
+}
+const row = (cells, numeric = () => false, attrs = {}) =>
+  el('tr', attrs, cells.map((cell, i) => (cell instanceof HTMLTableCellElement ? cell : el('td', { class: numeric(i) ? 'num' : null }, cell))));
+function problem(message) { $('#page-error').replaceChildren(el('p', { class: 'notice block' }, `✕ ${message}`)); }
+const clearProblem = () => $('#page-error').replaceChildren();
+function select(options, chosen, onchange) {
+  return el('select', { onchange }, options.map(o => el('option', { value: o.value, disabled: !!o.disabled, selected: o.value === chosen }, o.label)));
+}
+
+// --- page state --------------------------------------------------------------------------------------------
+
+let STATE = null, SET = null, DOC = null, PRE = null, RESULT = null, COMPARE = null, JOB = null;
+let ADDED = {}, STEP = 1, checking = false, preTimer = null, preTicket = 0, setTicket = 0, runTicket = 0, compareTicket = 0;
+let jobRunning = false, watching = false, yamlDirty = false, selectedRun = null, setupName = defaultName(), farthest = 1;
+let finishedAt = null, methodOpen = false, paramsOpen = false;
+const open = { drivers: new Set(), previews: new Map(), matrix: null };
+const uploading = new Set();
+
+const SERIES = [1, 2, 3, 4, 5, 6, 7, 8].map(n => `var(--series-${n})`);
+const colourSlots = new Map();
+function colourOf(name) {  // a scenario keeps its colour wherever it appears; past eight the tables carry it
+  for (const id of DOC ? scenarioIds() : []) if (!colourSlots.has(id)) colourSlots.set(id, colourSlots.size);
+  if (!colourSlots.has(name)) colourSlots.set(name, colourSlots.size);
+  return SERIES[colourSlots.get(name)] ?? 'var(--muted)';
+}
+const dot = name => el('span', { class: 'dot', style: `background:${colourOf(name)}` });
+
+// --- the setup: a document that mirrors the specification YAML ---------------------------------------------
+
+const FIELDS = ['rho', 'sicr_k', 'lgd_w', 'cpr_ttc', 'cpr_v'];
+const FIELD_NAME = { rho: 'Asset correlation', sicr_k: 'Stage 2 multiple', lgd_w: 'LGD sensitivity', cpr_ttc: 'Prepayment rate', cpr_v: 'Prepayment sensitivity' };
+const FIELD_HELP = { rho: 'asset correlation (rho), 0 to below 1', sicr_k: 'significant increase in credit risk: multiple of lifetime PD (sicr_k), above 0', lgd_w: 'LGD sensitivity to Z (lgd_w), 0 or more', cpr_ttc: 'through-the-cycle prepayment rate (cpr_ttc), 0 to 1', cpr_v: 'prepayment sensitivity to Z (cpr_v), 0 or more' };
+const UNIT = { percent: 0.01, decimal: 1, index: 1 };
+const DEFAULTS = { variant: 'core', balance_sheet: 'static', terminal_treatment: 'z', s2_treatment: 'repriced', horizon_runoff: 'contractual', lgd_path: 'annual' };
+
+function newDocument(folder) {
+  return { schema_version: 1, status: 'SYNTHETIC', source: `Control room, ${today()}`, version: setupName, input_set_hash: SET?.base?.hash ?? '',
+    run: { inputs: folder, scenarios: [], ...DEFAULTS } };  // the files say which scenarios exist
+}
+const BASE = () => SET?.base ?? null;
+const ANCHOR = () => STATE.anchor;  // the one scenario the engine requires
+const baseIds = () => (BASE()?.scenarios || []).map(s => s.id);
+const derived = () => Object.keys(DOC.scenarios || {});
+const scenarioIds = () => [...baseIds(), ...derived().filter(id => !baseIds().includes(id))];
+const inRun = () => DOC.run.scenarios || [];
+const runOrder = () => scenarioIds().filter(id => inRun().includes(id));
+const years = () => BASE()?.years || [];
+const varOf = id => (BASE()?.variables || []).find(v => v.id === id);
+const inBaseUnit = (override, variable) => override.value * (UNIT[override.unit] ?? 1) / (UNIT[varOf(variable)?.unit ?? 'decimal'] ?? 1);
+const ownOverride = (s, v, y) => (DOC.scenarios?.[s]?.overrides || []).find(o => o.variable === v && o.year === y && o.country === '*');
+
+function effective(s, v, y, depth = 0) {
+  const own = DOC.scenarios?.[s];
+  if (!own) { const c = BASE()?.common?.[s]?.[v]; return c ? { value: c[y] ?? null } : { value: null }; }
+  const hit = ownOverride(s, v, y);
+  if (hit) return { value: inBaseUnit(hit, v) };
+  if (own.inherits && depth < 12) return effective(own.inherits, v, y, depth + 1);
+  return { value: null };
+}
+function prune(name) {
+  const value = DOC[name];
+  if (value && ((Array.isArray(value) && !value.length) || (typeof value === 'object' && !Object.keys(value).length))) delete DOC[name];
+}
+function setOverride(s, v, y, value) {
+  const spec = DOC.scenarios[s];
+  spec.overrides = (spec.overrides || []).filter(o => !(o.variable === v && o.year === y && o.country === '*'));
+  if (value !== null) {
+    const def = varOf(v);
+    spec.overrides.push({ variable: v, country: '*', year: y, value, unit: def?.unit ?? 'decimal', value_type: def?.value_type ?? 'level' });
+  }
+}
+function addScenario() {
+  DOC.scenarios ??= {};
+  const ids = scenarioIds();
+  let n = ids.length + 1;
+  while (ids.includes(`scenario_${n}`)) n++;
+  const name = `scenario_${n}`, parent = ids.at(-1);
+  DOC.scenarios[name] = { inherits: parent, narrative: `Based on ${scenarioName(parent)}.`, overrides: [] };
+  DOC.run.scenarios = [...inRun(), name];
+  syncVolumes(); renderScenarios(); renderSettings(); check();
+  const input = $(`#scenarios-body input[data-name="${name}"]`);
+  input?.focus();
+  input?.select();
+}
+function removeScenario(name) {
+  const parent = DOC.scenarios[name].inherits ?? ANCHOR();
+  delete DOC.scenarios[name];
+  prune('scenarios');
+  DOC.run.scenarios = inRun().filter(id => id !== name);
+  for (const spec of Object.values(DOC.scenarios || {})) if (spec.inherits === name) spec.inherits = parent;
+  if (DOC.terminal_policies) { delete DOC.terminal_policies[name]; prune('terminal_policies'); }
+  syncVolumes(); renderScenarios(); renderSettings(); check();
+}
+function renameScenario(from, typed) {
+  const to = typed.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!/^[a-z]/.test(to)) { problem('A scenario name starts with a letter.'); return false; }
+  if (from === to) return true;
+  if (scenarioIds().includes(to)) { problem(`There is already a scenario called ${scenarioName(to)}.`); return false; }
+  DOC.scenarios = Object.fromEntries(Object.entries(DOC.scenarios).map(([key, value]) => [key === from ? to : key, value]));
+  DOC.run.scenarios = inRun().map(id => (id === from ? to : id));
+  for (const spec of Object.values(DOC.scenarios)) if (spec.inherits === from) spec.inherits = to;
+  if (DOC.terminal_policies?.[from]) { DOC.terminal_policies[to] = DOC.terminal_policies[from]; delete DOC.terminal_policies[from]; }
+  for (const item of DOC.balance_sheet?.assumptions || []) if (item.scenario === from) item.scenario = to;
+  if (colourSlots.has(from)) { colourSlots.set(to, colourSlots.get(from)); colourSlots.delete(from); }
+  clearProblem();
+  return true;
+}
+function setTerminal(name, method, yearsValue) {
+  DOC.terminal_policies ??= {};
+  if (method === 'base') delete DOC.terminal_policies[name];
+  else if (method === 'flat') DOC.terminal_policies[name] = { method: 'flat' };
+  else DOC.terminal_policies[name] = { method: 'reversion', years: yearsValue };
+  prune('terminal_policies');
+}
+function setSegment(name, field, value) {
+  DOC.segments ??= {};
+  DOC.segments[name] ??= {};
+  if (value === null) delete DOC.segments[name][field]; else DOC.segments[name][field] = value;
+  if (!Object.keys(DOC.segments[name]).length) delete DOC.segments[name];
+  prune('segments');
+}
+function driversOf(name) {
+  const base = BASE().segments[name]?.z_drivers ?? BASE().segments[DOC.segments?.[name]?.inherits]?.z_drivers ?? {};
+  return DOC.segments?.[name]?.z_drivers ?? base;
+}
+function setDriver(segment, driver, key, value) {
+  const drivers = JSON.parse(JSON.stringify(driversOf(segment)));
+  drivers[driver] = { ...drivers[driver], [key]: value };
+  const same = JSON.stringify(drivers) === JSON.stringify(BASE().segments[segment]?.z_drivers ?? {});
+  setSegment(segment, 'z_drivers', same ? null : drivers);
+}
+function syncVolumes() {
+  if (DOC.run.balance_sheet !== 'dynamic') { delete DOC.balance_sheet; return; }
+  const portfolios = (BASE()?.portfolios || []).map(p => p.id);
+  const keep = (DOC.balance_sheet?.assumptions || []).filter(a => inRun().includes(a.scenario));
+  for (const s of inRun()) for (const y of years()) for (const p of portfolios) {
+    if (!keep.some(a => a.scenario === s && a.year === y && a.portfolio === p)) keep.push({ scenario: s, year: y, portfolio: p, drawn_change: 0.0, undrawn_change: 0.0 });
+  }
+  DOC.balance_sheet = { ...(DOC.balance_sheet || {}), assumptions: keep };
+}
+const adjusted = () => ['scenarios', 'segments', 'terminal_policies', 'balance_sheet', 'models', 'assignments', 'reporting', 'additional_values'].filter(name => DOC[name] && Object.keys(DOC[name]).length);
+
+// --- loading ---------------------------------------------------------------------------------------------------
+
+async function load() {
+  await reloadState();
+  if (!DOC) {
+    const first = savedSets()[0];
+    DOC = newDocument(first ? first.inputs : '');
+    if (first) { await loadSet(first.inputs); DOC.run.scenarios = baseIds(); }
+  }
+  renderStep();
+  check();
+  poll();
+}
+
+async function reloadState() {
+  STATE = await api('/api/state');
+  ADDED = STATE.added;
+}
+
+async function loadSet(folder) {
+  const ticket = ++setTicket;
+  try {
+    const view = await api(`/api/inputs/${folder.split('/')[1]}`);
+    if (ticket !== setTicket) return;
+    SET = view;
+    if (view.base) DOC.input_set_hash = view.base.hash;
+    open.previews.clear();
+    open.matrix = view.summary?.ttc_pd_matrix.segments[0] ?? null;
+  } catch (fault) {
+    if (ticket !== setTicket) return;
+    SET = null;
+    problem(`cannot read ${folder}: ${fault.message}`);
+  }
+}
+
+async function chooseSet(folder) {
+  const before = baseIds();
+  DOC.run.inputs = folder;
+  await loadSet(folder);
+  DOC.run.scenarios = scenarioIds().filter(id => inRun().includes(id) || !before.includes(id));
+  syncVolumes();
+  renderStep();
+  check();
+}
+
+async function loadRunSetup(runId) {
+  try {
+    const answer = await api(`/api/setup?run=${encodeURIComponent(runId)}`);
+    DOC = answer.document;
+    setupName = answer.name;
+    for (const note of answer.notes) problem(`Loaded ${answer.from}, but ${note}.`);
+    if (!answer.notes.length) clearProblem();
+    if (DOC.run.inputs !== SET?.folder) await loadSet(DOC.run.inputs); else if (SET?.base) DOC.input_set_hash = SET.base.hash;
+    yamlDirty = false;
+    goTo(1); check();
+  } catch (fault) {
+    problem(`cannot load that run's setup: ${fault.message}`);
+  }
+}
+
+// --- where we are -----------------------------------------------------------------------------------------------------
+
+const STEP_TITLES = ['Files and settings', 'Review the files', 'Run', 'Outcomes'];
+const ready = () => !pending() && !checking && !!PRE && PRE.verdict !== 'blocked';
+const engineJob = job => job?.kind === 'run' || job?.kind === 'rerun';
+const canEnter = n => n === 1 || (n === 2 && ready()) || (n === 3 && (engineJob(JOB) || (farthest >= 2 && ready()))) || (n === 4 && (!!RESULT || STATE?.runs.some(r => r.status !== 'UNSEALED')));
+
+function isDone(n) {
+  if (n === 1) return ready();
+  if (n === 2) return ready() && farthest >= 3;
+  return n === 3 && !!finishedAt && !jobRunning;
+}
+
+function stepNote(n) {
+  if (n === STEP) return 'You are here';
+  if (n === 1) {
+    const good = slots().filter(s => s.kind !== 'missing' && !s.problem).length;
+    return ready() ? `${good} files, ${plural(runOrder().length, 'scenario')}` : `${good} of ${STATE.roles.length} files`;
+  }
+  if (n === 2) return farthest < 2 ? 'Not yet' : 'Seen';
+  if (n === 3) return jobRunning && engineJob(JOB) ? 'In progress' : finishedAt ? `Finished ${stamp(finishedAt)}` : 'Not started';
+  return RESULT ? `Run of ${stamp(RESULT.created_at)}` : STATE.runs.length ? plural(STATE.runs.length, 'earlier run') : 'No run yet';
+}
+
+function stoppedLine() {
+  const text = PRE?.blocked?.message ?? PRE?.fault?.message ?? '';
+  return text.length > 150 ? `${text.slice(0, 150)}…` : text;
+}
+
+function nowFiles() {
+  const all = slots();
+  const missing = all.filter(s => s.kind === 'missing');
+  const wrong = all.filter(s => s.problem);
+  if (uploading.size) return { text: 'Reading your file…' };
+  if (jobRunning && JOB?.kind === 'package') return { text: 'Saving your files…' };
+  if (missing.length) return { text: `Add ${missing.length === 1 ? 'the missing file' : `the ${missing.length} missing files`}: ${names(missing)}.` };
+  if (wrong.length) return { text: `Fix ${names(wrong)}: replace the file, or go back to the saved one.`, kind: 'block' };
+  if (pending()) return { text: 'All files are here. Use them, and the sanity checks run.', action: ['Use these files', useFiles] };
+  if (checking || !PRE) return { text: 'Running the sanity checks.', action: ['Next: review the files', null, true] };
+  if (PRE.verdict === 'blocked') return { text: `Sanity checks found an error: ${stoppedLine()}`, kind: 'block' };
+  if (PRE.rejected) return { text: `Sanity checks done: ${plural(PRE.rejected, 'record')} will be left out. See below.`, action: ['Next: review the files', () => goTo(2)] };
+  return { text: 'Sanity checks done, no errors observed.', kind: 'ok', action: ['Next: review the files', () => goTo(2)] };
+}
+
+function nowOf() {
+  if (jobRunning && engineJob(JOB)) return { text: `${JOB.kind === 'rerun' ? 'The repeat run' : 'The run'} is in progress: ${progressText(JOB)}. It carries on if you close this page.` };
+  if (STEP === 1) return nowFiles();
+  if (STEP === 2) {
+    if (!checking && (!PRE || PRE.verdict === 'blocked')) return { text: `Sanity checks found an error: ${stoppedLine()}`, kind: 'block', action: ['Next: run', null, true] };
+    return { action: ['Next: run', () => goTo(3), !ready()] };
+  }
+  if (STEP === 3) {
+    if (checking) return { text: 'Running the sanity checks.', action: ['Start run', null, true] };
+    if (!PRE || PRE.verdict === 'blocked') return { text: `Sanity checks found an error: ${stoppedLine()}`, kind: 'block' };
+    return { action: ['Start run', startRun] };
+  }
+  if (RESULT) return { action: ['Run again with changes', () => loadRunSetup(RESULT.run_id)] };
+  return { text: 'No finished run to show yet.', action: ['Back to the files', () => goTo(1)] };
+}
+
+function renderWhere() {
+  if (!STATE || !DOC) return;
+  const nodes = [];
+  STEP_TITLES.forEach((title, i) => {
+    const n = i + 1;
+    if (i) nodes.push(el('span', { class: `line${isDone(i) ? ' done' : ''}`, 'aria-hidden': 'true' }));
+    const done = n !== STEP && isDone(n);
+    nodes.push(el('button', { type: 'button', class: done ? 'done' : '', 'aria-current': n === STEP ? 'step' : null, disabled: !canEnter(n), onclick: () => goTo(n) },
+      el('span', { class: 'n' }, done ? '✓' : String(n)), el('span', { class: 't' }, title), el('span', { class: 's' }, stepNote(n))));
+  });
+  $('#stepper').replaceChildren(...nodes);
+  const now = nowOf();
+  $('#now').className = `now${now.kind ? ` ${now.kind}` : ''}`;
+  $('#now').hidden = !now.text;
+  $('#now-text').textContent = now.text ?? '';
+  const [label, action, off] = now.action ?? [];
+  $('#now-action').replaceChildren(...(label ? [el('button', { class: 'primary', type: 'button', id: 'next', disabled: !!off, onclick: action }, label)] : []));
+}
+
+function goTo(n) {
+  if (!canEnter(n)) return;
+  STEP = n;
+  farthest = Math.max(farthest, n);
+  renderStep();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderStep() {
+  for (let n = 1; n <= 4; n++) $(`#step-${n}`).hidden = n !== STEP;
+  renderWhere();
+  if (STEP === 1) { renderFiles(); renderScenarios(); renderSettings(); renderVerdict(); }
+  if (STEP === 2) { renderContents(); renderEffective(); }
+  if (STEP === 3) { renderPlan(); }
+  if (STEP === 4) { renderRunSelect(); renderRuns(); renderResult(); }
+}
+
+// --- step 1: the seven files --------------------------------------------------------------------------------------------
+
+const pending = () => Object.keys(ADDED).length > 0;
+const savedSets = () => STATE.inputs.filter(r => r.runnable).sort((a, b) => b.saved_at.localeCompare(a.saved_at));
+const setName = r => `Saved ${longStamp(r.saved_at)}${r.facilities === null ? ', unreadable' : `, ${count(r.facilities)} facilities, €${one.format(r.gca / 1000)}bn`}`;
+const names = list => list.map(s => s.label).join(', ');
+const acceptOf = role => (role.format === 'Parquet' ? '.parquet' : '.yaml,.yml');
+
+function savedProblem(f) {
+  if (f.problem) return f.problem;
+  if (f.hash_ok === false) return 'This file changed after it was saved.';
+  if (!f.missing_columns.length) return null;
+  const more = f.missing_columns.length - 4;
+  return `Columns missing: ${f.missing_columns.slice(0, 4).join(', ')}${more > 0 ? ` and ${more} more` : ''}.`;
+}
+
+function slots() {  // each of the seven places: a file added here, the saved set's file, or nothing yet
+  const saved = SET && DOC.run.inputs ? SET.files : [];
+  return STATE.roles.map(role => {
+    const added = ADDED[role.name];
+    if (added) return { ...role, kind: 'added', original: added.original, bytes: added.bytes, rows: added.rows, problem: added.problem };
+    const file = saved.find(f => f.name === role.name);
+    if (file?.present) return { ...role, kind: 'saved', original: file.file, bytes: file.bytes, rows: file.rows, problem: savedProblem(file) };
+    return { ...role, kind: 'missing', original: null, bytes: null, rows: null, problem: null };
+  });
+}
+
+function pickFile(accept, multiple, onpicked) {  // the computer's own file dialog; cancelling it changes nothing
+  const input = el('input', { type: 'file', accept, multiple, onchange: () => { if (input.files.length) onpicked([...input.files]); } });
+  input.click();
+}
+
+async function addFile(name, file) {
+  uploading.add(name);
+  renderFiles(); renderWhere();
+  try {
+    const response = await fetch(`/api/files/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) }, body: file });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `${response.status}`);
+    ADDED[name] = payload;
+    clearProblem();
+  } catch (fault) {
+    problem(`${file.name} could not be added: ${fault.message}`);
+  }
+  uploading.delete(name);
+  afterFiles();
+}
+
+async function removeFile(name) {
+  try {
+    ADDED = (await api('/api/remove-file', { name })).added;
+  } catch (fault) {
+    problem(fault.message);
+  }
+  afterFiles();
+}
+
+function afterFiles() {
+  $('#files-note').replaceChildren();
+  renderFiles();
+  check();
+}
+
+function roleOf(fileName) {  // the file's own name says which place it is for, or the person picks the row
+  const lower = fileName.toLowerCase();
+  const stem = lower.replace(/\.[^.]+$/, '');
+  return STATE.roles.find(r => r.file === lower) ?? (matches => (matches.length === 1 ? matches[0] : null))(STATE.roles.filter(r => stem.includes(r.name)));
+}
+
+async function addSeveral(files) {
+  const chosen = new Map(), unknown = [];
+  for (const file of files) {
+    const role = roleOf(file.name);
+    if (role && !chosen.has(role.name)) chosen.set(role.name, file); else unknown.push(file.name);
+  }
+  for (const [name, file] of chosen) await addFile(name, file);
+  if (unknown.length) problem(`Not sure which file ${unknown.join(', ')} ${unknown.length === 1 ? 'is' : 'are'}. Use Choose or Replace on the right row.`);
+}
+
+function useFiles() { startJob('/api/use-files', { base: DOC.run.inputs || null }); }
+
+function slotRow(s) {
+  const busy = uploading.has(s.name) || (jobRunning && JOB?.kind === 'package');
+  const state = uploading.has(s.name) ? el('span', { class: 'quiet' }, 'Reading the file…')
+    : s.kind === 'missing' ? el('span', { class: 'bad' }, '✕ Missing')
+      : s.problem ? el('span', { class: 'bad' }, `✕ ${s.problem}`)
+        : el('span', { class: 'good' }, s.kind === 'added' ? '✓ Fits, not in use yet' : '✓ In use');
+  return row([
+    el('td', {}, el('div', { class: 'slot-name' }, s.label), el('div', { class: 'quiet small' }, s.holds)),
+    el('td', {}, s.kind === 'missing' ? el('span', { class: 'quiet' }, `Needs a ${s.format} file`) : [el('div', { class: 'mono' }, s.original), el('div', { class: 'quiet small' }, s.kind === 'added' ? 'Your file' : 'Saved file')]),
+    s.rows === null ? gone : count(s.rows), s.bytes === null ? gone : kb(s.bytes), el('td', {}, state),
+    el('td', {}, el('div', { class: 'slot-do' },
+      s.kind === 'added' ? el('button', { class: 'action', type: 'button', disabled: busy, onclick: () => removeFile(s.name) }, SET?.base ? 'Back to saved file' : 'Remove') : null,
+      el('button', { class: 'action', type: 'button', disabled: busy, onclick: () => pickFile(acceptOf(s), false, ([file]) => addFile(s.name, file)) }, s.kind === 'missing' ? 'Choose file…' : 'Replace…')))],
+  i => i === 2 || i === 3);
+}
+
+function signOffBox() {
+  if (!SET?.base || pending()) return null;
+  const given = SET.approval?.status === 'APPROVED';
+  return el('details', { class: 'twin signoff' },
+    el('summary', {}, given ? `Signed off by ${SET.approval.approved_by} on ${SET.approval.approved_on}` : 'Sign-off of these files: not given. A run does not need it.'),
+    el('p', { class: 'small quiet', style: 'margin:4px 0' }, 'A sign-off records that the owner of the files accepts them. It changes neither the files nor the results. Each run states it in its readiness report.'),
+    given ? null : el('div', { class: 'inrow' }, el('input', { class: 'path', id: 'approver', placeholder: 'Your name', 'aria-label': 'name of the person signing off', style: 'flex:0 1 220px' }),
+      el('button', { class: 'action', type: 'button', onclick: () => startJob('/api/approve', { inputs: DOC.run.inputs, approver: $('#approver').value }) }, 'Sign off')));
+}
+
+function renderFiles() {
+  $('#files-tools').replaceChildren(el('button', { class: 'action', type: 'button', title: 'You can also drop files on this card', onclick: () => pickFile('.parquet,.yaml,.yml', true, addSeveral) }, 'Add several files…'));
+  $('#files-body').replaceChildren(...[
+    el('div', { class: 'scroll-x' }, table(['File', 'File in use', el('th', { class: 'num' }, 'Rows'), el('th', { class: 'num' }, 'Size'), 'State', ''], slots().map(slotRow), () => false, 'slots')),
+    SET?.error ? el('p', { class: 'notice block', style: 'margin-top:8px' }, `✕ These files cannot be read in full: ${SET.error}`) : null,
+    pending() ? el('p', { class: 'small quiet', style: 'margin-top:6px' }, `You added ${plural(Object.keys(ADDED).length, 'file')}. The engine reads a frozen copy, so using them saves the files as a new folder under ${STATE.inputs_dir}/. Your originals stay as they are.`) : null,
+    signOffBox()].filter(Boolean));
+}
+
+// --- step 1: settings ----------------------------------------------------------------------------------------------------
+
+const variantName = id => { const v = STATE.inputs.flatMap(r => r.variants).find(x => x.id === id); return v ? v.label.replace(/^AT-\d+\s+/, '').replace(/^./, c => c.toUpperCase()) : id; };
+const scenarioName = id => BASE()?.scenarios.find(s => s.id === id)?.label ?? id.replaceAll('_', ' ').replace(/^./, c => c.toUpperCase());
+const changedReadings = () => STATE.readings.filter(r => (DOC.run[r.field] ?? r.default) !== r.default);
+
+function setRun(key, value) {
+  DOC.run[key] = value;
+  if (key === 'balance_sheet' || key === 'variant') syncVolumes();
+  renderSettings();
+  check();
+}
+
+function setting(question, help, control) {
+  return el('div', { class: 'setting' }, el('div', {}, el('div', { class: 'q' }, question), help ? el('div', { class: 'h' }, help) : null), el('div', {}, control));
+}
+
+function radios(key, options) {
+  return el('div', { class: 'choice' }, options.map(o => el('label', { class: o.off ? 'off' : null },
+    el('input', { type: 'radio', name: `setting-${key}`, value: o.value, checked: (DOC.run[key] ?? DEFAULTS[key]) === o.value, disabled: !!o.off, onchange: () => setRun(key, o.value) }),
+    el('span', {}, o.label, o.standard ? el('span', { class: 'standard' }, ' (standard)') : null, o.off ? el('span', { class: 'standard' }, ` (${o.off})`) : null))));
+}
+
+function scenarioRow(id, i, ids) {
+  const own = DOC.scenarios?.[id];
+  const required = id === ANCHOR();
+  const include = el('input', { type: 'checkbox', checked: inRun().includes(id), disabled: required, title: required ? 'Every run needs this scenario' : null, 'aria-label': `include ${scenarioName(id)}`, onchange: e => { DOC.run.scenarios = ids.filter(x => (x === id ? e.target.checked : inRun().includes(x))); syncVolumes(); renderScenarios(); renderSettings(); check(); } });
+  const name = own ? el('input', { class: 'name', value: scenarioName(id), 'data-name': id, 'aria-label': 'scenario name', onchange: e => { if (renameScenario(id, e.target.value)) { renderScenarios(); renderSettings(); check(); } else e.target.value = scenarioName(id); } }) : el('b', {}, scenarioName(id));
+  let origin = 'Scenarios file';
+  if (own?.inherits) {
+    origin = select(ids.slice(0, i).map(x => ({ value: x, label: `Based on ${scenarioName(x)}` })), own.inherits, e => { own.inherits = e.target.value; renderScenarios(); check(); });
+    origin.className = 'inline';
+    origin.setAttribute('aria-label', `what ${scenarioName(id)} is based on`);
+  } else if (own) origin = 'Its own values';
+  const note = own ? el('input', { class: 'narrative', value: own.narrative ?? '', placeholder: 'What this scenario is', 'aria-label': 'what this scenario is', onchange: e => { own.narrative = e.target.value; check(); } }) : null;
+  return row([el('td', {}, include), el('td', { class: 'nowrap' }, dot(id), ' ', name), el('td', {}, origin), el('td', {}, required ? null : terminalControl(id)), el('td', {}, note), el('td', {}, own ? el('button', { class: 'action', type: 'button', onclick: () => removeScenario(id) }, 'Remove') : null)]);
+}
+
+function renderScenarios() {
+  const box = $('#scenarios-body');
+  if (!BASE()) {
+    $('#scenarios-tools').replaceChildren();
+    box.replaceChildren(el('p', { class: 'quiet small' }, 'The list comes from the Scenarios file, so it appears once the files are in use.'));
+    return;
+  }
+  $('#scenarios-tools').replaceChildren(el('button', { class: 'action', type: 'button', onclick: addScenario }, '+ Add a scenario'));
+  const editable = scenarioIds().filter(id => DOC.scenarios?.[id]?.inherits);
+  box.replaceChildren(...[
+    el('div', { class: 'scroll-x' }, table(['In run', 'Scenario', 'Comes from', 'After 2029', 'Description', ''], scenarioIds().map(scenarioRow), () => false, 'scenario-list')),
+    editable.length ? el('div', { class: 'scenario-grid', style: 'margin-top:8px' }, editable.map(id => scenarioCard(id, true))) : null].filter(Boolean));
+}
+
+const paramsNote = () => { const n = Object.keys(DOC.segments || {}).length; return n ? `${plural(n, 'segment')} changed from the file` : 'as in the file'; };
+
+function yamlBox() {
+  const textarea = el('textarea', { class: 'yaml', id: 'yaml', spellcheck: false, 'aria-label': 'the setup as the engine reads it', oninput: () => { yamlDirty = true; } });
+  textarea.value = yamlDirty ? $('#yaml')?.value ?? '' : PRE?.yaml ?? '';
+  return el('details', { class: 'method' }, el('summary', {}, el('b', {}, 'Advanced: edit the setup as YAML')),
+    textarea, el('div', { class: 'inrow', style: 'margin-top:5px' }, el('button', { class: 'action', type: 'button', onclick: applyYaml }, 'Apply')));
+}
+
+function renderSettings() {
+  const run = DOC.run;
+  $('#reset-settings').hidden = !(changedReadings().length || run.balance_sheet !== DEFAULTS.balance_sheet);
+  const bullet = BASE()?.variants.find(v => v.id === run.variant)?.bullet ?? true;
+  const changed = changedReadings();
+  const nodes = [
+    setting('Balance sheet', 'Whether the book changes size over the years.', radios('balance_sheet', [{ value: 'static', label: 'Static: the book stays as it is', standard: true }, { value: 'dynamic', label: 'Dynamic: you set yearly volume changes below' }])),
+    BASE() && run.balance_sheet === 'dynamic' ? volumesBox() : null,
+    el('details', { class: 'method', open: methodOpen || changed.length > 0, ontoggle: e => { methodOpen = e.target.open; } },
+      el('summary', {}, el('b', {}, 'Method choices'), el('span', { class: 'quiet' }, changed.length ? `${changed.length} changed from standard` : 'all on standard')),
+      el('p', { class: 'small quiet', style: 'margin:4px 0' }, 'The draft methodology can be read two ways on these four points. Stay on standard unless you want to test the other reading.'),
+      STATE.readings.map(r => setting(r.label, r.help, radios(r.field, Object.entries(r.choices).map(([value, label]) => ({ value, label, standard: value === r.default, off: value === r.bullet_only && !bullet ? 'needs bullet repayment' : null })))))),
+    BASE() ? el('details', { class: 'method', open: paramsOpen, ontoggle: e => { paramsOpen = e.target.open; } },
+      el('summary', {}, el('b', {}, 'Segment parameters'), el('span', { class: 'quiet', id: 'params-note' }, paramsNote())),
+      el('div', { class: 'scroll-x', style: 'margin-top:4px' }, segmentsTable(true)),
+      el('button', { class: 'link', type: 'button', style: 'margin-top:4px', onclick: () => { delete DOC.segments; open.drivers.clear(); renderSettings(); check(); } }, 'Back to the file\'s values')) : null,
+    BASE() ? yamlBox() : null];
+  $('#settings-body').replaceChildren(...nodes.filter(Boolean));
+}
+
+// --- the engine's verdict -------------------------------------------------------------------------------------------------
+
+const CHECK_STAGE = { specification: 'reading the setup', R1: 'opening the run', R2: 'loading the files', R3: 'validating the records', R4: 'building the scenarios' };
+
+function verdictBox() {
+  const box = el('div', { class: 'verdict' });
+  if (checking) {
+    box.replaceChildren(el('div', { class: 'head' }, 'Running the sanity checks…'), el('div', { class: 'line quiet' }, 'The engine reads the files and settings.'));
+  } else if (!PRE) {
+    box.replaceChildren(el('div', { class: 'head' }, 'Not checked yet'), el('div', { class: 'line quiet' }, 'They run once the files are in use.'));
+  } else if (PRE.blocked || PRE.fault) {
+    box.className = 'verdict block';
+    const stage = PRE.blocked?.code === 'INVALID_SPECIFICATION' ? 'reading your changes' : CHECK_STAGE[PRE.blocked?.step] ?? 'checking';
+    box.replaceChildren(el('div', { class: 'head' }, PRE.blocked ? `✕ Sanity checks found an error while ${stage}` : '✕ The check itself failed'),
+      el('div', { class: 'line' }, PRE.blocked ? PRE.blocked.message : PRE.fault.message));
+  } else {
+    const rejected = PRE.rejected > 0;
+    box.className = `verdict ${rejected ? 'warn' : 'ok'}`;
+    box.replaceChildren(el('div', { class: 'head' }, rejected ? `! Sanity checks done: ${plural(PRE.rejected, 'record')} will be left out` : '✓ Sanity checks done, no errors observed'),
+      rejected ? el('ul', {}, PRE.records.map(r => el('li', {}, r.details[0] ?? r.code.replaceAll('_', ' ').toLowerCase(), `: ${plural(r.records, 'record')}`, r.sample.length ? el('span', { class: 'quiet' }, ` (${r.sample.join(', ')}${r.records > r.sample.length ? '…' : ''})`) : null)))
+        : el('div', { class: 'line quiet' }, `The engine read the files and settings and accepted ${count(PRE.accepted)} facilities.`));
+  }
+  return box;
+}
+
+function differencesBox() {
+  const diff = PRE?.differences;
+  if (!diff || !(diff.differing.length || diff.unmeasured.length)) return null;
+  return el('details', { class: 'diff' },
+    el('summary', {}, `! These files differ from the requirements in ${plural(diff.differing.length, 'value')}${diff.unmeasured.length ? `, and ${plural(diff.unmeasured.length, 'comparison')} could not be made` : ''}`),
+    el('p', { class: 'quiet', style: 'margin:3px 0' }, `The engine does not check this, and a run still works. ${count(diff.compared)} values were compared with the requirements.`),
+    diff.differing.length ? el('div', { class: 'scroll-x' }, table(['Item', 'Is', 'Expected'], diff.differing.map(d => row([`${d.group}: ${d.item}`, `${Array.isArray(d.actual) ? d.actual.map(fixed).join(' to ') : fixed(d.actual)} ${d.unit}`, Array.isArray(d.expected) ? d.expected.map(fixed).join(' to ') : fixed(d.expected)], i => i > 0)))) : null,
+    diff.unmeasured.length ? el('ul', { style: 'margin:3px 0;padding-left:16px' }, diff.unmeasured.map(u => el('li', {}, `${u.group}: ${u.error}`))) : null);
+}
+
+function renderVerdict() {
+  $('#verdict-1').replaceChildren(...[verdictBox(), differencesBox()].filter(Boolean));
+  renderWhere();
+}
+
+// --- the engine's check --------------------------------------------------------------------------------------------
+
+function afterCheck() {
+  const note = $('#params-note');
+  if (note) note.textContent = paramsNote();
+  const yaml = $('#yaml');
+  if (yaml && PRE && !yamlDirty) yaml.value = PRE.yaml;
+  if (STEP === 1) renderVerdict(); else if (STEP === 2) renderEffective(); else if (STEP === 3) renderPlan();
+  renderWhere();
+}
+
+function check() {
+  clearTimeout(preTimer);
+  if (pending() || !SET?.base) {  // the engine reads a saved folder; files still on the list have none yet
+    ++preTicket;
+    checking = false;
+    PRE = null;
+    afterCheck();
+    return;
+  }
+  checking = true;
+  afterCheck();
+  preTimer = setTimeout(async () => {
+    const ticket = ++preTicket;
+    try {
+      const answer = await api('/api/preflight', { document: DOC, name: setupName });
+      if (ticket !== preTicket) return;
+      PRE = answer;
+      clearProblem();
+    } catch (fault) {
+      if (ticket !== preTicket) return;
+      PRE = null;
+      problem(fault.message === 'not found' ? 'This server started before the page changed. Stop it with Ctrl+C and start it again.' : fault.message);
+    }
+    checking = false;
+    afterCheck();
+  }, 350);
+}
+
+// --- step 2: what is in the files ---------------------------------------------------------------------------------
+
+function fileCard(name, file, summary, ...body) {
+  return el('details', { class: 'file', open: true }, el('summary', {}, el('b', {}, file), el('span', { class: 'quiet' }, summary)), el('div', { class: 'body' }, body));
+}
+
+function previewBox(name) {
+  const host = el('div');
+  const draw = async (offset = 0, q = '') => {
+    try {
+      const page = await api(`/api/inputs/${SET.folder.split('/')[1]}/preview?table=${name}&offset=${offset}&q=${encodeURIComponent(q)}`);
+      open.previews.set(name, { offset, q });
+      host.replaceChildren(
+        el('div', { class: 'inrow', style: 'margin-bottom:5px' }, el('input', { class: 'search', style: 'width:220px', placeholder: 'find text in any column', value: q, onchange: e => draw(0, e.target.value.trim()) }),
+          el('span', { class: 'quiet small' }, `${count(page.total)} rows${q ? ' match' : ''} · showing ${page.total ? page.offset + 1 : 0} to ${Math.min(page.total, page.offset + page.page)}`),
+          el('button', { class: 'action', type: 'button', disabled: page.offset === 0, onclick: () => draw(Math.max(0, page.offset - page.page), q) }, '← Previous'),
+          el('button', { class: 'action', type: 'button', disabled: page.offset + page.page >= page.total, onclick: () => draw(page.offset + page.page, q) }, 'Next →')),
+        el('div', { class: 'scroll-x' }, table(page.columns, page.rows.map(r => el('tr', {}, r.map(v => el('td', {}, v === null ? el('span', { class: 'quiet' }, gone) : String(v))))), () => false, 'preview')));
+    } catch (fault) {
+      host.replaceChildren(el('p', { class: 'notice block' }, `✕ ${fault.message}`));
+    }
+  };
+  const box = el('details', { class: 'twin', ontoggle: e => { if (e.target.open && !host.childElementCount) draw(open.previews.get(name)?.offset ?? 0, open.previews.get(name)?.q ?? ''); } }, el('summary', {}, 'Rows'), host);
+  return box;
+}
+
+function matrixBox() {
+  const s = SET.summary.ttc_pd_matrix;
+  const host = el('div', { class: 'scroll-x' });
+  const draw = async segment => {
+    open.matrix = segment;
+    try {
+      const m = await api(`/api/inputs/${SET.folder.split('/')[1]}/matrix?segment=${encodeURIComponent(segment)}`);
+      const heat = v => (v === null ? '' : `background: color-mix(in srgb, var(--stage-2) ${Math.round(Math.min(1, v) * 85)}%, transparent)`);
+      host.replaceChildren(table([el('th', {}, 'from \\ to'), ...m.grades.map(g => el('th', {}, g))],
+        m.grid.map((cells, i) => el('tr', {}, el('td', {}, m.grades[i]), ...cells.map(v => el('td', { style: heat(v), title: v === null ? '' : v.toFixed(6) }, v === null ? gone : v === 0 ? '·' : v < 0.0005 ? '<0.1%' : pct(v, 1))))), () => false, 'heat'));
+    } catch (fault) { host.replaceChildren(el('p', { class: 'notice block' }, `✕ ${fault.message}`)); }
+  };
+  const pick = select(s.segments.map(x => ({ value: x, label: x })), open.matrix ?? s.segments[0], e => draw(e.target.value));
+  pick.className = 'inline';
+  draw(open.matrix ?? s.segments[0]);
+  return el('div', {}, el('div', { class: 'inrow', style: 'margin-bottom:5px' }, el('span', { class: 'small' }, 'Segment'), pick), host);
+}
+
+function chips(items, unit = '') {
+  return el('div', { class: 'chips' }, items.map(([name, n]) => el('span', { class: 'chip' }, `${name} ${count(n)}${unit}`)));
+}
+
+function renderContents() {
+  const box = $('#contents-body');
+  if (!SET?.summary || !SET.base) { box.replaceChildren(el('p', { class: 'notice block' }, `✕ The files cannot be summarised: ${SET?.error ?? 'none are in use'}`)); return; }
+  const s = SET.summary, base = SET.base;
+  const f = s.facilities;
+  const cards = [
+    el('div', { class: 'card' },
+      fileCard('facilities', 'facilities.parquet', `${count(f.rows)} facilities × ${f.columns} columns · €${one.format(f.gca / 1000)}bn gross carrying amount · snapshot ${f.snapshot}`,
+        el('div', { class: 'scroll-x' }, table(['Portfolio', '', 'Products', 'Facilities', 'Gross carrying amount, EUR m', 'S1', 'S2', 'S3', 'S3 share'],
+          f.by_portfolio.map(p => row([p.portfolio, el('td', { class: 'quiet' }, p.name ?? ''), p.products.join(', ').replaceAll('_', ' '), count(p.facilities), amount(p.gca), amount(p.stage_gca[1]), amount(p.stage_gca[2]), amount(p.stage_gca[3]), pct(ratio(p.stage_gca[3], p.gca))], i => i >= 3)), i => i >= 3)),
+        previewBox('facilities')),
+      fileCard('obligors', 'obligors.parquet', `${count(s.obligors.rows)} obligors × ${s.obligors.columns} columns${s.obligors.groups ? ` · ${count(s.obligors.groups)} groups` : ''}`,
+        el('p', { class: 'small quiet' }, 'By country'), chips(s.obligors.countries), el('p', { class: 'small quiet' }, 'By counterparty sector'), chips(s.obligors.sectors), previewBox('obligors')),
+      fileCard('commitments', 'commitments.parquet', `${count(s.commitments.rows)} commitments × ${s.commitments.columns} columns · €${one.format(s.commitments.undrawn)}m undrawn`,
+        el('div', { class: 'scroll-x' }, table(['Portfolio', 'Commitments', 'Undrawn, EUR m', 'Mean conversion factor'], s.commitments.by_portfolio.map(p => row([p.portfolio, count(p.commitments), amount(p.undrawn), p.ccf === null ? gone : pct(p.ccf, 0)], i => i >= 1)), i => i >= 1)),
+        previewBox('commitments')),
+      fileCard('opening_provisions', 'opening_provisions.parquet', `${count(s.opening_provisions.rows)} rows × ${s.opening_provisions.columns} columns · €${one.format(s.opening_provisions.allowance_on)}m on-balance allowances, €${one.format(s.opening_provisions.provision_off)}m off-balance provisions`,
+        el('div', { class: 'scroll-x' }, table(['Portfolio', 'Allowance on, EUR m', 'Provision off, EUR m'], s.opening_provisions.by_portfolio.map(p => row([p.portfolio, amount(p.allowance_on), amount(p.provision_off)], i => i >= 1)), i => i >= 1)),
+        previewBox('opening_provisions')),
+      fileCard('ttc_pd_matrix', 'ttc_pd_matrix.parquet', `${count(s.ttc_pd_matrix.rows)} cells · ${s.ttc_pd_matrix.segments.length} segments · grades ${s.ttc_pd_matrix.grades.join(', ')}`, matrixBox(), previewBox('ttc_pd_matrix'))),
+    el('div', { class: 'card' }, el('h2', {}, 'scenarios.yaml ', el('span', { class: 'quiet', style: 'font-weight:400;font-size:12px' }, `${plural(scenarioIds().length, 'scenario')} · ${base.variables.length} variables · countries ${base.countries.join(', ')} · years ${years().join(', ')}`)),
+      el('div', { class: 'scenario-grid' }, scenarioIds().map(id => scenarioCard(id)))),
+    el('div', { class: 'card' }, el('h2', {}, 'parameter_set.yaml'), el('div', { class: 'scroll-x' }, segmentsTable())),
+  ];
+  box.replaceChildren(...cards);
+}
+
+function numberInput(current, placeholder, onvalue, attrs = {}) {
+  const input = el('input', { class: `num${current !== null && current !== undefined ? ' changed' : ''}`, type: 'number', step: 'any', value: fixed(current), placeholder: fixed(placeholder), ...attrs });
+  input.addEventListener('input', () => {
+    const text = input.value.trim();
+    if (text === '') { input.classList.remove('changed', 'bad'); onvalue(null); check(); return; }
+    const value = Number(text);
+    if (!Number.isFinite(value)) { input.classList.add('bad'); return; }
+    input.classList.remove('bad');
+    input.classList.add('changed');
+    onvalue(value);
+    check();
+  });
+  return input;
+}
+
+function terminalControl(name) {
+  const policy = DOC.terminal_policies?.[name];
+  const method = policy?.method ?? 'base';
+  const rule = BASE()?.terminal_rule;
+  const yearsInput = numberInput(policy?.years ?? null, rule?.reversion_years, v => setTerminal(name, 'reversion', v ?? rule?.reversion_years), { min: 1, step: 1, style: 'width:52px', title: 'years to revert to baseline after 2029' });
+  const pick = select([
+    { value: 'base', label: `Returns to baseline over ${rule?.reversion_years ?? '?'} years` },
+    { value: 'flat', label: 'Stays at its last Z' },
+    { value: 'reversion', label: 'Returns to baseline over' },
+  ], method, e => { setTerminal(name, e.target.value, policy?.years ?? rule?.reversion_years); renderScenarios(); check(); });
+  pick.className = 'inline';
+  pick.setAttribute('aria-label', `${scenarioName(name)} after 2029`);
+  return el('span', { style: 'display:inline-flex;gap:5px;align-items:center' }, pick, method === 'reversion' ? [yearsInput, el('span', { class: 'quiet small' }, 'years')] : null);
+}
+
+function scenarioCard(name, editable = false) {
+  const spec = DOC.scenarios?.[name];
+  const isDerived = !!spec;
+  const head = [dot(name), el('b', {}, scenarioName(name))];
+  if (isDerived) head.push(el('span', { class: 'quiet small' }, spec.inherits ? `based on ${scenarioName(spec.inherits)}` : 'its own values'));
+  if (!inRun().includes(name)) head.push(el('span', { class: 'quiet small' }, 'not in this run'));
+  const foreign = (spec?.overrides || []).filter(o => o.country !== '*').length;
+  const explicit = spec && !spec.inherits && spec.values;
+  const grid = table([el('th', {}, 'Common path, all countries'), ...years().map(y => el('th', { class: 'cell' }, String(y)))],
+    (BASE()?.variables || []).map(v => row([el('td', {}, el('span', { title: v.id }, v.label), el('span', { class: 'quiet' }, ` · ${v.unit}`)),
+      ...years().map(y => {
+        const got = effective(name, v.id, y);
+        if (!editable || !isDerived || explicit) return el('td', { class: 'cell' }, got.value === null ? el('span', { class: 'quiet', title: 'differs by country' }, 'by country') : fixed(got.value));
+        const own = ownOverride(name, v.id, y);
+        const parent = effective(spec.inherits, v.id, y);
+        return el('td', { class: 'cell' }, numberInput(own ? inBaseUnit(own, v.id) : null, parent.value, value => setOverride(name, v.id, y, value),
+          { title: parent.value === null ? `${spec.inherits} differs by country here; a value you type applies to every country` : `${spec.inherits}: ${fixed(parent.value)} ${v.unit}` }));
+      })])));
+  return el('div', { class: `scenario${isDerived ? ' derived' : ''}` }, el('div', { class: 'head' }, head),
+    el('div', { class: 'scroll-x' }, grid),
+    editable && foreign ? el('p', { class: 'small quiet', style: 'margin-top:4px' }, `Also ${plural(foreign, 'country-specific value')}, editable in the YAML.`) : null);
+}
+
+function segmentRow(name, base, isNew, editable) {
+  const again = () => (editable ? renderSettings() : renderContents());
+  const held = DOC.segments?.[name] || {};
+  const showing = open.drivers.has(name);
+  const cells = [el('td', {}, el('b', {}, name), isNew ? el('span', { class: 'quiet' }, ` new, from ${held.inherits}`) : null),
+    el('td', { class: 'quiet' }, (id => BASE().portfolios.find(p => p.id === id)?.name ?? id ?? '')(held.portfolio ?? base.portfolio)),
+    el('td', { class: 'num' }, base.facilities === undefined ? gone : count(base.facilities)),
+    el('td', { class: 'num' }, base.gca === undefined ? gone : amount(base.gca))];
+  for (const field of FIELDS) cells.push(editable ? el('td', { class: 'cell' }, numberInput(held[field] ?? null, base[field], v => setSegment(name, field, v), { title: `${FIELD_HELP[field]}; in the file ${fixed(base[field])}` })) : el('td', { class: 'cell', title: FIELD_HELP[field] }, fixed(held[field] ?? base[field])));
+  const models = Object.keys(DOC.models || {});
+  const drivers = driversOf(name);
+  const model = held.macro_model ?? base.macro_model ?? '';
+  cells.push(el('td', { class: 'nowrap' },
+    models.length && editable ? (() => { const s = select([{ value: '', label: 'Z drivers' }, ...models.map(m => ({ value: m, label: `model ${m}` }))], model, e => { setSegment(name, 'macro_model', e.target.value || null); renderSettings(); check(); }); s.className = 'inline'; return s; })() : !editable && model ? model : null,
+    model ? null : el('button', { class: 'link', type: 'button', onclick: () => { showing ? open.drivers.delete(name) : open.drivers.add(name); again(); } }, `${Object.keys(drivers).length} drivers${held.z_drivers ? ', changed' : ''} ${showing ? '▴' : '▾'}`)));
+  const rows = [el('tr', {}, cells)];
+  if (showing && !model) {
+    const baseDrivers = BASE().segments[name]?.z_drivers ?? BASE().segments[held.inherits]?.z_drivers ?? {};
+    rows.push(el('tr', { class: 'drivers' }, el('td', { colSpan: 4 + FIELDS.length + 1 }, el('div', { class: 'drivers' },
+      table(['Driver', 'beta', 'mean', 'sd'], Object.entries(drivers).map(([driver, c]) => row([driver,
+        ...['beta', 'mean', 'sd'].map(key => el('td', { class: 'cell' }, editable ? numberInput(c[key] === baseDrivers[driver]?.[key] ? null : c[key], baseDrivers[driver]?.[key], v => setDriver(name, driver, key, v ?? baseDrivers[driver]?.[key]), { title: `${driver} ${key}; file ${fixed(baseDrivers[driver]?.[key])}` }) : fixed(c[key])))])))))));
+  }
+  return rows;
+}
+
+function segmentsTable(editable = false) {
+  const base = BASE();
+  const names = [...Object.keys(base.segments), ...Object.keys(DOC.segments || {}).filter(n => !base.segments[n])];
+  const headers = ['Segment', 'Portfolio', 'Facilities', 'Gross carrying amount, EUR m', ...FIELDS.map(f => el('th', { class: 'cell', style: 'white-space:normal;min-width:78px;vertical-align:bottom', title: FIELD_HELP[f] }, FIELD_NAME[f])), 'Macro model'];
+  return table(headers, names.flatMap(name => {
+    const held = DOC.segments?.[name] || {};
+    const b = base.segments[name] ?? { ...(base.segments[held.inherits] ?? {}), facilities: undefined, gca: undefined };
+    return segmentRow(name, b, !base.segments[name], editable);
+  }));
+}
+
+function volumesBox() {
+  const portfolios = BASE().portfolios.map(p => p.id);
+  const held = DOC.balance_sheet?.assumptions || [];
+  const cell = (s, y, p, key) => {
+    const item = held.find(a => a.scenario === s && a.year === y && a.portfolio === p);
+    return numberInput(item && item[key] !== 0 ? +(item[key] * 100).toPrecision(10) : null, 0, v => { item[key] = v === null ? 0.0 : +(v / 100).toPrecision(10); }, { title: `${s} ${y} ${p}: ${key.replace('_', ' ')} in percent of the prior performing stock`, style: 'width:60px' });
+  };
+  return el('div', { style: 'padding:6px 0 4px' },
+    el('p', { class: 'small quiet' }, 'Yearly change of the performing stock, in percent. In each pair: drawn, then undrawn. Blank is no change.'),
+    ...runOrder().map(s => el('div', { class: 'scenario', style: 'margin-top:6px' }, el('div', { class: 'head' }, dot(s), el('b', {}, scenarioName(s))),
+      el('div', { class: 'scroll-x' }, table(['Year', ...portfolios.map(p => el('th', { class: 'cell', colSpan: 2 }, p))],
+        years().map(y => el('tr', {}, el('td', {}, String(y)), ...portfolios.flatMap(p => [el('td', { class: 'cell', style: 'padding-right:2px' }, cell(s, y, p, 'drawn_change')), el('td', { class: 'cell' }, cell(s, y, p, 'undrawn_change'))]))))))));
+}
+
+async function applyYaml() {
+  try {
+    const answer = await api('/api/yaml', { yaml: $('#yaml').value });
+    DOC = answer.document;
+    yamlDirty = false;
+    clearProblem();
+    if (DOC.run.inputs !== SET?.folder) await loadSet(DOC.run.inputs); else if (SET?.base) DOC.input_set_hash = SET.base.hash;
+    renderStep(); check();
+  } catch (fault) {
+    problem(`the YAML is refused: ${fault.message}`);
+  }
+}
+
+function renderEffective() {
+  $('#effective-body').replaceChildren(zTable());
+  renderWhere();
+}
+
+function zTable() {
+  if (!PRE?.z) return el('p', { class: 'quiet small' }, 'Not reached.');
+  const order = runOrder();
+  const cells = new Map(PRE.z.map(z => [`${z.segment}|${z.scenario}|${z.year}`, z]));
+  const segments = [...new Set(PRE.z.map(z => z.segment))].sort();
+  const headers = [el('th', {}, 'Segment'), ...order.flatMap(name => years().map((y, i) => el('th', { class: `cell${i === 0 ? ' scen' : ''}`, title: scenarioName(name) }, i === 0 ? [dot(name), ` ${scenarioName(name)} ${y}`] : String(y))))];
+  const rows = segments.map(segment => el('tr', {}, el('td', {}, segment), ...order.flatMap(name => years().map(y => {
+    const z = cells.get(`${segment}|${name}|${y}`);
+    if (!z) return el('td', { class: 'z quiet' }, gone);
+    const spread = z.min !== z.max ? ` (${z.min.toFixed(2)} to ${z.max.toFixed(2)} across countries)` : '';
+    return el('td', { class: `z${z.mean < -0.5 ? ' stress' : z.mean > 0.5 ? ' lift' : ''}`, title: `${segment}, ${scenarioName(name)} ${y}: Z ${z.mean.toFixed(3)}${spread}` }, z.mean.toFixed(2));
+  }))));
+  return el('div', { class: 'scroll-x' }, table(headers, rows));
+}
+
+// --- step 3: run -------------------------------------------------------------------------------------------------------
+
+const CHANGE_NAMES = { scenarios: 'new scenarios', segments: 'segment parameters', terminal_policies: 'paths after 2029', balance_sheet: 'yearly volumes', models: 'macro models', assignments: 'segment assignments', reporting: 'reporting classes', additional_values: 'extra driver values' };
+const changeNames = () => (DOC ? adjusted().map(name => CHANGE_NAMES[name]) : []);
+function startRun() { startJob('/api/start', { document: DOC, name: setupName }); }
+
+function renderPlan() {
+  const box = $('#plan-body');
+  const run = DOC.run;
+  const chosen = STATE.inputs.find(r => r.inputs === run.inputs);
+  const methods = changedReadings().map(r => `${r.label}: ${r.choices[run[r.field]]}`);
+  const items = [
+    ['Files', chosen ? setName(chosen) : gone],
+    ['Scenarios', runOrder().map(scenarioName).join(', ')],
+    ...(run.variant === DEFAULTS.variant ? [] : [['Repayment and exposure', variantName(run.variant)]]),
+    ['Balance sheet', run.balance_sheet === 'dynamic' ? 'Dynamic, with your yearly volumes' : 'Static'],
+    ['Method choices', methods.length ? methods.join('; ') : 'All standard'],
+    ['Changes for this run', changeNames().length ? changeNames().join(', ') : 'None'],
+    ...(run.analysis ? [['Extra analysis', run.analysis.split('/').pop()]] : []),
+  ];
+  const nodes = [el('dl', { class: 'facts', style: 'display:grid;grid-template-columns:max-content minmax(0,1fr);gap:2px 12px;margin:0 0 8px' }, items.flatMap(([k, v]) => [el('dt', { class: 'quiet' }, k), el('dd', { style: 'margin:0;color:var(--fg)' }, v)]))];
+  if (PRE?.needs_specification) {
+    nodes.push(el('div', { class: 'inrow', style: 'margin-bottom:8px' }, el('span', { class: 'small' }, 'Name of this setup'), el('input', { class: 'name', style: 'width:230px', value: setupName, 'aria-label': 'name of this setup', onchange: e => { setupName = e.target.value.trim(); DOC.version = setupName; check(); } })));
+  }
+  if (checking || PRE?.verdict !== 'ready') nodes.push(verdictBox());
+  nodes.push(el('details', { class: 'twin' }, el('summary', {}, 'The exact command'), el('div', { class: 'command' }, checking ? 'Checking…' : PRE?.shown ?? '')));
+  box.replaceChildren(...nodes);
+}
+
+// --- jobs: run, rerun, package, approve ----------------------------------------------------------------------------------
+
+async function startJob(path, body) {
+  try {
+    const job = await api(path, body);
+    watching = true;
+    showJob(job);
+    poll();
+  } catch (fault) {
+    problem(fault.message);
+  }
+}
+
+const END_TEXT = { sealed: ['ok', '✓', 'Finished'], blocked: ['block', '✕', 'Stopped'], fault: ['block', '✕', 'Failed'], not_reproduced: ['block', '✕', 'Did not reproduce'], done: ['ok', '✓', 'Done'] };
+
+function progressText(job) {
+  const codes = Object.keys(STATE.steps);
+  return `step ${codes.indexOf(job.step) + 1} of ${codes.length}, ${job.detail}`;
+}
+
+function showOneOff(job) {
+  const saving = job.kind === 'package';
+  const running = job.state === 'running', good = job.state === 'done';
+  const text = running ? (saving ? 'Saving your files…' : 'Recording the sign-off…')
+    : good ? (saving ? '✓ Your files are saved and in use.' : '✓ Signed off.')
+      : `✕ ${saving ? 'The files could not be saved' : 'The sign-off could not be recorded'}. ${job.message ?? ''}`;
+  $('#files-note').replaceChildren(el('div', { class: `notice ${running ? '' : good ? 'ok' : 'block'}`, style: 'margin:8px 0 0' }, text, running || good ? null : el('pre', { class: 'job-log' }, job.log.join('\n'))));
+}
+
+function showJob(job) {
+  JOB = job;
+  jobRunning = job.state === 'running';
+  if (!engineJob(job)) { showOneOff(job); renderWhere(); return; }
+  const [kind, icon, word] = END_TEXT[job.state] ?? ['block', '✕', job.state];
+  const codes = Object.keys(STATE?.steps || {});
+  const at = codes.indexOf(job.step);
+  const pips = el('div', { class: 'pips', role: 'img', 'aria-label': progressText(job) }, codes.map((code, i) => {
+    let state = '';
+    if (job.state === 'sealed' || job.state === 'not_reproduced') state = 'done';
+    else if (job.state === 'running' && code === job.step) state = 'active';
+    else if (job.state !== 'running' && code === job.step) state = 'failed';
+    else if (job.reached.includes(code) || i < at) state = 'done';
+    return el('div', { class: `pip ${state}`, title: STATE?.steps[code] ?? '' });
+  }));
+  const verb = job.kind === 'rerun' ? 'Repeat run' : 'Run';
+  const reproduced = job.kind === 'rerun' && job.state === 'sealed';
+  $('#job-body').replaceChildren(
+    el('div', { class: 'job-state' }, el('span', {}, job.state === 'running' ? `${verb} in progress: ${progressText(job)}` : `${verb} ended`), el('span', { class: 'quiet' }, `${job.elapsed.toFixed(0)} s`)),
+    pips,
+    ...(job.state === 'running' ? [] : [el('p', { class: `notice ${kind}`, style: 'margin:6px 0 0' }, `${icon} ${reproduced ? 'Reproduced: every output matches' : word}`, job.message && job.state !== 'sealed' ? el('span', { class: 'small', style: 'display:block' }, job.message) : null)]),
+    el('details', { class: 'twin', open: job.state === 'fault' }, el('summary', {}, 'Engine log'), el('pre', { class: 'job-log' }, job.log.join('\n'))));
+  renderWhere();
+}
+
+async function poll() {
+  let job;
+  try { job = await api('/api/job'); } catch { jobRunning = false; problem('The server stopped. A run in progress still finishes.'); return; }
+  if (job.state === 'idle') return;
+  if (engineJob(job) || job.state === 'running' || watching) showJob(job);
+  if (job.state === 'running') { watching = true; setTimeout(poll, 600); return; }
+  if (!watching) return;
+  watching = false;
+  await reloadState();
+  if (job.kind === 'package') {
+    if (job.state === 'done' && job.input_set) await chooseSet(`${STATE.inputs_dir}/${job.input_set}`); else renderStep();
+  } else if (job.kind === 'approve') {
+    await loadSet(DOC.run.inputs); renderStep();
+  } else if (job.kind === 'run' && job.state === 'sealed' && job.run_id) {
+    finishedAt = new Date().toISOString();
+    await selectRun(job.run_id);
+    if (STEP === 3) goTo(4);
+  } else if (job.kind === 'rerun') {
+    renderRuns();
+  } else renderStep();
+  renderWhere();
+}
+
+// --- step 4: outcomes -------------------------------------------------------------------------------------------------
+
+function settingsOf(run) {
+  const parts = run.variant === DEFAULTS.variant ? [] : [variantName(run.variant)];
+  const picked = (run.selected || '').split(',').filter(Boolean);
+  for (const reading of STATE.readings) for (const [value, label] of Object.entries(reading.choices)) if (value !== reading.default && picked.includes(value)) parts.push(label);
+  if (run.balance_sheet === 'dynamic') parts.push('dynamic balance sheet');
+  if (run.specification) parts.push(/^setup-\d{8}-\d{4}$/.test(run.specification) ? 'With your changes' : `Setup ${run.specification}`);
+  if (run.analysis) parts.push('extra analysis');
+  return parts.length ? parts.join(', ') : 'Standard settings';
+}
+const runName = run => `${stamp(run.created_at)}: ${(run.scenarios || []).map(scenarioName).join(', ')}`;
+
+function renderRunSelect() {
+  const runs = STATE.runs.filter(r => r.status !== 'UNSEALED');
+  $('#run-select').replaceChildren(...runs.map(r => el('option', { value: r.run_id, selected: r.run_id === selectedRun }, runName(r))));
+  if (!selectedRun && runs.length) selectRun(runs[0].run_id);
+}
+
+function renderRuns() {
+  const runs = STATE.runs;
+  if (!runs.length) { $('#runs-body').replaceChildren(el('p', { class: 'notice' }, 'No run yet.')); return; }
+  const scenarios = [...new Set(runs.flatMap(r => Object.keys(r.headline || {})))].sort((a, b) => (a === ANCHOR() ? -1 : b === ANCHOR() ? 1 : a.localeCompare(b)));
+  const headers = ['Started', 'Scenarios', 'Settings', ...scenarios.map(s => el('th', { class: 'num', title: `cumulative charge, ${s}, EUR m` }, `${scenarioName(s)} charge`)), ''];
+  const rows = runs.slice(0, 40).map(run => {
+    const settings = run.status === 'UNSEALED' ? 'Did not finish' : run.status === 'BLOCKED' ? `Stopped: ${settingsOf(run)}` : settingsOf(run);
+    const cells = [run.created_at ? stamp(run.created_at) : gone, (run.scenarios || []).map(scenarioName).join(', '), settings,
+      ...scenarios.map(s => el('td', { class: 'num' }, run.headline?.[s] ?? gone)),
+      el('td', { class: 'nowrap' }, run.status === 'UNSEALED' ? null : el('button', { class: 'link', type: 'button', onclick: e => { e.stopPropagation(); loadRunSetup(run.run_id); } }, 'Load its setup'))];
+    return row(cells, () => false, { class: `pick${run.run_id === selectedRun ? ' picked' : ''}`, onclick: () => run.status !== 'UNSEALED' && selectRun(run.run_id) });
+  });
+  $('#runs-body').replaceChildren(el('div', { class: 'scroll-x' }, table(headers, rows)));
+}
+
+async function selectRun(id) {
+  if (!id) return;
+  selectedRun = id;
+  const ticket = ++runTicket;
+  try {
+    const answer = await api(`/api/runs/${encodeURIComponent(id)}`);
+    if (ticket !== runTicket) return;
+    RESULT = answer;
+  } catch (fault) {
+    if (ticket !== runTicket) return;
+    RESULT = null;
+    $('#result-head').replaceChildren(el('p', { class: 'notice block' }, `✕ ${fault.message}. Nothing from this run is shown.`));
+    $('#result-body').replaceChildren();
+  }
+  if (STEP === 4) { renderRunSelect(); renderRuns(); renderResult(); }
+  renderWhere();
+}
+
+async function selectCompare(id) {
+  const ticket = ++compareTicket;
+  try {
+    const answer = id ? await api(`/api/runs/${encodeURIComponent(id)}`) : null;
+    if (ticket !== compareTicket) return;
+    COMPARE = answer;
+    renderResult();
+  } catch (fault) {
+    if (ticket !== compareTicket) return;
+    COMPARE = null;
+    problem(`cannot compare: ${fault.message}`);
+  }
+}
+
+function renderResult() {
+  const run = RESULT;
+  const head = $('#result-head'), body = $('#result-body');
+  if (!run) { head.replaceChildren(el('p', { class: 'quiet small' }, 'No sealed run yet.')); body.replaceChildren(); return; }
+  const link = (key, label) => run.files[key] && el('a', { class: 'action', href: `/api/runs/${encodeURIComponent(run.run_id)}/${key}`, target: key === 'report' ? null : '_blank', rel: 'noopener' }, label);
+  const others = STATE.runs.filter(r => r.status !== 'UNSEALED' && r.status !== 'BLOCKED' && r.run_id !== run.run_id);
+  const compare = el('select', { class: 'inline', 'aria-label': 'compare with', onchange: e => selectCompare(e.target.value) },
+    el('option', { value: '' }, 'Compare with…'), others.map(r => el('option', { value: r.run_id, selected: COMPARE?.run_id === r.run_id }, runName(r))));
+  const left = run.rejections?.records;
+  head.replaceChildren(...[
+    el('p', { class: 'sub' }, `${settingsOf(run)}.${left ? ` ${plural(left, 'record')} left out.` : ''}`),
+    el('div', { class: 'actions' }, link('report', 'Excel workbook'), link('summary', 'Summary'), link('log', 'Run log'),
+      el('button', { class: 'action', type: 'button', disabled: !run.replay.possible || run.status === 'BLOCKED' || jobRunning, title: run.replay.possible ? 'Runs it again and confirms that every output matches' : run.replay.reason, onclick: async () => { await startJob('/api/rerun', { run_id: run.run_id }); goTo(3); } }, 'Check it reproduces'),
+      compare),
+    run.blocked ? el('p', { class: 'notice block' }, `✕ This run stopped. ${run.blocked.message}`) : null,
+    !run.blocked && !run.results ? el('p', { class: 'notice warn' }, `! No summary for this run: ${run.unreadable}`) : null].filter(Boolean));
+  if (!run.results) { body.replaceChildren(); return; }
+  const r = run.results;
+  const worst = [...r.scenarios].sort((a, b) => r.kpis[b].cumulative - r.kpis[a].cumulative)[0];
+  const charts = [
+    chartCard('Annual charge, EUR m', `${scenarioName(worst)}: ${pct(ratio(r.kpis[worst].first_year, r.kpis[worst].cumulative), 0)} lands in ${r.first}`, r, chargeChart, chargeTable(r)),
+    chartCard('Provisions at year-end, EUR m', `${scenarioName(worst)}: ${eur(r.impairment[worst][0].opening)} to ${eur(r.kpis[worst].closing)}`, r, stockChart, stockTable(r)),
+    chartCard('Gross carrying amount by stage, EUR bn', `${scenarioName(worst)}: S3 ${pct(ratio(r.kpis[worst].s3_gca, r.kpis[worst].closing_gca))} of the book by ${r.last}`, r, stageChart, stageTable(r)),
+    portfolioCard(r, worst),
+  ];
+  body.replaceChildren(el('div', { class: 'grid-4' }, kpiTiles(r)), el('div', { class: 'grid-2 stacked' }, charts));
+  charts.forEach(node => node.draw?.());
+}
+
+function kpiTiles(r) {
+  const line = (name, measure, extra) => {
+    const kpi = r.kpis[name];
+    const before = COMPARE?.results?.kpis?.[name];
+    const delta = before ? kpi[measure] - before[measure] : null;
+    return [
+      el('div', { class: 'row' }, el('span', { class: 'dot', style: `background:${colourOf(name)}` }), el('span', { class: 'name', title: scenarioName(name) }, scenarioName(name)), el('span', { class: 'amount' }, eur(kpi[measure]))),
+      el('div', { class: 'row' }, el('span', {}), el('span', { class: 'extra' }, [extra(kpi), COMPARE ? (delta === null ? 'not in the compared run' : `${signedEur(delta)} vs compared`) : null].filter(Boolean).join(' · '))),
+    ];
+  };
+  const tile = (label, measure, extra) => el('div', { class: 'card kpi' }, el('div', { class: 'label' }, label), r.scenarios.map(name => line(name, measure, extra)));
+  return [
+    tile(`Cumulative charge ${r.first}–${r.last}`, 'cumulative', k => `${pct(ratio(k.cumulative, k.opening_gca))} of opening gross carrying amount`),
+    tile(`Charge in ${r.first}`, 'first_year', k => `${pct(ratio(k.first_year, k.cumulative), 0)} of the total`),
+    tile(`Closing provisions ${r.last}`, 'closing', k => `coverage ${pct(k.coverage)}`),
+    tile(`S3 gross carrying amount ${r.last}`, 's3_gca', k => `${pct(ratio(k.s3_gca, k.closing_gca))} of gross carrying amount`),
+  ];
+}
+
+// --- charts ----------------------------------------------------------------------------------------------------------------
+
+function chartCard(title, sub, r, drawer, twinTable) {
+  const host = el('div', { class: 'host' });
+  const legend = el('div', { class: 'legend' });
+  const node = el('div', { class: 'card' }, el('h3', {}, title), el('p', { class: 'sub' }, sub), legend, host, twinTable);
+  node.draw = () => drawer(host, legend, r);
+  return node;
+}
+function legendOf(box, items, shape = '') {
+  box.replaceChildren(...items.map(entry => el('span', {}, el('i', { class: `key ${shape}`, style: `background:${entry.colour}` }), entry.name)));
+}
+function twin(headers, rows) {
+  return el('details', { class: 'twin' }, el('summary', {}, 'Table'), el('div', { class: 'scroll-x' }, el('table', {},
+    el('thead', {}, el('tr', {}, headers.map((h, i) => el('th', { class: i ? 'num' : null }, h)))),
+    el('tbody', {}, rows.map(cells => el('tr', {}, cells.map((cell, i) => el('td', { class: i ? 'num' : null }, cell))))))));
+}
+const chargeTable = r => twin(['Scenario', ...r.years.map(String), 'Cumulative'], r.scenarios.map(name => [scenarioName(name), ...r.impairment[name].map(x => amount(x.charge)), amount(r.kpis[name].cumulative)]));
+const stockTable = r => twin(['Scenario', 'Opening', ...r.years.map(String)], r.scenarios.map(name => [scenarioName(name), amount(r.impairment[name][0].opening), ...r.impairment[name].map(x => amount(x.closing))]));
+const stageTable = r => twin(['Scenario', 'Year', 'S1', 'S2', 'S3', 'Coverage S1', 'S2', 'S3'], r.scenarios.flatMap(name => r.stages[name].map(x => [scenarioName(name), String(x.year), amount(x.stock[1]), amount(x.stock[2]), amount(x.stock[3]), pct(x.coverage[1], 2), pct(x.coverage[2]), pct(x.coverage[3])])));
+
+const NS = 'http://www.w3.org/2000/svg';
+function svg(tagName, attrs = {}, parent = null, text = null) {
+  const node = document.createElementNS(NS, tagName);
+  for (const [key, value] of Object.entries(attrs)) if (value !== undefined && value !== null) node.setAttribute(key, value);
+  if (text !== null) node.textContent = text;
+  if (parent) parent.appendChild(node);
+  return node;
+}
+const redraws = new Map();
+const sizer = new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const redraw = redraws.get(entry.target);
+    const width = Math.round(entry.contentRect.width);
+    if (redraw && width && width !== redraw.width) { redraw.width = width; redraw(); }
+  }
+});
+function chart(host, draw) {
+  draw.width = Math.round(host.clientWidth);
+  redraws.set(host, draw);
+  sizer.observe(host);
+  draw();
+}
+function frame(host, height, label) {
+  const width = Math.max(host.clientWidth, 200);
+  const root = svg('svg', { width, height, viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': label });
+  host.replaceChildren(root);
+  return { root, width };
+}
+function ticks(low, high, n = 4) {
+  const raw = ((high - low) || 1) / n;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * magnitude).find(s => s >= raw);
+  const out = [];
+  for (let v = Math.floor(low / step) * step; v < high + step * 0.999; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+function yAxis(root, values, y, left, right) {
+  for (const v of values) {
+    svg('line', { class: v === 0 ? 'axisline' : 'gridline', x1: left, x2: right, y1: y(v), y2: y(v) }, root);
+    svg('text', { class: 'tick', x: left - 6, y: y(v) + 3.5, 'text-anchor': 'end' }, root, v.toLocaleString('en-GB'));
+  }
+}
+function columnPath(x, width, base, end, radius = 4) {
+  const sign = end < base ? 1 : -1;
+  const r = Math.min(radius, Math.abs(end - base), width / 2);
+  return `M${x} ${base}V${end + sign * r}Q${x} ${end} ${x + r} ${end}H${x + width - r}Q${x + width} ${end} ${x + width} ${end + sign * r}V${base}Z`;
+}
+const tip = $('#tip');
+function showTip(title, rows, x, y) {
+  tip.replaceChildren(el('div', { class: 'title' }, title), ...rows.map(r => el('div', { class: 'line' }, el('i', { style: `background:${r.colour}` }), el('b', {}, r.value), el('span', {}, r.name))));
+  tip.hidden = false;
+  const box = tip.getBoundingClientRect();
+  tip.style.left = `${Math.min(window.innerWidth - box.width - 8, Math.max(8, x + 12))}px`;
+  tip.style.top = `${Math.min(window.innerHeight - box.height - 8, Math.max(8, y - box.height - 10))}px`;
+}
+const hideTip = () => { tip.hidden = true; };
+function bindTip(node, build) {
+  const show = event => { const { title, rows } = build(); showTip(title, rows, event.clientX, event.clientY); };
+  node.addEventListener('pointermove', show);
+  node.addEventListener('focus', () => { const box = node.getBoundingClientRect(); const { title, rows } = build(); showTip(title, rows, box.left + box.width / 2, box.top); });
+  node.addEventListener('pointerleave', hideTip);
+  node.addEventListener('blur', hideTip);
+}
+
+function chargeChart(host, legend, r) {
+  legendOf(legend, r.scenarios.map(name => ({ name: scenarioName(name), colour: colourOf(name) })));
+  chart(host, () => {
+    const height = 200, m = { t: 18, r: 4, b: 22, l: 40 };
+    const { root, width } = frame(host, height, 'Annual charge by scenario, EUR millions. The table below lists every value.');
+    const values = r.scenarios.flatMap(name => r.impairment[name].map(x => x.charge));
+    const scale = ticks(Math.min(0, ...values), Math.max(0, ...values));
+    const low = scale[0], high = scale.at(-1), inner = height - m.t - m.b;
+    const y = v => Math.round(m.t + inner * (1 - (v - low) / (high - low)));
+    yAxis(root, scale, y, m.l, width - m.r);
+    const band = (width - m.l - m.r) / r.years.length;
+    const barWidth = Math.min(24, (band - 14 - (r.scenarios.length - 1) * 2) / r.scenarios.length);
+    const groupWidth = r.scenarios.length * barWidth + (r.scenarios.length - 1) * 2;
+    const labels = [];
+    r.years.forEach((year, i) => {
+      const left = m.l + band * i + (band - groupWidth) / 2;
+      const rows = r.scenarios.map(name => ({ name: scenarioName(name), colour: colourOf(name), value: eur(r.impairment[name][i].charge) }));
+      r.scenarios.forEach((name, j) => {
+        const v = r.impairment[name][i].charge, x = left + j * (barWidth + 2);
+        const mark = svg('path', { class: 'mark', d: columnPath(x, barWidth, y(0), y(v)), tabindex: 0, 'aria-label': `${scenarioName(name)} ${year}: ${eur(v)}`, style: `fill:${colourOf(name)}` }, root);
+        bindTip(mark, () => ({ title: String(year), rows }));
+        labels.push({ x: x + barWidth / 2, y: v >= 0 ? y(v) - 5 : y(v) + 13, text: amount(v), size: Math.abs(v) });
+      });
+      svg('text', { class: 'tick', x: left + groupWidth / 2, y: height - 5, 'text-anchor': 'middle' }, root, String(year));
+    });
+    const placed = [];
+    labels.sort((a, b) => b.size - a.size).forEach(label => {
+      const half = label.text.length * 3.1 + 2;
+      const box = { x0: label.x - half, x1: label.x + half, y0: label.y - 11, y1: label.y + 2 };
+      if (placed.some(p => box.x0 < p.x1 && box.x1 > p.x0 && box.y0 < p.y1 && box.y1 > p.y0)) return;
+      placed.push(box);
+      svg('text', { class: 'value-label', x: label.x, y: label.y, 'text-anchor': 'middle' }, root, label.text);
+    });
+  });
+}
+
+function stockChart(host, legend, r) {
+  legendOf(legend, r.scenarios.map(name => ({ name: scenarioName(name), colour: colourOf(name) })), 'line');
+  const points = [r.first - 1, ...r.years];
+  const seriesOf = name => [r.impairment[name][0].opening, ...r.impairment[name].map(x => x.closing)];
+  chart(host, () => {
+    const height = 200, m = { t: 10, r: 52, b: 22, l: 40 };
+    const { root, width } = frame(host, height, 'Provisions at each year-end by scenario, EUR millions. The table below lists every value.');
+    const scale = ticks(0, Math.max(...r.scenarios.flatMap(seriesOf)));
+    const high = scale.at(-1), inner = height - m.t - m.b;
+    const y = v => m.t + inner * (1 - v / high);
+    const x = i => m.l + (width - m.l - m.r) * i / (points.length - 1);
+    yAxis(root, scale, v => Math.round(y(v)), m.l, width - m.r);
+    points.forEach((year, i) => svg('text', { class: 'tick', x: x(i), y: height - 5, 'text-anchor': i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle' }, root, String(year)));
+    const placed = [];
+    [...r.scenarios].sort((a, b) => seriesOf(b).at(-1) - seriesOf(a).at(-1)).forEach(name => {
+      const line = seriesOf(name);
+      svg('polyline', { points: line.map((v, i) => `${x(i)},${y(v)}`).join(' '), fill: 'none', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', style: `stroke:${colourOf(name)}` }, root);
+      const endY = y(line.at(-1));
+      svg('circle', { cx: x(points.length - 1), cy: endY, r: 4, 'stroke-width': 2, style: `fill:${colourOf(name)};stroke:var(--surface)` }, root);
+      if (!placed.some(p => Math.abs(p - endY) < 13)) { placed.push(endY); svg('text', { class: 'end-label', x: x(points.length - 1) + 9, y: endY + 4 }, root, amount(line.at(-1))); }
+    });
+    const cross = svg('line', { class: 'axisline', y1: m.t, y2: height - m.b, visibility: 'hidden' }, root);
+    const layer = svg('rect', { x: m.l, y: m.t, width: width - m.l - m.r, height: inner, fill: 'transparent', tabindex: 0, 'aria-label': 'Provisions by year; use the arrow keys' }, root);
+    let index = points.length - 1;
+    const reveal = (cx, cy) => {
+      cross.setAttribute('x1', x(index)); cross.setAttribute('x2', x(index)); cross.setAttribute('visibility', 'visible');
+      showTip(index ? `End ${points[index]}` : `Opening, end ${points[0]}`, r.scenarios.map(name => ({ name: scenarioName(name), colour: colourOf(name), value: eur(seriesOf(name)[index]) })), cx, cy);
+    };
+    layer.addEventListener('pointermove', event => { const box = layer.getBoundingClientRect(); index = Math.round((event.clientX - box.left) / box.width * (points.length - 1)); reveal(event.clientX, event.clientY); });
+    const clear = () => { hideTip(); cross.setAttribute('visibility', 'hidden'); };
+    layer.addEventListener('pointerleave', clear);
+    layer.addEventListener('blur', clear);
+    const atPoint = () => { const box = layer.getBoundingClientRect(); reveal(box.left + x(index) - m.l, box.top + 20); };
+    layer.addEventListener('focus', atPoint);
+    layer.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft') index = Math.max(0, index - 1); else if (event.key === 'ArrowRight') index = Math.min(points.length - 1, index + 1); else return;
+      event.preventDefault(); atPoint();
+    });
+  });
+}
+
+function stageChart(host, legend, r) {
+  const stages = [[1, 'S1', 'var(--stage-1)'], [2, 'S2', 'var(--stage-2)'], [3, 'S3', 'var(--stage-3)']];
+  legendOf(legend, stages.map(([, name, colour]) => ({ name, colour })));
+  chart(host, () => {
+    const height = 200, m = { t: 18, r: 4, b: 36, l: 40 };
+    const { root, width } = frame(host, height, 'Gross carrying amount by stage, each scenario and year, EUR billions. The table below lists every value.');
+    const scale = ticks(0, Math.max(...r.scenarios.flatMap(name => r.stages[name].map(x => x.gca / 1000))));
+    const high = scale.at(-1), inner = height - m.t - m.b;
+    const y = v => m.t + inner * (1 - v / high);
+    yAxis(root, scale, v => Math.round(y(v)), m.l, width - m.r);
+    const group = (width - m.l - m.r) / r.scenarios.length;
+    r.scenarios.forEach((name, g) => {
+      const rows = r.stages[name];
+      const slot = (group - 16) / rows.length;
+      const barWidth = Math.min(24, slot - 4);
+      const left = m.l + group * g + (group - (slot * rows.length)) / 2;
+      rows.forEach((held, i) => {
+        const x = left + slot * i + (slot - barWidth) / 2;
+        const tipRows = stages.map(([stage, label, colour]) => ({ name: `${label} · coverage ${pct(held.coverage[stage], stage === 1 ? 2 : 1)}`, colour, value: eur(held.stock[stage]) }));
+        const parts = stages.filter(([stage]) => held.stock[stage]);
+        const spoken = `${scenarioName(name)} ${held.year}: ${tipRows.map(t => `${t.name}, ${t.value}`).join('; ')}`;
+        let running = 0;
+        parts.forEach(([stage, , colour], s) => {
+          const value = held.stock[stage] / 1000;
+          const base = y(running) - (s ? 2 : 0);
+          const end = Math.min(y(running + value), base - 1);
+          const last = s === parts.length - 1;
+          const d = last ? columnPath(x, barWidth, base, end) : `M${x} ${base}H${x + barWidth}V${end}H${x}Z`;
+          const mark = svg('path', { class: 'mark', d, tabindex: last ? 0 : -1, 'aria-label': spoken, style: `fill:${colour}` }, root);
+          bindTip(mark, () => ({ title: `${scenarioName(name)} · ${held.year}`, rows: tipRows }));
+          running += value;
+        });
+        svg('text', { class: 'tick', x: x + barWidth / 2, y: height - 22, 'text-anchor': 'middle' }, root, String(held.year).slice(2));
+        if (i === rows.length - 1) svg('text', { class: 'value-label', x: x + barWidth / 2, y: y(running) - 5, 'text-anchor': 'end' }, root, `${pct(ratio(held.stock[3], held.gca))} S3`);
+      });
+      svg('text', { class: 'tick', x: left + slot * rows.length / 2, y: height - 6, 'text-anchor': 'middle' }, root, scenarioName(name));
+    });
+  });
+}
+
+function portfolioCard(r, worst) {
+  const rows = [...r.portfolios].sort((a, b) => b.values[worst].cumulative - a.values[worst].cumulative);
+  const peak = Math.max(...rows.flatMap(x => r.scenarios.map(name => Math.abs(x.values[name].cumulative))));
+  return el('div', { class: 'card' },
+    el('h3', {}, `Cumulative charge by portfolio, ${r.first}–${r.last}, EUR m`),
+    el('p', { class: 'sub' }, `${rows[0].portfolio} carries ${pct(ratio(rows[0].values[worst].cumulative, r.kpis[worst].cumulative), 0)} of the ${scenarioName(worst)} charge`),
+    el('div', { class: 'legend' }, r.scenarios.map(name => el('span', {}, el('i', { class: 'key', style: `background:${colourOf(name)}` }), scenarioName(name)))),
+    rows.map(x => {
+      const tipRows = r.scenarios.map(name => ({ name: `${scenarioName(name)} · coverage ${pct(x.values[name].coverage)}`, colour: colourOf(name), value: eur(x.values[name].cumulative) }));
+      const node = el('div', { class: 'barrow', tabIndex: 0, 'aria-label': `${x.portfolio}: ${tipRows.map(t => `${t.name} ${t.value}`).join(', ')}` },
+        el('div', { class: 'who' }, el('b', {}, x.portfolio), el('span', {}, x.name)),
+        el('div', { class: 'bars' }, r.scenarios.map(name => {
+          const v = x.values[name].cumulative;
+          const length = (100 * Math.abs(v) / peak).toFixed(2);
+          return el('div', { class: 'lane' }, el('div', { class: 'bar', style: `width:${length}%;background:${colourOf(name)}` }), el('em', { style: `left:${length}%` }, amount(v)));
+        })));
+      bindTip(node, () => ({ title: `${x.portfolio} · gross carrying amount €${one.format(x.opening_gca / 1000)}bn`, rows: tipRows }));
+      return node;
+    }),
+    twin(['Portfolio', ...r.scenarios.flatMap(name => [`${scenarioName(name)} charge`, 'closing', 'coverage'])],
+      rows.map(x => [x.portfolio, ...r.scenarios.flatMap(name => [amount(x.values[name].cumulative), amount(x.values[name].closing), pct(x.values[name].coverage)])])));
+}
+
+// --- wiring --------------------------------------------------------------------------------------------------------------
+
+$('#run-select').addEventListener('change', e => selectRun(e.target.value));
+$('#reset-settings').addEventListener('click', () => { Object.assign(DOC.run, DEFAULTS); DOC.run.scenarios = inRun(); syncVolumes(); renderSettings(); check(); });
+const dropZone = $('#files-card');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drop'); });
+dropZone.addEventListener('dragleave', e => { if (e.target === dropZone) dropZone.classList.remove('drop'); });
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drop'); if (e.dataTransfer.files.length) addSeveral([...e.dataTransfer.files]); });
+
+
+try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch { /* private window */ }
+
+load().catch(fault => problem(`${fault.message}. Is the server running?`));
+</script>
+</body>
+</html>

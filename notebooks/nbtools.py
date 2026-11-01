@@ -21,11 +21,9 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import pyarrow.parquet as pq
 import yaml
-from matplotlib.colors import LinearSegmentedColormap
 
 from stress import cli
 from stress.contracts.run import (
@@ -55,12 +53,21 @@ SCENARIO_COLOURS = {"baseline": "#2a78d6", "adverse": "#eb6834"}
 STAGE_COLOURS = {1: "#86b6ef", 2: "#2a78d6", 3: "#104281"}
 INK, INK_SECONDARY, MUTED, GRID, AXIS, SURFACE = (
     "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb")
-# Sign of a change: blue below zero, grey at zero, red above.
-DIVERGING = LinearSegmentedColormap.from_list("diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def __getattr__(name: str):
+    """matplotlib loads only when a notebook draws: the control room shares this module, and a hosted
+    install has only the engine's dependencies."""
+    if name == "DIVERGING":  # sign of a change: blue below zero, grey at zero, red above
+        from matplotlib.colors import LinearSegmentedColormap
+        return LinearSegmentedColormap.from_list("diverging", ["#2a78d6", "#f0efec", "#e34948"])
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def setup() -> None:
     """Display options for wide tables and a quiet chart style."""
+    import matplotlib.pyplot as plt
+
     pd.set_option("display.width", 200)
     pd.set_option("display.max_columns", 40)
     pd.set_option("display.max_rows", 80)

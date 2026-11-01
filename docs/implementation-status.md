@@ -103,5 +103,5 @@ input set and analysis file before replaying the sealed snapshot.
 
 Final gate: **148 tests passed**, Ruff clean, all three import contracts kept, generated O1
 specification current. The independent change reviewer returned **APPROVE** after verifying
-the comparisons, replay, capital bridge and climate stock-to-flow reconciliation. Changes
-are on `improve/eba-draft-preparation`; they have not been merged into `main`.
+the comparisons, replay, capital bridge and climate stock-to-flow reconciliation. The changes
+reached `main` in tag `v1.2.0`.

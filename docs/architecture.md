@@ -9,7 +9,7 @@ How this repository is organised and what is enforced. The engine design is in [
 | `docs/spec/` | O1 (`foundation/transcribe`); requirements text by the project owner | Locked |
 | `inputs/<hash>/` | O2–O4 (`foundation/matrices`, `foundation/synth`) | Locked; R2 checks every file's hash |
 | `runs/<run_id>/` | R1–R11 | Locked; write-once, sealed by R11 |
-| `foundation/`, `src/stress/`, `tests/`, `notebooks/`, rest of `docs/` | People and Claude Code | Normal review |
+| `foundation/`, `src/stress/`, `tests/`, `notebooks/`, `control_room/`, rest of `docs/` | People and Claude Code | Normal review |
 | `archive/` | People only | Claude Code fully blocked; not in git |
 | `inputs/bank/` | Nobody yet | Claude Code fully blocked; not in git |
 

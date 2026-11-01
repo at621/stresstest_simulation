@@ -40,7 +40,7 @@ The baseline no longer releases provisions in 2027. Most of the change comes fro
 
 ## EBA 2027 review: decisions waiting on the owner
 
-The review's findings are built on branches stacked on `improve/eba-draft-preparation`, none merged: see [its status table](docs/eba-2027-review/eba-2027-review-findings.md#status-of-the-findings). The open decisions are items 9–12 of `docs/architecture.md` §6.
+The review's findings are built and on `main`: see [its status table](docs/eba-2027-review/eba-2027-review-findings.md#status-of-the-findings). The open decisions are items 9–12 of `docs/architecture.md` §6.
 
 The baseline S2 note under "Baseline 2027 releases provisions" calls falling S2 coverage "the expected behaviour of a static balance sheet with replacement at maturity". That note is reopened: ECL-06 and the draft's ¶76, ¶123 and ¶125 read it differently (C14).
 

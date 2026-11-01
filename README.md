@@ -20,6 +20,7 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 | **How staging works** | [docs/staging/stress-engine-staging.html](docs/staging/stress-engine-staging.html) |
 | **How PD curves are built** | [docs/pd-curves/pd-curve-flow.html](docs/pd-curves/pd-curve-flow.html) |
 | **Operating the engine** | [docs/runbook.md](docs/runbook.md) |
+| **Control room** | [control_room/README.md](control_room/README.md) |
 | **Traceability matrix** | [docs/traceability/traceability-matrix.md](docs/traceability/traceability-matrix.md), regenerated with `uv run python -m tests.traceability` |
 
 The engine supports optional dynamic performing volumes, named crisis scenarios,
@@ -153,6 +154,43 @@ A run takes about 25 seconds and writes `runs/<run_id>/` (see [runs/README.md](r
 - **`run.log`**: every step's facts, checks and timings. The console shows the same lines while the run works; use `-q` for warnings only. Variants: `core` (bullet, fixed CCF), `annuity`, `linear` and `utilisation` (the AT-35 CCF sensitivity). Exit codes: 0 sealed, 2 blocked (the folder is sealed with status BLOCKED and the reason), 3 rerun not reproduced.
 
 To rebuild the one-off material: `uv run python -m foundation.transcribe` (O1, `--check` to compare) and `uv run python -m foundation.synth` (O2–O4, writes a new `inputs/<hash>/` when anything changes, and that includes the machine: see A36 in [docs/assumptions.md](docs/assumptions.md)).
+
+## Control room
+
+The control room is one page that takes a run from its files to its results in four steps. Every action on it is an engine or one-off command, and every verdict is the engine's own.
+
+```
+uv run python control_room/server.py
+```
+
+This opens <http://127.0.0.1:8770>.
+
+| Step | What you do there |
+|---|---|
+| **1 Files and settings** | See the seven files a run needs, replace any of them, choose the scenarios and set the run's options. The engine's sanity checks run here without calculating anything. |
+| **2 Review the files** | View each table, rating transition matrix, scenario path and parameter. |
+| **3 Run** | See what will run, start it and follow its progress. |
+| **4 Outcomes** | Read the figures and charts, download the workbook, check that the run reproduces, and compare it with another run. |
+
+A run started here is an ordinary sealed folder under `runs/`, the same as one started in a terminal. See the [control room's README](control_room/README.md) for adding files by hand, scenarios and how each action maps to the engine.
+
+### On Heroku
+
+The control room can also be hosted as a Heroku web app: `Procfile` starts it, and it will not start without a `ROOM_PASSWORD`. On a hosted page, every request needs https and that password.
+
+```
+heroku create <app-name>
+heroku config:set ROOM_PASSWORD=<long-random-password> -a <app-name>
+git push heroku <branch>:main
+heroku ps:type performance-m -a <app-name>
+```
+
+Two limits shape how to use it:
+
+- **Memory:** a run with two scenarios needs about 1.7 GB, so smaller dynos cannot run it safely.
+- **Files do not last:** Heroku clears the app's files at every deploy and restart, and at least once a day. Runs and anything added on the page go with them, so download the workbook to keep a result.
+
+Use synthetic data only. See [Hosting on Heroku](docs/runbook.md#hosting-on-heroku) in the runbook.
 
 ## Making changes
 
