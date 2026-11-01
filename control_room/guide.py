@@ -84,7 +84,6 @@ AFTER_YOU_ADD = (
     "for each file list the known ones separately."),
     ("A record that is left out is listed with its reason, and the run can go ahead without it. If every "
     "record is left out, the run stops."),
-    "A comparison with the requirements lists where the files differ from them. It does not stop a run.",
     "Scenarios you add and settings you change here apply to this run only. The files stay as they are.",
 )
 

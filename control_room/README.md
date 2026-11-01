@@ -56,7 +56,7 @@ The method choices are the readings of the draft recorded in `docs/assumptions.m
 
 The sanity checks are the engine's own: `preflight.dry_run` runs R1 to R4 for real, in a temporary folder, and stops before R5. Nothing is calculated and nothing reaches `runs/`. "No errors observed" appears only when they pass with nothing left out. A stopped setup shows the engine's own message and cannot be started. Records the engine leaves out are listed with their reasons before the run.
 
-One check the engine does not make: `preflight.differences` compares the saved set with `docs/spec/`, using the measures and tolerances of AT-01, SYN-PAR-05 and section 6.2. Only differences are shown. A derived scenario is an intended departure and is not compared.
+The page does not compare the files with the requirements, because the small dataset differs from them by design. `preflight.differences` makes that comparison, using the measures and tolerances of AT-01, SYN-PAR-05 and section 6.2, and the tests hold the full book to it.
 
 ## Rules it keeps
 

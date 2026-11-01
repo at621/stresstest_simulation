@@ -142,7 +142,7 @@ heroku config:set DATASET=large
 
 Setting or removing the var restarts the app, which clears its files. `heroku config:unset DATASET` goes back to `small`, and `heroku ps:type basic` then goes back to the smaller dyno. A value that is neither `small` nor `large` stops the server at start, and the log says why.
 
-The small dataset holds a tenth of the facilities in each portfolio and opening stage of the full book. `uv run python control_room/small_set.py` rebuilds it, and A41 in [the assumptions](assumptions.md) records how close it comes. It cannot meet the requirements' exact targets, so the page lists those differences.
+The small dataset holds a tenth of the facilities in each portfolio and opening stage of the full book. `uv run python control_room/small_set.py` rebuilds it, and A41 in [the assumptions](assumptions.md) records how close it comes. It cannot meet the requirements' exact targets.
 
 **Dyno size.** Measured on Linux on 1 November 2026, the page and the engine together peak at about 0.55 GB on `small` and 1.7 GB on `large`, in a run with two scenarios. More scenarios need more. Going over quota logs an R14 warning and may slow the run. Heroku stops the dyno only at the limit in the third column.
 

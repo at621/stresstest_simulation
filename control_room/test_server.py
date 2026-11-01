@@ -537,6 +537,11 @@ def test_another_site_cannot_start_a_run(hosted):
     assert response.status == 400, payload  # past the gate, and refused for what it says
 
 
+def test_the_page_does_not_compare_the_files_with_the_requirements():
+    assert "differ from the requirements" not in server.PAGE.read_text(encoding="utf-8")
+    assert "differences" not in server.Control(nb.RUNS_DIR).preflight({"document": with_hash(PLAIN), "name": "check"})
+
+
 def test_the_steps_carry_only_the_standard_labels():
     page = server.PAGE.read_text(encoding="utf-8")
     start = page.index("function stepNote")
