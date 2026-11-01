@@ -40,9 +40,31 @@ The baseline no longer releases provisions in 2027. Most of the change comes fro
 
 ## EBA 2027 review: decisions waiting on the owner
 
-The review's findings are built on branches stacked on `improve/eba-draft-preparation`, none merged: see [its status table](docs/eba-2027-review/eba-2027-review-findings.md#status-of-the-findings). The open decisions are items 9–12 of `docs/architecture.md` §6.
+The review's findings are built and on `main`: see [its status table](docs/eba-2027-review/eba-2027-review-findings.md#status-of-the-findings). The open decisions are items 9–12 of `docs/architecture.md` §6.
 
 The baseline S2 note under "Baseline 2027 releases provisions" calls falling S2 coverage "the expected behaviour of a static balance sheet with replacement at maturity". That note is reopened: ECL-06 and the draft's ¶76, ¶123 and ¶125 read it differently (C14).
+
+## Input checks: gaps found while writing the guide to step 1
+
+The review of the control room's guide on 1 November 2026 ran altered copies of the small dataset through the engine. These are engine behaviour, so a fix sits under `src/` and they are not fixed. The guide states the crashes as rules that stop a run partway (`LATE_RULES` in `control_room/guide.py`), and those lines can go once the sanity checks catch them.
+
+### Steps
+
+- [ ] Trace why a blank `portfolio` on one Stage 1 facility of €0.4m seals a run with baseline Stage 3 gross carrying amount 2029 at €85.6m against €91.6m, with no rejection and unchanged charges. It sits close to the rule that missing is never zero.
+- [ ] Make R3 block with a reason code on a blank `snapshot_date`, which raises a raw `TypeError` today.
+- [ ] Make a blank `counterparty_sector`, and a Scenarios file with no `index_of` or `starting_values`, block with a reason code. They pass R1 to R4 and then stop the run with `INTERNAL_ERROR`.
+- [ ] Have the sanity checks reach the rules that block only later: facility LTV and collateral type, the two price index names and `template_class` at the report step; a variant with no repayment profile for a product at R5; a `residual_maturity` past `last_bucket_year` and a scenario value that breaks the point-in-time matrix at R6.
+- [ ] Reject a blank or misspelt `regulatory_approach`. `src/stress/report/excel.py` keeps only rows that say `IRB`, so a blank seals a run with a wrong workbook figure: 123.58 against 138.85 on the Portfolios sheet, for one €15.3m loan left blank on the small dataset.
+- [ ] Reject an unknown word in a variant's `repayment_profile`. It falls to the linear formula in `src/stress/cashflows/__init__.py` and seals a run: adverse €61.8m against €65.1m on the small dataset.
+- [ ] Decide whether R2 should enforce `Column.nullable` in `src/stress/contracts/inputs.py`, which no code reads, or whether to remove it.
+
+## Control room: a restart leaves the page showing a run in progress
+
+When Heroku stopped the dyno during a run on 1 November 2026, the page stayed on "The run is in progress" and still said the run carries on if the page is closed. The restarted server had forgotten the job, and `/api/job` answered idle.
+
+### Steps
+
+- [ ] Have the page notice that the job it was following has gone, and say the run stopped.
 
 ## Loan-level ECL and term-structure table
 

@@ -6,7 +6,7 @@
 | **Baseline** | `main` at `b59446e` (tag `v1.1.0`) |
 | **Reference run** | `20261019T0511Z-core-05ddae55`, input set `d62d0386f2c5256e` |
 | **Regulatory text** | EBA 2027 draft package of 11 June 2026. No final package was found at this date |
-| **Status** | Findings by Claude Code, now built on branches stacked on `improve/eba-draft-preparation`: see [Status of the findings](#status-of-the-findings). Reviewed by `change-reviewer` as code changes; the findings text below it was not. Not decided by the owner and not merged |
+| **Status** | Findings by Claude Code, now built and on `main`: see [Status of the findings](#status-of-the-findings). Reviewed by `change-reviewer` as code changes; the findings text below it was not. Not decided by the owner |
 
 ## Summary
 

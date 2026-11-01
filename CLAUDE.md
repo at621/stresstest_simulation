@@ -36,6 +36,7 @@ The design leads. If another document disagrees with it, follow the design and t
 - `src/stress/`: the engine. One package per run step R1–R11, plus `contracts/` for the tables the steps share and `cli.py`, which wires the steps.
 - `tests/`: `unit/`, `acceptance/` (one test per AT) and `controls/`.
 - `notebooks/`: Jupyter notebooks that start runs through `stress.cli` and read sealed runs back; shared helpers in `nbtools.py`. See `notebooks/README.md`.
+- `control_room/`: the page that takes a run through four steps, with its own tests. It stays outside `src/`, because everything there changes the engine's code identity. See `control_room/README.md`.
 - `docs/spec/`, `inputs/<hash>/`, `runs/<run_id>/`: written only by code; see below.
 
 ## Protected folders
@@ -57,3 +58,4 @@ After `uv sync`:
 - `uv run ruff check`: lint
 - `uv run stress run --inputs inputs/<hash> --scenarios baseline,adverse --variant core`: a full run (current input set `d62d0386f2c5256e`); `stress report`, `stress rerun` and `stress compare` read sealed runs
 - `uv run python -m foundation.transcribe` (O1) and `uv run python -m foundation.synth` (O2–O4): rebuild the one-off material
+- `uv run python control_room/server.py`: the control room, on the small dataset unless given `--dataset large` or `DATASET=large`; `uv run pytest control_room`: its tests, which `uv run pytest` does not run

@@ -20,6 +20,7 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 | **How staging works** | [docs/staging/stress-engine-staging.html](docs/staging/stress-engine-staging.html) |
 | **How PD curves are built** | [docs/pd-curves/pd-curve-flow.html](docs/pd-curves/pd-curve-flow.html) |
 | **Operating the engine** | [docs/runbook.md](docs/runbook.md) |
+| **Control room** | [control_room/README.md](control_room/README.md) |
 | **Traceability matrix** | [docs/traceability/traceability-matrix.md](docs/traceability/traceability-matrix.md), regenerated with `uv run python -m tests.traceability` |
 
 The engine supports optional dynamic performing volumes, named crisis scenarios,
@@ -153,6 +154,63 @@ A run takes about 25 seconds and writes `runs/<run_id>/` (see [runs/README.md](r
 - **`run.log`**: every step's facts, checks and timings. The console shows the same lines while the run works; use `-q` for warnings only. Variants: `core` (bullet, fixed CCF), `annuity`, `linear` and `utilisation` (the AT-35 CCF sensitivity). Exit codes: 0 sealed, 2 blocked (the folder is sealed with status BLOCKED and the reason), 3 rerun not reproduced.
 
 To rebuild the one-off material: `uv run python -m foundation.transcribe` (O1, `--check` to compare) and `uv run python -m foundation.synth` (O2–O4, writes a new `inputs/<hash>/` when anything changes, and that includes the machine: see A36 in [docs/assumptions.md](docs/assumptions.md)).
+
+## Control room
+
+The control room is one page that takes a run from its files to its results in four steps. Every action on it is an engine or one-off command, and every verdict is the engine's own.
+
+```
+uv run python control_room/server.py
+```
+
+This opens <http://127.0.0.1:8770>.
+
+The page opens on one of two datasets, and the setting is `small`:
+
+| Setting | Input set | Holds | A run needs | Use it for |
+|---|---|---|---:|---|
+| `small` (default) | `inputs/70a9337b7d75f668` | 1,002 facilities, about €1.2bn of GCA | about 0.55 GB | Trying the page. Its results cannot stand in for the full book's. |
+| `large` | `inputs/d62d0386f2c5256e` | 10,000 facilities, €11bn of GCA | about 1.7 GB | The full book the requirements describe. |
+
+To change it, pass `--dataset`, or set the `DATASET` environment variable, which `--dataset` overrides:
+
+```
+uv run python control_room/server.py --dataset large
+```
+
+The setting belongs to the page. `stress run` names its input set with `--inputs`, and the `DATASET` variable does not affect it.
+
+| Step | What you do there |
+|---|---|
+| **1 Files and settings** | See the seven files a run needs and what each must contain, replace any of them, choose the scenarios and set the run's options. The engine's sanity checks run here without calculating anything. |
+| **2 Review the files** | View each table, rating transition matrix, scenario path and parameter. |
+| **3 Run** | See what will run, start it and follow its progress. |
+| **4 Outcomes** | Read the figures and charts, download the workbook, check that the run reproduces, and compare it with another run. |
+
+A run started here is an ordinary sealed folder under `runs/`, the same as one started in a terminal. See the [control room's README](control_room/README.md) for adding files by hand, scenarios and how each action maps to the engine.
+
+### On Heroku
+
+The control room can also be hosted as a Heroku web app: `Procfile` starts it. A hosted page has no sign-in, so anyone with its address can use it, and it answers over https only.
+
+```
+heroku create <app-name>
+git push heroku <branch>:main
+```
+
+Heroku gets both datasets and follows the same setting, so the app starts on `small`. To move it to `large`, resize the dyno first, then set a config var:
+
+```
+heroku ps:type performance-m
+heroku config:set DATASET=large
+```
+
+Two limits shape how to use it:
+
+- **Memory:** a `small` run with two scenarios needs about 0.55 GB, slightly over a Basic dyno's 0.5 GB quota but well under the 1 GB where Heroku stops it. A `large` run needs about 1.7 GB, so Heroku stops it on a Basic dyno.
+- **Files do not last:** Heroku clears the app's files at every deploy and restart, and at least once a day. Runs and anything added on the page go with them, so download the workbook to keep a result.
+
+Use synthetic data only. See [Hosting on Heroku](docs/runbook.md#hosting-on-heroku) in the runbook.
 
 ## Making changes
 

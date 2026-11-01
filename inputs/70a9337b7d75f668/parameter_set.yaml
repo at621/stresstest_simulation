@@ -1,0 +1,242 @@
+parameter_set_id: SYN-PS-0.1-proposed
+version: '0.1'
+status: PROPOSED
+spec_version: '1.3'
+horizon:
+  snapshot_date: '2026-12-31'
+  snapshot_year: 2026
+  projection_years:
+  - 2027
+  - 2028
+  - 2029
+  last_bucket_year: 2060
+master_scale:
+  grades:
+  - G1
+  - G2
+  - G3
+  - G4
+  - G5
+  - G6
+  - G7
+  - G8
+  - G9
+  - G10
+  default_grade: D
+  ttc_pd:
+  - 0.0002
+  - 0.0005
+  - 0.0012
+  - 0.003
+  - 0.007
+  - 0.016
+  - 0.03
+  - 0.048
+  - 0.09
+  - 0.18
+segments:
+  P01:
+    portfolio: P01
+    z_drivers:
+      gdp_growth:
+        beta: 0.4
+        mean: 0.015
+        sd: 0.03
+      unemployment:
+        beta: -0.3
+        mean: 0.065
+        sd: 0.02
+      residential_price_change:
+        beta: 0.3
+        mean: 0.025
+        sd: 0.08
+    rho: 0.15
+    sicr_k: 2.5
+    lgd_w: 0.2
+    cpr_ttc: 0.06
+    cpr_v: 0.25
+    ccf: null
+  P02:
+    portfolio: P02
+    z_drivers:
+      gdp_growth:
+        beta: 0.5
+        mean: 0.015
+        sd: 0.03
+      unemployment:
+        beta: -0.5
+        mean: 0.065
+        sd: 0.02
+    rho: 0.06
+    sicr_k: 2.0
+    lgd_w: 0.1
+    cpr_ttc: 0.1
+    cpr_v: 0.2
+    ccf: null
+  P03:
+    portfolio: P03
+    z_drivers:
+      gdp_growth:
+        beta: 0.6
+        mean: 0.015
+        sd: 0.03
+      unemployment:
+        beta: -0.2
+        mean: 0.065
+        sd: 0.02
+      reference_rate:
+        beta: -0.2
+        mean: 0.025
+        sd: 0.015
+    rho: 0.12
+    sicr_k: 2.5
+    lgd_w: 0.15
+    cpr_ttc: 0.05
+    cpr_v: 0.15
+    ccf: 0.5
+  P04:
+    portfolio: P04
+    z_drivers:
+      gdp_growth:
+        beta: 0.3
+        mean: 0.015
+        sd: 0.03
+      cre_price_change:
+        beta: 0.5
+        mean: 0.02
+        sd: 0.1
+      reference_rate:
+        beta: -0.2
+        mean: 0.025
+        sd: 0.015
+    rho: 0.15
+    sicr_k: 2.5
+    lgd_w: 0.25
+    cpr_ttc: 0.03
+    cpr_v: 0.15
+    ccf: null
+  P05:
+    portfolio: P05
+    z_drivers:
+      gdp_growth:
+        beta: 0.7
+        mean: 0.015
+        sd: 0.03
+      reference_rate:
+        beta: -0.3
+        mean: 0.025
+        sd: 0.015
+    rho: 0.12
+    sicr_k: 2.5
+    lgd_w: 0.15
+    cpr_ttc: 0.05
+    cpr_v: 0.15
+    ccf: 0.5
+  P06_GG:
+    portfolio: P06
+    z_drivers:
+      gdp_growth:
+        beta: 0.8
+        mean: 0.015
+        sd: 0.03
+      reference_rate:
+        beta: -0.2
+        mean: 0.025
+        sd: 0.015
+    rho: 0.2
+    sicr_k: 3.0
+    lgd_w: 0.1
+    cpr_ttc: 0.0
+    cpr_v: 0.0
+    ccf: null
+  P06_CI:
+    portfolio: P06
+    z_drivers:
+      gdp_growth:
+        beta: 0.6
+        mean: 0.015
+        sd: 0.03
+      unemployment:
+        beta: -0.2
+        mean: 0.065
+        sd: 0.02
+      reference_rate:
+        beta: -0.2
+        mean: 0.025
+        sd: 0.015
+    rho: 0.2
+    sicr_k: 3.0
+    lgd_w: 0.1
+    cpr_ttc: 0.0
+    cpr_v: 0.0
+    ccf: null
+terminal_rule:
+  method: linear_reversion_to_baseline
+  baseline: flat
+  s1_end_of_horizon: loss_rate_interpolation
+  last_scenario_year: 2029
+  reversion_years: 6
+conventions:
+  sicr_horizon: remaining_life_at_opening
+  stub_pd: constant_hazard_by_grade
+  default_buckets: calendar_year_end
+  new_s3_undrawn: off_balance_flow_ccf_lgd
+  opening_allowance_matrix: ttc
+  opening_allowance_schedule: bullet
+sicr_triggers:
+  enabled:
+  - dpd
+  - watchlist
+  - forborne
+  dpd_days: 30
+  hold: until_default
+  definitions:
+    dpd: days past due on the facility's contractual payments at the observation date
+    watchlist: on the bank's credit watchlist at the observation date
+    forborne: a forbearance measure in place at the observation date (forborne exposure)
+  source: synthetic, set by the generator O3 (foundation/synth) and observed at the snapshot date
+tolerances:
+  counts:
+    kind: exact
+  probability_identity:
+    kind: abs
+    abs: 1.0e-10
+  rate:
+    kind: abs
+    abs: 1.0e-10
+  amount:
+    kind: abs
+    abs: 0.01
+  aggregate:
+    kind: max_abs_rel
+    abs: 1.0
+    rel: 1.0e-08
+variants:
+  core:
+    label: Core reference run (bullet, fixed CCF)
+    repayment_profile:
+      default: bullet
+    ccf: {}
+  annuity:
+    label: Annuity repayment for amortising products
+    repayment_profile:
+      mortgage: annuity
+      consumer_loan: annuity
+      term_loan: annuity
+      default: bullet
+    ccf: {}
+  linear:
+    label: Linear repayment for amortising products
+    repayment_profile:
+      mortgage: linear
+      consumer_loan: linear
+      term_loan: linear
+      default: bullet
+    ccf: {}
+  utilisation:
+    label: AT-35 utilisation sensitivity
+    repayment_profile:
+      default: bullet
+    ccf:
+      P03: 0.75
+      P05: 0.75
