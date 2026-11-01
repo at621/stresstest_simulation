@@ -116,11 +116,10 @@ oracles remain open until supplied by the owner; passing automated checks does n
 
 Heroku hosts the control room as a web app. `Procfile` starts it. `.python-version` keeps it on Python 3.12, the version the lock file and the tests use. Heroku receives committed files only, so nothing git ignores, including `runs/`, reaches it.
 
-1. Create the app and set a long random password. The page will not start without one.
+1. Create the app.
 
    ```
    heroku create <app-name>
-   heroku config:set ROOM_PASSWORD=<long-random-password> -a <app-name>
    ```
 
 2. Deploy, then set the dyno size. The size comes second because the app needs a dyno to resize.
@@ -130,9 +129,9 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
    heroku ps:type performance-m -a <app-name>
    ```
 
-3. Open `https://<app-name>.herokuapp.com` and sign in with the password. Any user name works. Start a run on the current input set, and check that its headline matches a local run of the same set.
+3. Open `https://<app-name>.herokuapp.com`. Start a run on the current input set, and check that its headline matches a local run of the same set.
 
-Changing `ROOM_PASSWORD` with `heroku config:set` restarts the app, which clears its files.
+**No sign-in.** Anyone with the address can use the page: start runs, add files, approve input sets and read results.
 
 **Dyno size.** The page and the engine together peak at about 1.7 GB in a run with two scenarios, measured on Linux on 1 November 2026. More scenarios need more.
 
@@ -150,6 +149,6 @@ Changing `ROOM_PASSWORD` with `heroku config:set` restarts the app, which clears
 
 The committed input sets come back with each deploy. To keep a result, download the workbook from the outcomes step. Heroku is not the retention store for approved runs (OPS-03).
 
-**Synthetic data only.** Files added on a hosted page leave this machine for Heroku, so never add bank data there.
+**Synthetic data only.** Files added on a hosted page leave this machine for Heroku, and anyone with the address can see them, so never add bank data there.
 
 **Why the `Procfile` sets `PYTHONPATH`.** Heroku builds the app in a temporary folder, and the installed project can keep pointing there. `PYTHONPATH` makes the server and the engine import the deployed source, and it lets a run fingerprint that source. A dyno has no `.git`, so a run's code version reads `0.1.0+unknown+source.<hash>`.

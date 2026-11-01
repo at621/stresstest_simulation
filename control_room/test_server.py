@@ -7,11 +7,9 @@ and a marked test under tests/ would enter the generated traceability matrix. Th
 makes one real run through the page's own setup and job, which takes about three quarters of a minute.
 """
 
-import base64
 import http.client
 import io
 import json
-import os
 import re
 import shutil
 import stat
@@ -500,49 +498,35 @@ def test_a_plain_form_post_cannot_start_a_run(site):
 
 @pytest.fixture
 def hosted(tmp_path):
-    """The real server as a router that ends TLS reaches it, with a password."""
-    running = server.serve(tmp_path, 0, password="open sesame")
+    """The real server as a router that ends TLS reaches it."""
+    running = server.serve(tmp_path, 0, "localhost")
     threading.Thread(target=running.serve_forever, daemon=True).start()
     yield running
     running.shutdown()
     running.server_close()
 
 
-def router(password="open sesame"):
-    token = base64.b64encode(f"anyone:{password}".encode()).decode()
-    return {"Host": "room.example", "X_Forwarded_Proto": "https", "Authorization": f"Basic {token}"}
+def router():
+    return {"Host": "room.example", "X_Forwarded_Proto": "https"}
 
 
-def test_plain_http_goes_to_https_before_any_password(hosted):
+def test_only_a_host_beyond_this_machine_is_hosted(hosted, site):
+    assert hosted.RequestHandlerClass.hosted and not site.RequestHandlerClass.hosted
+
+
+def test_plain_http_goes_to_https(hosted):
     response, _ = call(hosted, "GET", "/api/state?x=1", Host="room.example", X_Forwarded_Proto="http")
     assert response.status == 308 and response.getheader("Location") == "https://room.example/api/state?x=1"
     response, _ = call(hosted, "GET", "/", **router())
     assert response.status == 200
 
 
-@pytest.mark.parametrize("authorization", [
-    None, "Basic not base64", "Basic " + base64.b64encode(b"\xff\xfe").decode(),
-    "Bearer " + base64.b64encode(b"anyone:open sesame").decode(),
-    "Basic " + base64.b64encode(b"no colon").decode(),
-    "Basic " + base64.b64encode(b"anyone:open sesame ").decode(),
-])
-def test_nothing_opens_without_the_password(hosted, authorization):
-    headers = {"Host": "room.example", "X_Forwarded_Proto": "https"}
-    if authorization:
-        headers["Authorization"] = authorization
-    for method, path in (("GET", "/"), ("GET", "/api/state"), ("POST", "/api/start")):
-        response, payload = call(hosted, method, path, **headers)
-        assert response.status == 401 and "control room" not in payload.decode().lower().replace("realm", "")
-        assert response.getheader("WWW-Authenticate").startswith("Basic ")
-    assert hosted.RequestHandlerClass.control.job is None
-
-
-def test_the_password_opens_the_room_from_any_host_name(hosted):
+def test_the_room_opens_to_anyone_from_any_host_name(hosted):
     response, payload = call(hosted, "GET", "/api/job", **router())
     assert response.status == 200 and json.loads(payload) == {"state": "idle"}
 
 
-def test_another_site_cannot_use_a_signed_in_browser(hosted):
+def test_another_site_cannot_start_a_run(hosted):
     response, _ = post(hosted, "/api/start", {"document": PLAIN}, Origin="https://attacker.example", **router())
     assert response.status == 403
     response, _ = post(hosted, "/api/start", {"document": PLAIN}, Origin="http://room.example", **router())
@@ -553,18 +537,7 @@ def test_another_site_cannot_use_a_signed_in_browser(hosted):
     assert response.status == 400, payload  # past the gate, and refused for what it says
 
 
-def test_the_room_will_not_leave_this_machine_without_a_password(monkeypatch, capsys):
-    monkeypatch.delenv(server.PASSWORD, raising=False)
-    monkeypatch.setattr(server, "serve", lambda *_: pytest.fail("it listened"))
-    assert server.main(["--host", "0.0.0.0", "--port", "0", "--no-browser"]) == 1
-    monkeypatch.setenv(server.PASSWORD, "")
-    assert server.main(["--host", "0.0.0.0", "--port", "0", "--no-browser"]) == 1
-    assert server.PASSWORD in capsys.readouterr().err
-
-
-@pytest.mark.parametrize("host, password", [("0.0.0.0", "open sesame"), (server.HOST, None)])
-def test_the_password_is_read_only_to_listen_wider_and_reaches_no_engine(monkeypatch, host, password):
-    monkeypatch.setenv(server.PASSWORD, "open sesame")
+def test_the_room_listens_on_the_host_it_is_given(monkeypatch):
     seen = []
 
     def stop(_, __, *rest):
@@ -572,9 +545,8 @@ def test_the_password_is_read_only_to_listen_wider_and_reaches_no_engine(monkeyp
         raise OSError("enough")
 
     monkeypatch.setattr(server, "serve", stop)
-    assert server.main(["--host", host, "--no-browser"]) == 1
-    assert seen == [host, password]
-    assert (server.PASSWORD in os.environ) == (password is None)
+    assert server.main(["--host", "0.0.0.0", "--no-browser"]) == 1
+    assert seen == ["0.0.0.0"]
 
 
 def test_the_room_starts_without_matplotlib():

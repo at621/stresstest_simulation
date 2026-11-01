@@ -176,11 +176,10 @@ A run started here is an ordinary sealed folder under `runs/`, the same as one s
 
 ### On Heroku
 
-The control room can also be hosted as a Heroku web app: `Procfile` starts it, and it will not start without a `ROOM_PASSWORD`. On a hosted page, every request needs https and that password.
+The control room can also be hosted as a Heroku web app: `Procfile` starts it. A hosted page has no sign-in, so anyone with its address can use it, and it answers over https only.
 
 ```
 heroku create <app-name>
-heroku config:set ROOM_PASSWORD=<long-random-password> -a <app-name>
 git push heroku <branch>:main
 heroku ps:type performance-m -a <app-name>
 ```

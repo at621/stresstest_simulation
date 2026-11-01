@@ -13,13 +13,10 @@ Every action is an engine or one-off command: `stress run`, `stress rerun`, `fou
 packaged as inputs/<hash>/, so the input folders stay written by the one-off step alone. A setup a
 flag cannot say is written as a specification YAML under this folder's specifications/ and runs with
 --specification. This server listens on the loopback address and answers only its own page. Given
-another --host it will not start without ROOM_PASSWORD, and then answers only over https, with that
-password, from its own site.
+another --host it is a public site with no sign-in, and answers only over https, from its own site.
 """
 
 import argparse
-import base64
-import hmac
 import json
 import os
 import re
@@ -68,7 +65,6 @@ from stress.lineage import check_replay_environment, read_manifest
 
 HOST = "127.0.0.1"
 PORT = 8770
-PASSWORD = "ROOM_PASSWORD"  # the environment variable that lets the room listen beyond this machine
 HERE = Path(__file__).resolve().parent
 ROOT = nb.ROOT
 PAGE = HERE / "index.html"
@@ -750,11 +746,11 @@ def input_view(folder: Path) -> dict:
 class Handler(BaseHTTPRequestHandler):
     """A loopback server is still reachable from any page open in the browser. So a request counts
     only with this server's own Host (no DNS rebinding) and no foreign Origin (no cross-site start).
-    With a password the server sits behind a router that ends TLS, so a request counts only over
-    https, with the password, and with no foreign Origin."""
+    Hosted, the server sits behind a router that ends TLS, so a request counts only over https and
+    with no foreign Origin. There is no sign-in: whoever has the address has the page."""
 
     control: Control
-    password: str | None = None
+    hosted: bool = False
     server_version = "StressControlRoom"
 
     def log_message(self, *_) -> None:
@@ -778,7 +774,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(payload, allow_nan=False, default=str).encode(), "application/json")
 
     def _ours(self) -> bool:
-        if self.password is not None:
+        if self.hosted:
             return self._ours_hosted()
         hosts = {f"{HOST}:{self.server.server_port}", f"localhost:{self.server.server_port}"}
         origin = self.headers.get("Origin")
@@ -788,27 +784,14 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _ours_hosted(self) -> bool:
-        """https comes first, so that a password is never asked for over plain http."""
         host = self.headers.get("Host", "")
         if self.headers.get("X-Forwarded-Proto") != "https":
             self._send(308, b"", "text/plain", Location=f"https://{host}{self.path}")
-        elif not self._signed_in():
-            self._send(401, b"password required", "text/plain",
-                       WWW_Authenticate='Basic realm="Control room", charset="UTF-8"')
         elif self.headers.get("Origin") not in (None, f"https://{host}"):
             self._json(403, {"error": "this server answers only its own page"})
         else:
             return True
         return False
-
-    def _signed_in(self) -> bool:
-        """HTTP Basic; the browser asks for a user name too, and any will do."""
-        kind, _, token = self.headers.get("Authorization", "").partition(" ")
-        try:
-            _, _, given = base64.b64decode(token, validate=True).decode().partition(":")
-        except ValueError:
-            return False
-        return kind.lower() == "basic" and hmac.compare_digest(given.encode(), self.password.encode())
 
     def do_GET(self) -> None:
         if self._ours():
@@ -952,24 +935,20 @@ class Server(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"  # on Windows the option lets a second server share the port
 
 
-def serve(runs_dir: Path, port: int = PORT, host: str = HOST, password: str | None = None) -> Server:
-    handler = type("BoundHandler", (Handler,), {"control": Control(runs_dir), "password": password})
+def serve(runs_dir: Path, port: int = PORT, host: str = HOST) -> Server:
+    handler = type("BoundHandler", (Handler,), {"control": Control(runs_dir), "hosted": host != HOST})
     return Server((host, port), handler)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Control room for the stress engine.")
-    parser.add_argument("--host", default=HOST, help=f"listen here instead; anything but {HOST} needs {PASSWORD}")
+    parser.add_argument("--host", default=HOST, help=f"listen here instead; anything but {HOST} is a public site with no sign-in")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--runs-dir", type=Path, default=nb.RUNS_DIR, help="where runs are read and written")
     parser.add_argument("--no-browser", action="store_true", help="do not open the page")
     args = parser.parse_args(argv)
-    password = os.environ.pop(PASSWORD, None) if args.host != HOST else None  # no engine process inherits it
-    if args.host != HOST and not password:
-        print(f"will not listen on {args.host} without {PASSWORD}", file=sys.stderr)
-        return 1
     try:
-        server = serve(args.runs_dir.resolve(), args.port, args.host, password)
+        server = serve(args.runs_dir.resolve(), args.port, args.host)
     except OSError as exc:
         print(f"could not listen on {args.host}:{args.port}: {exc}", file=sys.stderr)
         return 1

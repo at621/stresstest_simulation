@@ -55,19 +55,19 @@ One check the engine does not make: `preflight.differences` compares the saved s
 - **It writes only its own files.** Saved setups go under `specifications/` here, named by one file name. Added files go to a temporary folder that goes when the server stops.
 - **No number is invented.** Every value comes from the files, a sealed run, `docs/spec/` or the engine's check.
 - **Closed folders stay closed.** Input sets are found by name, `inputs/<hash>/`, as in `nbtools.py`. A path in a setup is refused if it points into `archive/`, `inputs/bank/` or a tool cache.
-- **Local unless hosted.** It listens on `127.0.0.1` and refuses requests from any other host or site. The page loads nothing from the internet, and files go no further than this machine. Listening anywhere else takes `--host` and a password; see [On Heroku](#on-heroku).
+- **Local unless hosted.** It listens on `127.0.0.1` and refuses requests from any other host or site. The page loads nothing from the internet, and files go no further than this machine. Listening anywhere else takes `--host`; see [On Heroku](#on-heroku).
 
 After changing `server.py` or `preflight.py`, restart the server: it keeps its code in memory but reads the page fresh, and the page says so if the two have drifted apart.
 
 ## On Heroku
 
-`Procfile`, at the repository root, starts this server with `--host 0.0.0.0`. Given any host but `127.0.0.1`, the server refuses to start unless `ROOM_PASSWORD` is set. It then behaves differently in three ways:
+`Procfile`, at the repository root, starts this server with `--host 0.0.0.0`. Given any host but `127.0.0.1`, the server behaves differently in three ways:
 
-- **https only.** A plain http request is redirected before any password is asked for.
-- **A password on every request.** The browser asks for it once, as HTTP Basic. Any user name works.
-- **Its own site only.** A request from another site is refused, even from a browser that has signed in.
+- **No sign-in.** Anyone with the address can use the page.
+- **https only.** A plain http request is redirected.
+- **Its own site only.** A request from another site is refused.
 
-The server takes the password out of its environment at the start, so no engine process inherits it. There is one password, so the page keeps no record of who did what, and a sign-off's name is whatever was typed. One job at a time applies to everyone on the page.
+The page keeps no record of who did what, and a sign-off's name is whatever was typed. One job at a time applies to everyone on the page.
 
 The steps and limits are in [Hosting on Heroku](../docs/runbook.md#hosting-on-heroku).
 
