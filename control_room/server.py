@@ -640,8 +640,7 @@ class Control:
             if preflight.needs_specification(doc) or next(r for r in inputs if r["inputs"] == doc["run"]["inputs"])["runnable"]:
                 raise
             verdict = preflight.dry_run(run_config(doc))
-            return {**verdict, "needs_specification": False, "shown": "", "yaml": specification_text(doc, SPECS),
-                    "differences": preflight.differences(ROOT / doc["run"]["inputs"])}
+            return {**verdict, "needs_specification": False, "shown": "", "yaml": specification_text(doc, SPECS)}
         if flags is None:
             with tempfile.TemporaryDirectory(prefix="stress-preflight-") as temp:
                 path = Path(temp) / "specification.yaml"
@@ -653,8 +652,7 @@ class Control:
             verdict = preflight.dry_run(run_config(doc))
             shown = self.command(flags)[1]
         return {**verdict, "needs_specification": flags is None, "shown": shown,
-                "yaml": specification_text(doc, SPECS),
-                "differences": preflight.differences(ROOT / doc["run"]["inputs"])}
+                "yaml": specification_text(doc, SPECS)}
 
     def start_run(self, form: dict) -> Job:
         """Start exactly what the page showed: the flags, or the file saved under the name shown."""

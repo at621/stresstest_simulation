@@ -214,8 +214,6 @@ details.file > .body { padding: 6px 0 4px; }
 .verdict .head { display: flex; gap: 6px; align-items: baseline; font-weight: 600; font-size: 14px; }
 .verdict .line { font-size: 12.5px; margin-top: 2px; overflow-wrap: anywhere; }
 .verdict ul { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
-details.diff { font-size: 12px; margin-bottom: 8px; }
-details.diff summary { cursor: pointer; color: var(--warn); }
 .command { font: 12px/1.5 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 7px 9px; overflow-wrap: anywhere; margin: 6px 0 8px; min-height: 24px; }
 .error-line { font-size: 12px; color: var(--block); margin: 6px 0; overflow-wrap: anywhere; }
 .pips { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 3px; margin: 8px 0 4px; max-width: 760px; }
@@ -903,18 +901,8 @@ function verdictBox() {
   return box;
 }
 
-function differencesBox() {
-  const diff = PRE?.differences;
-  if (!diff || !(diff.differing.length || diff.unmeasured.length)) return null;
-  return el('details', { class: 'diff' },
-    el('summary', {}, `! These files differ from the requirements in ${plural(diff.differing.length, 'value')}${diff.unmeasured.length ? `, and ${plural(diff.unmeasured.length, 'comparison')} could not be made` : ''}`),
-    el('p', { class: 'quiet', style: 'margin:3px 0' }, `The engine does not check this, and a run still works. ${count(diff.compared)} values were compared with the requirements.`),
-    diff.differing.length ? el('div', { class: 'scroll-x' }, table(['Item', 'Is', 'Expected'], diff.differing.map(d => row([`${d.group}: ${d.item}`, absent(d.actual) ? gone : `${Array.isArray(d.actual) ? d.actual.map(fixed).join(' to ') : fixed(d.actual)} ${d.unit}`, Array.isArray(d.expected) ? d.expected.map(fixed).join(' to ') : fixed(d.expected)], i => i > 0)))) : null,
-    diff.unmeasured.length ? el('ul', { style: 'margin:3px 0;padding-left:16px' }, diff.unmeasured.map(u => el('li', {}, `${u.group}: ${u.error}`))) : null);
-}
-
 function renderVerdict() {
-  $('#verdict-1').replaceChildren(...[verdictBox(), differencesBox()].filter(Boolean));
+  $('#verdict-1').replaceChildren(verdictBox());
   renderWhere();
 }
 

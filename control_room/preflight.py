@@ -4,7 +4,7 @@
   parameters, its variants and portfolios. Every value is read from the set's own files.
 - ``dry_run``: the engine's own verdict on a setup. It calls R1 to R4 as ``cli.pipeline`` does, in a
   temporary folder, and stops before R5. Nothing is calculated, and nothing reaches runs/.
-- ``differences``: the base input set against docs/spec/, the one check the engine does not make.
+- ``differences``: the base input set against docs/spec/, the one check the engine does not make. The tests use it; the page does not.
 - ``specification_document`` and ``parse_yaml``: the page's setup as the YAML the engine reads, and back.
 """
 
