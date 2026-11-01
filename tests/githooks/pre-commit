@@ -3,7 +3,9 @@
 #   git config core.hooksPath tests/githooks
 #
 # 1. Protected and local-only paths are never committed.
-# 2. Lint, import rules and the full test suite pass.
+# 2. Lint and import rules pass.
+# 3. The full test suite passes, unless every staged file is on the small-change list below
+#    (CLAUDE.md, "How to work"). A file not on the list counts as the engine, deleted ones too.
 
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 
@@ -25,4 +27,14 @@ unset VIRTUAL_ENV
 uv run python -m foundation.transcribe --check || exit 1
 uv run ruff check || exit 1
 uv run lint-imports --cache-dir tests/.import_linter_cache || exit 1
+
+touched=$(git diff --cached --name-only)
+spec=$(printf '%s\n' "$touched" | grep '^docs/spec/')
+other=$(printf '%s\n' "$touched" | grep -Ev '^(control_room/|docs/|README\.md$|TODO\.md$|CLAUDE\.md$|Procfile$)')
+if [ -z "$spec$other" ]; then
+    uv run python -m tests.traceability --check || exit 1
+    echo "pre-commit: small change, full test suite skipped"
+    exit 0
+fi
+
 uv run pytest -q -x -p no:cacheprovider || exit 1

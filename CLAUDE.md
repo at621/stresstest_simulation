@@ -21,8 +21,11 @@ The design leads. If another document disagrees with it, follow the design and t
 
 ## How to work
 
-- Do each improvement on its own branch, never directly on `main`. Merge into `main` only when the user explicitly permits it.
-- Use `/improve` for a change to the engine or the one-off steps: tests first, then the gate, then a full run compared against the last one, then review by `change-reviewer`.
+- Do each improvement on its own branch, never directly on `main`. Commit to that branch without asking. Merge into `main` only when the user explicitly permits it.
+- Sort every change first, and say which kind it is in one line. If it could be either, ask in one line.
+  - **Small:** it touches only `control_room/`, `docs/` (not `docs/spec/`), `README.md`, `TODO.md`, `CLAUDE.md` or `Procfile`, changes no result, and adds no new statement about what the engine does. Examples: page wording or layout, a button, a document. Make it, run `uv run pytest control_room` if the room changed, look at the page if it changed, and commit. It needs no `/improve`, no full run and no `change-reviewer`, and the pre-commit gate skips the full test suite.
+  - **Major:** everything else, including the engine, the one-off steps, input data, a new capability, or text that says what the engine does or accepts. Give the user the scope in one line and wait for their approval before building. Then use `/improve`: tests first, then the gate, then a full run compared against the last one, then review by `change-reviewer`. Test any claims about the engine yourself before review.
+- The full test suite runs only with the user's permission: as part of a major change they approved, or when they ask for it. If any other commit would trigger it in the pre-commit gate, ask first.
 - Keep to the code rules in `docs/architecture.md` §2. A change that alters results must say so, with `stress compare` output; a change that is not meant to alter results must reproduce them.
 - Record any new assumption, or conflict with the design, in `docs/assumptions.md`. When behaviour or commands change, update `README.md` and `docs/runbook.md` to match. A change that departs from the design needs the user's agreement first, and the design is updated with it.
 - Keep `README.md` for durable project information, capabilities, setup and usage. Never put temporary implementation status, progress updates, pending owner approvals/sign-offs, open-action lists or delivery tracking there. Record those in `TODO.md`, `docs/architecture.md` §6 or the relevant review/implementation document under `docs/`.

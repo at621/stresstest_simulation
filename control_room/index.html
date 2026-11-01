@@ -572,18 +572,13 @@ const canEnter = n => n === 1 || (n === 2 && ready()) || (n === 3 && (engineJob(
 function isDone(n) {
   if (n === 1) return ready();
   if (n === 2) return ready() && farthest >= 3;
-  return n === 3 && !!finishedAt && !jobRunning;
+  if (n === 3) return !!finishedAt && !jobRunning;
+  return isDone(3) && !!RESULT;
 }
 
 function stepNote(n) {
   if (n === STEP) return 'You are here';
-  if (n === 1) {
-    const good = slots().filter(s => s.kind !== 'missing' && !s.problem).length;
-    return ready() ? `${good} files, ${plural(runOrder().length, 'scenario')}` : `${good} of ${STATE.roles.length} files`;
-  }
-  if (n === 2) return farthest < 2 ? 'Not yet' : 'Seen';
-  if (n === 3) return jobRunning && engineJob(JOB) ? 'In progress' : finishedAt ? `Finished ${stamp(finishedAt)}` : 'Not started';
-  return RESULT ? `Run of ${stamp(RESULT.created_at)}` : STATE.runs.length ? plural(STATE.runs.length, 'earlier run') : 'No run yet';
+  return isDone(n) ? 'Passed' : 'Not passed';
 }
 
 function stoppedLine() {
@@ -1275,7 +1270,10 @@ async function poll() {
     if (STEP === 3) goTo(4);
   } else if (job.kind === 'rerun') {
     renderRuns();
-  } else renderStep();
+  } else {
+    if (job.kind === 'run') finishedAt = null;  // a run that did not seal leaves the step not passed
+    renderStep();
+  }
   renderWhere();
 }
 

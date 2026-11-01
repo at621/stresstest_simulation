@@ -76,8 +76,8 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 
 ### Gates
 
-- **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about three minutes), and blocks the stop until they pass.
-- **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks and refuses protected paths and run folders.
+- **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about seven minutes), and blocks the stop until they pass.
+- **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks and refuses protected paths and run folders. When every staged file is on the hook's small-change list, it skips pytest, checks traceability instead and takes seconds. CI still runs everything.
 - **Traceability:** after changing a test marker, an ID named in code, an acceptance docstring, `docs/assumptions.md` or `docs/traceability/requirement-status.yaml`, run `uv run python -m tests.traceability` to regenerate [the matrix](traceability/traceability-matrix.md) and [the source register](source-register/source-register.md); a control test fails until they are current, and `--check` compares without writing.
 
 ### Draft preparation and replay

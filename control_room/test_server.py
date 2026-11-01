@@ -537,6 +537,13 @@ def test_another_site_cannot_start_a_run(hosted):
     assert response.status == 400, payload  # past the gate, and refused for what it says
 
 
+def test_the_steps_carry_only_the_standard_labels():
+    page = server.PAGE.read_text(encoding="utf-8")
+    start = page.index("function stepNote")
+    body = page[start:page.index("function stoppedLine")]
+    assert set(re.findall(r"'([^']+)'", body)) == {"You are here", "Passed", "Not passed"}
+
+
 def test_the_guide_to_step_one_is_served(site):
     response, payload = call(site, "GET", "/api/guide")
     assert response.status == 200 and len(json.loads(payload)["files"]) == 7

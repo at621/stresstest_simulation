@@ -21,7 +21,7 @@ The page opens on the book the setting names, and the setting is `small`. `BOOKS
 
 ## The four steps
 
-The bar at the top stays in view. It shows the four steps, which are done and where you are, and holds the button that moves you on. A line appears under it only when something needs saying: a missing file, an error, a run in progress.
+The bar at the top stays in view. It shows the four steps, each as Passed or Not passed, marks the one you are on with You are here, and holds the button that moves you on. A line appears under it only when something needs saying: a missing file, an error, a run in progress.
 
 | Step | What you do there |
 |---|---|

@@ -1,6 +1,6 @@
 ---
 name: change-reviewer
-description: Independent reviewer for one improvement to the stress engine. Checks the change's code and tests against its stated purpose, the design, the requirements and the repository rules, runs the gate, checks the effect on results, and returns APPROVE or CHANGES REQUESTED with findings. Every change needs its approval before it is merged.
+description: Independent reviewer for one improvement to the stress engine. Checks the change's code and tests against its stated purpose, the design, the requirements and the repository rules, runs the gate, checks the effect on results, and returns APPROVE or CHANGES REQUESTED with findings. Every major change needs its approval before it is merged; a small change, as CLAUDE.md defines it, does not.
 tools: Read, Grep, Glob, Bash
 ---
 
