@@ -1,11 +1,13 @@
-"""Tests of the small input set that Heroku hosts, run with the room's other tests:
+"""Tests of the small dataset and of the setting that chooses a dataset, run with the room's other tests:
 
     uv run pytest control_room
 
-The full book must stay as it is and keep opening first; the sample must stay whole and run.
+The full book must stay as it is, the sample must stay whole and run, and the page must open on the
+book the setting names or not start.
 """
 
 import json
+import shutil
 import subprocess
 import sys
 import warnings
@@ -34,6 +36,8 @@ from stress.contracts.inputs import (
 
 ROOT = server.ROOT
 FULL = small_set.FULL
+CHOSEN, OTHER = "a" * 16, "b" * 16
+RETIRED: set[str] = set()  # sets a rebuild replaced; they stay committed, and the page no longer opens on them
 
 
 def committed_sets() -> list[Path]:
@@ -41,12 +45,6 @@ def committed_sets() -> list[Path]:
     listed = subprocess.run(["git", "ls-files", "inputs"], cwd=ROOT, check=True, capture_output=True, text=True)
     names = {Path(line).parts[1] for line in listed.stdout.split()}
     return sorted(ROOT / "inputs" / name for name in names if server.nb.INPUT_SET_NAME.fullmatch(name))
-
-
-def hosted_sets() -> list[Path]:
-    """What is left on Heroku once .slugignore has removed its folders."""
-    left_out = (ROOT / ".slugignore").read_text(encoding="utf-8").split()
-    return [path for path in committed_sets() if f"/inputs/{path.name}" not in left_out]
 
 
 def table(folder: Path, spec) -> pd.DataFrame:
@@ -59,13 +57,11 @@ def document(folder: Path, spec) -> dict:
 
 @pytest.fixture(scope="module")
 def small() -> Path:
-    found = hosted_sets()
-    assert len(found) == 1, found
-    return found[0]
+    return ROOT / "inputs" / server.BOOKS["small"]
 
 
-def test_heroku_gets_the_small_set_alone(small):
-    assert small != FULL
+def test_the_small_dataset_is_a_tenth_of_the_large_one(small):
+    assert FULL.name == server.BOOKS["large"] and small != FULL
     assert len(table(small, FACILITIES)) == pytest.approx(len(table(FULL, FACILITIES)) / small_set.SHARE, abs=10)
 
 
@@ -132,15 +128,118 @@ def test_the_full_book_stays_untouched():
     assert not measured["differing"] and not measured["unmeasured"]
 
 
-def test_the_page_opens_on_the_full_book_while_it_is_here(small):
-    assert small.name in {row["inputs"].split("/")[1] for row in server.input_inventory()}
-    first = next(row for row in server.input_inventory() if row["runnable"])
-    assert first["inputs"] == f"inputs/{FULL.name}"
+def test_the_setting_starts_small(small, tmp_path):
+    assert server.DATASET == "small"
+    assert server.Control(tmp_path).state()["opening"] == f"inputs/{small.name}"
 
 
-def test_the_page_keeps_the_servers_order():
-    opening = next(line for line in server.PAGE.read_text(encoding="utf-8").splitlines() if "const savedSets" in line)
-    assert ".sort(" not in opening
+def test_large_opens_the_full_book(tmp_path):
+    assert server.Control(tmp_path, "large").state()["opening"] == f"inputs/{FULL.name}"
+
+
+def test_the_page_opens_on_what_the_server_names():
+    assert "newDocument(STATE.opening)" in server.PAGE.read_text(encoding="utf-8")
+
+
+def test_heroku_receives_both_books():
+    """DATASET can then change on the app with no new build."""
+    left_out = ROOT / ".slugignore"
+    skipped = left_out.read_text(encoding="utf-8").split() if left_out.exists() else []
+    assert set(server.BOOKS.values()) <= {path.name for path in committed_sets()}
+    assert not [name for name in server.BOOKS.values() if f"/inputs/{name}" in skipped]
+
+
+@pytest.mark.parametrize("flags, variable, expected", [
+    ([], None, "small"), ([], "large", "large"), (["--dataset", "large"], None, "large"),
+    (["--dataset", "small"], "large", "small")])
+def test_a_flag_beats_the_environment_and_the_environment_beats_the_default(flags, variable, expected, monkeypatch):
+    seen = []
+
+    def stop_at_listening(_runs_dir, _port, _host, dataset):
+        seen.append(dataset)
+        raise OSError("stopped here")
+
+    monkeypatch.setattr(server, "serve", stop_at_listening)
+    monkeypatch.delenv("DATASET", raising=False)
+    if variable:
+        monkeypatch.setenv("DATASET", variable)
+    assert server.main(["--no-browser", *flags]) == 1
+    assert seen == [expected]
+
+
+@pytest.mark.parametrize("flags, variable", [(["--dataset", "medium"], None), ([], "Large"), ([], "")])
+def test_a_wrong_setting_stops_the_server(flags, variable, monkeypatch, capsys):
+    monkeypatch.delenv("DATASET", raising=False)
+    if variable is not None:
+        monkeypatch.setenv("DATASET", variable)
+    with pytest.raises(SystemExit) as stopped:
+        server.main(["--no-browser", "--port", "0", *flags])
+    assert stopped.value.code == 2
+    assert "small or large" in capsys.readouterr().err
+
+
+def test_a_book_that_is_not_here_stops_the_server_rather_than_opening_another(monkeypatch, capsys):
+    monkeypatch.delenv("DATASET", raising=False)
+    monkeypatch.setitem(server.BOOKS, "small", "0" * 16)
+    with pytest.raises(SystemExit) as stopped:
+        server.main(["--no-browser", "--port", "0"])
+    assert stopped.value.code == 2
+    assert "inputs/0000000000000000" in capsys.readouterr().err
+
+
+@pytest.fixture
+def books(small, tmp_path, monkeypatch):
+    """Two books in a folder of their own, free to break."""
+    for setting, name in (("small", CHOSEN), ("large", OTHER)):
+        shutil.copytree(small, tmp_path / name)
+        monkeypatch.setitem(server.BOOKS, setting, name)
+    monkeypatch.setattr(server.nb, "INPUTS_DIR", tmp_path)
+    monkeypatch.delenv("DATASET", raising=False)
+    return tmp_path
+
+
+def stopped_saying(capsys) -> str:
+    with pytest.raises(SystemExit) as stopped:
+        server.main(["--no-browser", "--port", "0"])
+    assert stopped.value.code == 2
+    return capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name", ["scenarios.yaml", "parameter_set.yaml", "manifest.json", "obligors.parquet",
+                                  "facilities.parquet"])
+def test_an_unreadable_book_stops_the_server_with_a_message(books, name, capsys):
+    (books / CHOSEN / name).write_bytes(b"a: [1")
+    assert f"inputs/{CHOSEN}" in stopped_saying(capsys)
+
+
+def test_a_book_without_its_manifest_is_not_taken_for_a_port_problem(books, capsys):
+    (books / CHOSEN / "manifest.json").unlink()
+    assert "could not listen" not in stopped_saying(capsys)
+
+
+def test_a_book_the_engine_cannot_read_stops_the_server(books, capsys):
+    path = books / CHOSEN / FACILITIES.filename
+    pd.read_parquet(path).drop(columns="credit_status_date").to_parquet(path)
+    assert "credit_status_date" in stopped_saying(capsys)
+
+
+def test_a_broken_book_other_than_the_chosen_one_leaves_the_server_alone(books):
+    (books / OTHER / "scenarios.yaml").write_bytes(b"a: [1")
+    server.check_dataset("small")
+    assert not next(row for row in server.input_inventory() if row["inputs"] == f"inputs/{OTHER}")["runnable"]
+
+
+def test_every_committed_set_the_engine_can_read_is_a_book_or_retired():
+    """A new set must be named, or the page stays on the one it replaced."""
+    readable = {path.name for path in committed_sets() if not server.contract_gaps(path)}
+    assert set(server.BOOKS.values()) <= readable
+    assert readable - set(server.BOOKS.values()) <= RETIRED
+
+
+@pytest.mark.parametrize("document", ["README.md", "docs/runbook.md", "docs/assumptions.md"])
+def test_the_documents_name_the_current_books(document):
+    text = (ROOT / document).read_text(encoding="utf-8")
+    assert all(name in text for name in server.BOOKS.values())
 
 
 def test_the_engine_runs_the_small_set(small, tmp_path):

@@ -72,7 +72,7 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 2. Parameter set or generator changed: run `uv run python -m foundation.synth` on the machine that built the current input set. The hash depends on the operating system and the CPU's BLAS kernel, and a rebuild elsewhere can give a different book, not only different bytes (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
 3. Run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces` fails until the new input set is in `inputs/`. It runs on Windows only and passes only under the kernel that built the set, so CI cannot catch a missing rebuild.
 4. Compare the old and new results with `uv run stress compare --base runs/<old> --new runs/<new>` (version-change control). It prints the impairment differences and keeps the full report in `runs/comparisons/<old>__<new>/`: `summary.md`, the differences in impairment, stage stocks and coverage, PD and LGD, and `comparison.json`, which ties them to both runs. Sealed runs are write-once, so the report sits beside them; `--out` chooses another folder outside them.
-5. A new full input set also changes what Heroku would host, and a run of it there is stopped for lack of memory. Point `FULL` in `control_room/small_set.py` at the new set and run that script to rebuild the sample. Add lines to `.slugignore` for the new full set and the old sample. Update both hashes and the sample's figures in A41 of [the assumptions](assumptions.md), the sample's hash in [Hosting on Heroku](#hosting-on-heroku), and its figures in `README.md`. Then stage the new sets and run `uv run pytest control_room`, which checks this: the gate does not.
+5. A new full input set needs a new small dataset too. Put its hash in `BOOKS["large"]` in `control_room/server.py`, run `uv run python control_room/small_set.py`, and put the hash that prints in `BOOKS["small"]`. Add the two replaced hashes to `RETIRED` in `control_room/test_small_set.py`, because old sets stay committed. Update both hashes and the sample's figures in A41 of [the assumptions](assumptions.md), the sample's hash in [Hosting on Heroku](#hosting-on-heroku), and both hashes and the figures in `README.md`. If a new run changes the memory peaks, update them in [Hosting on Heroku](#hosting-on-heroku) too. Then stage the new sets and run `uv run pytest control_room`: it fails until `BOOKS` and those documents name the new sets. The gate does not run it.
 
 ### Gates
 
@@ -111,7 +111,7 @@ oracles remain open until supplied by the owner; passing automated checks does n
 
 ## Control room
 
-`uv run python control_room/server.py` opens the page on this machine, and [its README](../control_room/README.md) covers the page itself. Its tests are not part of the gate: run `uv run pytest control_room`, which takes about two and a half minutes.
+`uv run python control_room/server.py` opens the page on this machine, on the small dataset. Add `--dataset large` for the full book, and see [its README](../control_room/README.md) for the page itself. Its tests are not part of the gate: run `uv run pytest control_room`, which takes about two and a half minutes.
 
 ### Hosting on Heroku
 
@@ -123,7 +123,7 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
    heroku create <app-name>
    ```
 
-2. Deploy. A new app gets a Basic dyno, which is enough for the sample.
+2. Deploy. A new app gets a Basic dyno, which is enough for the small dataset.
 
    ```
    git push heroku <branch>:main
@@ -133,11 +133,20 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
 
 **No sign-in.** Anyone with the address can use the page: start runs, add files, approve input sets and read results.
 
-**The hosted input set.** Heroku deploys `inputs/70a9337b7d75f668` alone, because `.slugignore` leaves every other set out. Heroku applies that file when it builds with a classic buildpack, as this app does. A new committed set needs its own line there, and a room test fails until it has one. The sample holds a tenth of the facilities in each portfolio and opening stage of the full book. `uv run python control_room/small_set.py` rebuilds it, and A41 in [the assumptions](assumptions.md) records how close it comes. It cannot meet the requirements' exact targets, so the page lists those differences. Locally the page still opens on the full book, because it opens on the largest set it can read.
+**The hosted dataset.** Heroku deploys every committed input set, and the same setting as on this machine chooses the book, so the app starts on `small`, `inputs/70a9337b7d75f668`. It stays there unless the app has a `DATASET` config var. To change it, resize the dyno first if you are going to `large`, then set the var:
 
-**Dyno size.** Measured on Linux on 1 November 2026, the page and the engine together peak at about 0.55 GB on the sample and 1.7 GB on the full book, in a run with two scenarios. More scenarios need more. Going over quota logs an R14 warning and may slow the run. Heroku stops the dyno only at the limit in the third column.
+```
+heroku ps:type performance-m
+heroku config:set DATASET=large
+```
 
-| Dyno | Memory quota | Stopped at | The sample | The full book |
+Setting or removing the var restarts the app, which clears its files. `heroku config:unset DATASET` goes back to `small`, and `heroku ps:type basic` then goes back to the smaller dyno. A value that is neither `small` nor `large` stops the server at start, and the log says why.
+
+The small dataset holds a tenth of the facilities in each portfolio and opening stage of the full book. `uv run python control_room/small_set.py` rebuilds it, and A41 in [the assumptions](assumptions.md) records how close it comes. It cannot meet the requirements' exact targets, so the page lists those differences.
+
+**Dyno size.** Measured on Linux on 1 November 2026, the page and the engine together peak at about 0.55 GB on `small` and 1.7 GB on `large`, in a run with two scenarios. More scenarios need more. Going over quota logs an R14 warning and may slow the run. Heroku stops the dyno only at the limit in the third column.
+
+| Dyno | Memory quota | Stopped at | `small` | `large` |
 |---|---:|---:|---|---|
 | eco, basic, standard-1x | 0.5 GB | 1 GB | Fits, slightly over quota | Is stopped partway |
 | standard-2x | 1 GB | 2 GB | Fits | Is over quota and close to being stopped |
@@ -149,7 +158,7 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
 - input sets packaged on the page, and sign-offs made there;
 - setups saved on the page, and files added there.
 
-The sample comes back with each deploy. To keep a result, download the workbook from the outcomes step. Heroku is not the retention store for approved runs (OPS-03).
+Both datasets come back with each restart. To keep a result, download the workbook from the outcomes step. Heroku is not the retention store for approved runs (OPS-03).
 
 **Synthetic data only.** Files added on a hosted page leave this machine for Heroku, and anyone with the address can see them, so never add bank data there.
 

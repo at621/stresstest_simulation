@@ -6,7 +6,18 @@ One page that takes a run through four steps. Every action on it is an engine or
 uv run python control_room/server.py
 ```
 
-This opens <http://127.0.0.1:8770>. Ctrl+C stops the page. A run in progress still finishes, because the engine runs in its own process group. Use `--port` for another port, `--no-browser` to skip opening the page, and `--runs-dir` to read and write runs in another folder. To host the page instead, see [On Heroku](#on-heroku).
+This opens <http://127.0.0.1:8770>. Ctrl+C stops the page. A run in progress still finishes, because the engine runs in its own process group. Use `--port` for another port, `--no-browser` to skip opening the page, `--runs-dir` to read and write runs in another folder, and `--dataset` to choose the book. To host the page instead, see [On Heroku](#on-heroku).
+
+## Small or large
+
+The page opens on the book the setting names, and the setting is `small`. `BOOKS` and `DATASET` at the top of `server.py` hold both.
+
+| Setting | The book |
+|---|---|
+| `small` | The sample, a tenth of the full book, for trying the page. |
+| `large` | The full book the requirements describe. |
+
+`--dataset large` changes it for one start. The `DATASET` environment variable does the same, and `--dataset` overrides it. To change it for good, edit `DATASET` in `server.py`. A value that is neither, or a book that is missing or that the engine cannot read, stops the server with a message, so the page never opens on the other book by accident.
 
 ## The four steps
 
@@ -14,7 +25,7 @@ The bar at the top stays in view. It shows the four steps, which are done and wh
 
 | Step | What you do there |
 |---|---|
-| **1 Files and settings** | The files the run needs, one row each: what the file holds, the file in use, its rows and size, and whether it fits. Add or replace any file with your computer's file dialog, several at once, or by dropping them on the card. Everything that changes a run is here: choose the scenarios, add your own and type their values, set each scenario's path after 2029, the balance sheet with its yearly volumes, the method choices, and each segment's parameters and Z drivers. The sanity checks then run without calculating, and the next step opens only when nothing stops them. |
+| **1 Files and settings** | The files the run needs, one row each: what the file holds, the file in use, its rows and size, and whether it fits. Add or replace any file with your computer's file dialog, or by dropping files on the card. "What this step expects" opens the guide: the rules every file follows, what happens to a file, and for each file its columns or sections, and which problems stop the run, stop it partway or leave a record out. Everything that changes a run is here: choose the scenarios, add your own and type their values, set each scenario's path after 2029, the balance sheet with its yearly volumes, the method choices, and each segment's parameters and Z drivers. The sanity checks then run without calculating, and the next step opens only when nothing stops them. |
 | **2 Review the files** | View only. Each table with its summary and a searchable row preview, every rating transition matrix, the scenario paths, the parameters, and the Z of each segment, scenario and year. If something is wrong, go back to step 1. |
 | **3 Run** | What will run, in one list. Start, then the engine's progress and its log. The exact command is folded below the list. |
 | **4 Outcomes** | The run's figures, charts and workbook, a check that it reproduces, a comparison with another run, and every earlier run. "Run again with changes" loads the setup back into step 1. |
@@ -23,9 +34,9 @@ The bar at the top stays in view. It shows the four steps, which are done and wh
 
 The engine reads only a frozen folder, `inputs/<hash>/`, and only the one-off step writes one. So a file added on the page waits in a temporary folder of this server, and is checked at once against the columns or sections its row needs. "Use these files" copies the added files and the saved files for the other rows together and runs `foundation.synth package`. If the contents match a saved set, that set comes back unchanged. Your originals and the saved sets are not touched.
 
-The file's row decides what it is, so a file can have any name. "Add several files" matches files to rows by name and says which ones it could not place. Files wait until the server stops. The engine reads Parquet and YAML only, so a file in another format has to be converted first.
+The file's row decides what it is, so a file can have any name. Files dropped on the card go to rows by name, and the page says which ones it could not place. Files wait until the server stops. The engine reads Parquet and YAML only, so a file in another format has to be converted first.
 
-The page opens on the largest saved set the engine can read, and the newest of those, and every row can then be replaced. So a smaller set never takes over from the full book. Older sets it cannot read are not offered.
+Every row of the book the page opens on can be replaced. A set packaged here stays in use until the page is reloaded, when the page goes back to the setting's book. To reach it again, use "Load its setup" on one of its runs, or add its files again. Older sets the engine cannot read are not offered.
 
 ## Scenarios
 
@@ -69,7 +80,7 @@ After changing `server.py` or `preflight.py`, restart the server: it keeps its c
 
 The page keeps no record of who did what, and a sign-off's name is whatever was typed. One job at a time applies to everyone on the page.
 
-Heroku gets one input set, a sample of a tenth of the full book, because a run of the full book needs more memory than a small dyno has. `small_set.py` makes it, and `.slugignore` at the repository root keeps the other sets off the app.
+Heroku gets both books and follows [the same setting](#small-or-large), so the app starts on `small`, because a run of the full book needs more memory than a small dyno has. `heroku config:set DATASET=large` moves it to the full book, which needs a larger dyno first.
 
 The steps and limits are in [Hosting on Heroku](../docs/runbook.md#hosting-on-heroku).
 
@@ -79,10 +90,11 @@ The steps and limits are in [Hosting on Heroku](../docs/runbook.md#hosting-on-he
 |---|---|
 | `server.py` | Holds added files, has the engine judge a setup, writes it as a specification, starts the engine and the one-off steps, reads sealed runs, serves the page. |
 | `preflight.py` | The seven files in words and each file's check, what a saved set holds, the dry run, the comparison with the requirements, and the setup as YAML and back. |
+| `guide.py` | The guide to step 1. Columns, allowed values and required sections come from the engine's contract, and each rule names the engine's reasons or block codes. A test fails if a new column, section, reason or block code has no place in it. The plain words still have to be read against the engine. |
 | `index.html` | The page: the bar and the four steps. Chart colours match `nbtools.py`. |
-| `small_set.py` | Cuts the full input set to a tenth for Heroku, and has `foundation.synth package` freeze it. |
+| `small_set.py` | Cuts the large dataset to a tenth to make the small one, and has `foundation.synth package` freeze it. |
 | `specifications/` | Setups saved from the page, as the engine reads them. Created on first save. |
-| `test_preflight.py`, `test_server.py`, `test_small_set.py` | Their tests. |
+| `test_guide.py`, `test_preflight.py`, `test_server.py`, `test_small_set.py` | Their tests. |
 
 ```
 uv run pytest control_room

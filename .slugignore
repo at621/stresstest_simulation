@@ -1,4 +1,0 @@
-# Heroku deploys the small input set alone: a run of the full book needs more memory than a Basic dyno has.
-/inputs/32415eb9d5bbcd74
-/inputs/514ed0e86e3dc760
-/inputs/d62d0386f2c5256e

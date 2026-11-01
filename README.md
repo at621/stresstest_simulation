@@ -165,9 +165,24 @@ uv run python control_room/server.py
 
 This opens <http://127.0.0.1:8770>.
 
+The page opens on one of two datasets, and the setting is `small`:
+
+| Setting | Input set | Holds | A run needs | Use it for |
+|---|---|---|---:|---|
+| `small` (default) | `inputs/70a9337b7d75f668` | 1,002 facilities, about €1.2bn of GCA | about 0.55 GB | Trying the page. Its results cannot stand in for the full book's. |
+| `large` | `inputs/d62d0386f2c5256e` | 10,000 facilities, €11bn of GCA | about 1.7 GB | The full book the requirements describe. |
+
+To change it, pass `--dataset`, or set the `DATASET` environment variable, which `--dataset` overrides:
+
+```
+uv run python control_room/server.py --dataset large
+```
+
+The setting belongs to the page. `stress run` names its input set with `--inputs`, and the `DATASET` variable does not affect it.
+
 | Step | What you do there |
 |---|---|
-| **1 Files and settings** | See the seven files a run needs, replace any of them, choose the scenarios and set the run's options. The engine's sanity checks run here without calculating anything. |
+| **1 Files and settings** | See the seven files a run needs and what each must contain, replace any of them, choose the scenarios and set the run's options. The engine's sanity checks run here without calculating anything. |
 | **2 Review the files** | View each table, rating transition matrix, scenario path and parameter. |
 | **3 Run** | See what will run, start it and follow its progress. |
 | **4 Outcomes** | Read the figures and charts, download the workbook, check that the run reproduces, and compare it with another run. |
@@ -183,11 +198,16 @@ heroku create <app-name>
 git push heroku <branch>:main
 ```
 
-Heroku gets one input set: a sample of the full book with 1,002 facilities and about €1.2bn of GCA. `.slugignore` keeps the full sets off the app. The sample is for trying the page, and its results cannot stand in for the full book's.
+Heroku gets both datasets and follows the same setting, so the app starts on `small`. To move it to `large`, resize the dyno first, then set a config var:
+
+```
+heroku ps:type performance-m
+heroku config:set DATASET=large
+```
 
 Two limits shape how to use it:
 
-- **Memory:** a run of the sample with two scenarios needs about 0.55 GB, slightly over a Basic dyno's 0.5 GB quota but well under the 1 GB where Heroku stops it. The full book needs about 1.7 GB.
+- **Memory:** a `small` run with two scenarios needs about 0.55 GB, slightly over a Basic dyno's 0.5 GB quota but well under the 1 GB where Heroku stops it. A `large` run needs about 1.7 GB, so Heroku stops it on a Basic dyno.
 - **Files do not last:** Heroku clears the app's files at every deploy and restart, and at least once a day. Runs and anything added on the page go with them, so download the workbook to keep a result.
 
 Use synthetic data only. See [Hosting on Heroku](docs/runbook.md#hosting-on-heroku) in the runbook.

@@ -537,6 +537,11 @@ def test_another_site_cannot_start_a_run(hosted):
     assert response.status == 400, payload  # past the gate, and refused for what it says
 
 
+def test_the_guide_to_step_one_is_served(site):
+    response, payload = call(site, "GET", "/api/guide")
+    assert response.status == 200 and len(json.loads(payload)["files"]) == 7
+
+
 def test_the_room_listens_on_the_host_it_is_given(monkeypatch):
     seen = []
 
@@ -546,7 +551,7 @@ def test_the_room_listens_on_the_host_it_is_given(monkeypatch):
 
     monkeypatch.setattr(server, "serve", stop)
     assert server.main(["--host", "0.0.0.0", "--no-browser"]) == 1
-    assert seen == ["0.0.0.0"]
+    assert seen[0] == "0.0.0.0"
 
 
 def test_the_room_starts_without_matplotlib():

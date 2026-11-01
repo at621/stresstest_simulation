@@ -191,6 +191,11 @@ details.file > summary::-webkit-details-marker { display: none; }
 details.file > summary b { font-family: var(--mono); font-weight: 600; }
 details.file > summary .quiet { font-size: 12px; }
 details.file > .body { padding: 6px 0 4px; }
+.guide { border-bottom: 1px solid var(--grid); margin-bottom: 8px; padding-bottom: 8px; }
+.guide h3 { font-size: 13px; font-weight: 600; margin: 8px 0 3px; }
+.guide ul { margin: 0 0 4px; padding-left: 18px; max-width: 110ch; }
+.guide code { white-space: nowrap; overflow-wrap: normal; }
+.guide details.file > summary b { font-family: var(--sans); }
 
 /* scenario cards */
 .scenario { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
@@ -280,7 +285,7 @@ svg text { font-family: var(--sans); }
   <div id="page-error"></div>
 
   <section id="step-1">
-    <div class="card" id="files-card"><h2>Files <span class="end" id="files-tools"></span></h2><div id="files-body"></div><div id="files-note"></div></div>
+    <div class="card" id="files-card"><h2>Files <span class="end"><button class="link" type="button" id="guide-toggle" aria-expanded="false" aria-controls="files-guide">What this step expects</button></span></h2><div class="guide" id="files-guide" hidden></div><div id="files-body"></div><div id="files-note"></div></div>
     <div class="card"><h2>Scenarios <span class="end" id="scenarios-tools"></span></h2><div id="scenarios-body"></div></div>
     <div class="card"><h2>Run settings <span class="end"><button class="link" type="button" id="reset-settings" hidden>Back to standard</button></span></h2><div id="settings-body"></div></div>
     <div class="card"><h2>Sanity checks</h2><div id="verdict-1"></div></div>
@@ -502,9 +507,9 @@ const adjusted = () => ['scenarios', 'segments', 'terminal_policies', 'balance_s
 async function load() {
   await reloadState();
   if (!DOC) {
-    const first = savedSets()[0];
-    DOC = newDocument(first ? first.inputs : '');
-    if (first) { await loadSet(first.inputs); DOC.run.scenarios = baseIds(); }
+    DOC = newDocument(STATE.opening);
+    await loadSet(STATE.opening);
+    DOC.run.scenarios = baseIds();
   }
   renderStep();
   check();
@@ -656,7 +661,6 @@ function renderStep() {
 // --- step 1: the seven files --------------------------------------------------------------------------------------------
 
 const pending = () => Object.keys(ADDED).length > 0;
-const savedSets = () => STATE.inputs.filter(r => r.runnable);
 const setName = r => `Saved ${longStamp(r.saved_at)}${r.facilities === null ? ', unreadable' : `, ${count(r.facilities)} facilities, €${one.format(r.gca / 1000)}bn`}`;
 const names = list => list.map(s => s.label).join(', ');
 const acceptOf = role => (role.format === 'Parquet' ? '.parquet' : '.yaml,.yml');
@@ -680,8 +684,8 @@ function slots() {  // each of the seven places: a file added here, the saved se
   });
 }
 
-function pickFile(accept, multiple, onpicked) {  // the computer's own file dialog; cancelling it changes nothing
-  const input = el('input', { type: 'file', accept, multiple, onchange: () => { if (input.files.length) onpicked([...input.files]); } });
+function pickFile(accept, onpicked) {  // the computer's own file dialog; cancelling it changes nothing
+  const input = el('input', { type: 'file', accept, onchange: () => { if (input.files.length) onpicked(input.files[0]); } });
   input.click();
 }
 
@@ -746,7 +750,7 @@ function slotRow(s) {
     s.rows === null ? gone : count(s.rows), s.bytes === null ? gone : kb(s.bytes), el('td', {}, state),
     el('td', {}, el('div', { class: 'slot-do' },
       s.kind === 'added' ? el('button', { class: 'action', type: 'button', disabled: busy, onclick: () => removeFile(s.name) }, SET?.base ? 'Back to saved file' : 'Remove') : null,
-      el('button', { class: 'action', type: 'button', disabled: busy, onclick: () => pickFile(acceptOf(s), false, ([file]) => addFile(s.name, file)) }, s.kind === 'missing' ? 'Choose file…' : 'Replace…')))],
+      el('button', { class: 'action', type: 'button', disabled: busy, onclick: () => pickFile(acceptOf(s), file => addFile(s.name, file)) }, s.kind === 'missing' ? 'Choose file…' : 'Replace…')))],
   i => i === 2 || i === 3);
 }
 
@@ -760,8 +764,37 @@ function signOffBox() {
       el('button', { class: 'action', type: 'button', onclick: () => startJob('/api/approve', { inputs: DOC.run.inputs, approver: $('#approver').value }) }, 'Sign off')));
 }
 
+const guideList = items => el('ul', { class: 'small' }, items.map(text => el('li', {}, text)));
+
+const GUIDE_EFFECTS = [['stops', 'If not, the run stops'], ['late', 'If not, the run stops partway, after the sanity checks have passed'], ['left_out', 'If not, the record is left out']];
+
+function guideFile(file) {
+  const columns = file.columns && table(['Column', 'Kind', 'What it holds'], file.columns.map(c => row([el('code', {}, c.name), c.kind, [c.meaning, c.values ? ` One of: ${c.values.join(', ')}.` : '']])));
+  const sections = file.sections && table(['Section', 'What it holds'], file.sections.map(s => row([el('code', {}, s.name), s.holds])));
+  return el('details', { class: 'file' }, el('summary', {}, el('b', {}, file.label), el('span', { class: 'quiet' }, `${file.format}. ${file.holds}`)),
+    el('div', { class: 'body' }, file.warning ? el('p', { class: 'notice warn' }, file.warning) : null, el('div', { class: 'scroll-x' }, columns ?? sections),
+      GUIDE_EFFECTS.map(([effect, title]) => {
+        const rules = file.rules.filter(rule => rule.effect === effect);
+        return rules.length ? [el('h3', {}, title), guideList(rules.map(rule => rule.text))] : null;
+      })));
+}
+
+async function toggleGuide() {
+  const box = $('#files-guide');
+  if (!box.childElementCount) {
+    try {
+      const guide = await api('/api/guide');
+      box.replaceChildren(el('h3', {}, 'Every file'), guideList(guide.every_file), el('h3', {}, 'After you add a file'), guideList(guide.after_you_add), el('h3', {}, 'File by file'), ...guide.files.map(guideFile));
+    } catch (fault) {
+      problem(`cannot read the guide: ${fault.message}`);
+      return;
+    }
+  }
+  box.hidden = !box.hidden;
+  $('#guide-toggle').setAttribute('aria-expanded', String(!box.hidden));
+}
+
 function renderFiles() {
-  $('#files-tools').replaceChildren(el('button', { class: 'action', type: 'button', title: 'You can also drop files on this card', onclick: () => pickFile('.parquet,.yaml,.yml', true, addSeveral) }, 'Add several files…'));
   $('#files-body').replaceChildren(...[
     el('div', { class: 'scroll-x' }, table(['File', 'File in use', el('th', { class: 'num' }, 'Rows'), el('th', { class: 'num' }, 'Size'), 'State', ''], slots().map(slotRow), () => false, 'slots')),
     SET?.error ? el('p', { class: 'notice block', style: 'margin-top:8px' }, `✕ These files cannot be read in full: ${SET.error}`) : null,
@@ -1589,6 +1622,7 @@ function portfolioCard(r, worst) {
 
 $('#run-select').addEventListener('change', e => selectRun(e.target.value));
 $('#reset-settings').addEventListener('click', () => { Object.assign(DOC.run, DEFAULTS); DOC.run.scenarios = inRun(); syncVolumes(); renderSettings(); check(); });
+$('#guide-toggle').addEventListener('click', toggleGuide);
 const dropZone = $('#files-card');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drop'); });
 dropZone.addEventListener('dragleave', e => { if (e.target === dropZone) dropZone.classList.remove('drop'); });

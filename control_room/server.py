@@ -8,6 +8,8 @@
 3. Run: what will run, Start, and the engine's progress.
 4. Outcomes: the sealed run's figures, its reproduction and a comparison.
 
+The page opens on the small or the large dataset, as --dataset or the DATASET environment variable says.
+
 Every action is an engine or one-off command: `stress run`, `stress rerun`, `foundation.synth package`,
 `foundation.synth approve`. Files added on the page wait in a temporary folder until the seven are
 packaged as inputs/<hash>/, so the input folders stay written by the one-off step alone. A setup a
@@ -43,6 +45,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "notebooks"))  # nbtools
 
+import guide
 import preflight
 
 import nbtools as nb
@@ -69,6 +72,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = nb.ROOT
 PAGE = HERE / "index.html"
 SPECS = HERE / "specifications"  # the room's own setups, saved as the engine reads them
+BOOKS = {"small": "70a9337b7d75f668", "large": "d62d0386f2c5256e"}  # docs/assumptions.md A41
+DATASET = "small"  # the book the page opens on, unless --dataset or the DATASET environment variable says otherwise
 PAGE_POLICY = ("default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; "
                "script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'")
 # Never listed, read or written here: the protected folders and tool caches.
@@ -194,12 +199,25 @@ def input_inventory() -> list[dict]:
                 variants=[{"id": name, "label": spec["label"],
                            "bullet": set(spec["repayment_profile"].values()) == {"bullet"}}
                           for name, spec in parameters["variants"].items()])
-        except (OSError, KeyError, TypeError, ValueError, AttributeError) as exc:
+        except (OSError, KeyError, TypeError, ValueError, AttributeError, yaml.YAMLError) as exc:
             # One unreadable set must not hide the others: it is listed, and it cannot be chosen.
             row.update(facilities=None, gca=None, gaps=[f"unreadable: {exc}"], runnable=False,
                        why_not=why_unusable(["unreadable"]), scenarios=[], variants=[])
-    # The page opens on the first it can read: the largest book, then the newest, so a sample never takes over.
-    return sorted(rows, key=lambda row: (row["facilities"] or 0, row["saved_at"]), reverse=True)
+    return rows
+
+
+def check_dataset(dataset: str) -> None:
+    """A wrong setting stops the server: a page quietly open on the other book would pass for the chosen one."""
+    if dataset not in BOOKS:
+        raise Refused(f"the dataset is {' or '.join(BOOKS)}, not {dataset!r}")
+    folder = nb.INPUTS_DIR / BOOKS[dataset]
+    try:
+        preflight.base_of(folder)
+        gaps = contract_gaps(folder)
+    except (OSError, KeyError, TypeError, ValueError, AttributeError, yaml.YAMLError) as exc:
+        gaps = [f"{type(exc).__name__}: {exc}"]
+    if gaps:
+        raise Refused(f"the {dataset} dataset, inputs/{folder.name}, is missing or the engine cannot read it: {gaps[0]}")
 
 
 # --- reading runs --------------------------------------------------------------------------------
@@ -544,10 +562,11 @@ class Busy(RuntimeError):
 
 
 class Control:
-    """What the page's requests share: where runs go, and the one job in hand."""
+    """What the page's requests share: where runs go, the book it opens on, and the one job in hand."""
 
-    def __init__(self, runs_dir: Path):
+    def __init__(self, runs_dir: Path, dataset: str = DATASET):
         self.runs_dir = runs_dir
+        self.opening = f"inputs/{BOOKS[dataset]}"
         self.job: Job | None = None
         self.lock = threading.Lock()
         self._holding = tempfile.TemporaryDirectory(prefix="stress-room-files-", ignore_cleanup_errors=True)
@@ -725,7 +744,7 @@ class Control:
         runs = list_runs(self.runs_dir)
         return {
             "steps": STEPS, "typical_seconds": typical_seconds(runs), "runs": runs, "readings": READINGS,
-            "inputs": input_inventory(), "roles": preflight.file_roles(), "added": self.added,
+            "inputs": input_inventory(), "opening": self.opening, "roles": preflight.file_roles(), "added": self.added,
             "anchor": REQUIRED_SCENARIO, "inputs_dir": from_root(nb.INPUTS_DIR),
         }
 
@@ -822,6 +841,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, control.state())
         elif path == "/api/job":
             self._json(200, control.job.as_dict() if control.job else {"state": "idle"})
+        elif path == "/api/guide":
+            self._json(200, guide.step_one())
         elif path == "/api/setup":
             self._json(200, setup_of(query, control.runs_dir))
         elif inputs:
@@ -936,8 +957,9 @@ class Server(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"  # on Windows the option lets a second server share the port
 
 
-def serve(runs_dir: Path, port: int = PORT, host: str = HOST) -> Server:
-    handler = type("BoundHandler", (Handler,), {"control": Control(runs_dir), "hosted": host != HOST})
+def serve(runs_dir: Path, port: int = PORT, host: str = HOST, dataset: str = DATASET) -> Server:
+    check_dataset(dataset)
+    handler = type("BoundHandler", (Handler,), {"control": Control(runs_dir, dataset), "hosted": host != HOST})
     return Server((host, port), handler)
 
 
@@ -947,9 +969,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--runs-dir", type=Path, default=nb.RUNS_DIR, help="where runs are read and written")
     parser.add_argument("--no-browser", action="store_true", help="do not open the page")
+    parser.add_argument("--dataset", default=os.environ.get("DATASET", DATASET),
+                        help=f"the book the page opens on, {' or '.join(BOOKS)}; default DATASET from the environment, else {DATASET}")
     args = parser.parse_args(argv)
     try:
-        server = serve(args.runs_dir.resolve(), args.port, args.host)
+        server = serve(args.runs_dir.resolve(), args.port, args.host, args.dataset)
+    except Refused as exc:
+        parser.error(str(exc))
     except OSError as exc:
         print(f"could not listen on {args.host}:{args.port}: {exc}", file=sys.stderr)
         return 1

@@ -1,12 +1,12 @@
-"""A tenth of the full input set, for a Heroku dyno too small for the full book:
+"""The small dataset, a tenth of the large one, for a Heroku dyno too small for the full book:
 
     uv run python control_room/small_set.py
 
 It keeps a tenth of the facilities in each portfolio and opening stage, at least one of each, with
 their obligors, commitments and opening provisions. The rating matrices, scenarios and parameter set
 stay as they are. `foundation.synth package` freezes the result as a new inputs/<hash>/, so only the
-one-off step writes an input set and the full book is not touched. `.slugignore` keeps every other
-set off Heroku. The sample cannot meet the requirements' exact targets (docs/assumptions.md A41).
+one-off step writes an input set and the full book is not touched. `BOOKS` in server.py names both
+sets. The sample cannot meet the requirements' exact targets (docs/assumptions.md A41).
 """
 
 import shutil
@@ -17,11 +17,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from server import BOOKS, ROOT
 
 from stress.contracts.inputs import COMMITMENTS, DATASETS, FACILITIES, OBLIGORS, OPENING_PROVISIONS
 
-ROOT = Path(__file__).resolve().parents[1]
-FULL = ROOT / "inputs" / "d62d0386f2c5256e"
+FULL = ROOT / "inputs" / BOOKS["large"]
 SHARE = 10
 CELL = ["portfolio", "ifrs_stage"]
 SPREAD = ["segment", "current_grade", "gca", "facility_id"]
