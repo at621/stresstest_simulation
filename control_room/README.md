@@ -25,7 +25,7 @@ The engine reads only a frozen folder, `inputs/<hash>/`, and only the one-off st
 
 The file's row decides what it is, so a file can have any name. "Add several files" matches files to rows by name and says which ones it could not place. Files wait until the server stops. The engine reads Parquet and YAML only, so a file in another format has to be converted first.
 
-The page opens on the newest saved set the engine can read, and every row can then be replaced. Older sets it cannot read are not offered.
+The page opens on the largest saved set the engine can read, and the newest of those, and every row can then be replaced. So a smaller set never takes over from the full book. Older sets it cannot read are not offered.
 
 ## Scenarios
 
@@ -69,6 +69,8 @@ After changing `server.py` or `preflight.py`, restart the server: it keeps its c
 
 The page keeps no record of who did what, and a sign-off's name is whatever was typed. One job at a time applies to everyone on the page.
 
+Heroku gets one input set, a sample of a tenth of the full book, because a run of the full book needs more memory than a small dyno has. `small_set.py` makes it, and `.slugignore` at the repository root keeps the other sets off the app.
+
 The steps and limits are in [Hosting on Heroku](../docs/runbook.md#hosting-on-heroku).
 
 ## Files and tests
@@ -78,8 +80,9 @@ The steps and limits are in [Hosting on Heroku](../docs/runbook.md#hosting-on-he
 | `server.py` | Holds added files, has the engine judge a setup, writes it as a specification, starts the engine and the one-off steps, reads sealed runs, serves the page. |
 | `preflight.py` | The seven files in words and each file's check, what a saved set holds, the dry run, the comparison with the requirements, and the setup as YAML and back. |
 | `index.html` | The page: the bar and the four steps. Chart colours match `nbtools.py`. |
+| `small_set.py` | Cuts the full input set to a tenth for Heroku, and has `foundation.synth package` freeze it. |
 | `specifications/` | Setups saved from the page, as the engine reads them. Created on first save. |
-| `test_preflight.py`, `test_server.py` | Their tests. |
+| `test_preflight.py`, `test_server.py`, `test_small_set.py` | Their tests. |
 
 ```
 uv run pytest control_room

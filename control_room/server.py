@@ -198,7 +198,8 @@ def input_inventory() -> list[dict]:
             # One unreadable set must not hide the others: it is listed, and it cannot be chosen.
             row.update(facilities=None, gca=None, gaps=[f"unreadable: {exc}"], runnable=False,
                        why_not=why_unusable(["unreadable"]), scenarios=[], variants=[])
-    return rows
+    # The page opens on the first it can read: the largest book, then the newest, so a sample never takes over.
+    return sorted(rows, key=lambda row: (row["facilities"] or 0, row["saved_at"]), reverse=True)
 
 
 # --- reading runs --------------------------------------------------------------------------------

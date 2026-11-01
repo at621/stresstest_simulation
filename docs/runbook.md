@@ -72,6 +72,7 @@ Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input
 2. Parameter set or generator changed: run `uv run python -m foundation.synth` on the machine that built the current input set. The hash depends on the operating system and the CPU's BLAS kernel, and a rebuild elsewhere can give a different book, not only different bytes (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
 3. Run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces` fails until the new input set is in `inputs/`. It runs on Windows only and passes only under the kernel that built the set, so CI cannot catch a missing rebuild.
 4. Compare the old and new results with `uv run stress compare --base runs/<old> --new runs/<new>` (version-change control). It prints the impairment differences and keeps the full report in `runs/comparisons/<old>__<new>/`: `summary.md`, the differences in impairment, stage stocks and coverage, PD and LGD, and `comparison.json`, which ties them to both runs. Sealed runs are write-once, so the report sits beside them; `--out` chooses another folder outside them.
+5. A new full input set also changes what Heroku would host, and a run of it there is stopped for lack of memory. Point `FULL` in `control_room/small_set.py` at the new set and run that script to rebuild the sample. Add lines to `.slugignore` for the new full set and the old sample. Update both hashes and the sample's figures in A41 of [the assumptions](assumptions.md), the sample's hash in [Hosting on Heroku](#hosting-on-heroku), and its figures in `README.md`. Then stage the new sets and run `uv run pytest control_room`, which checks this: the gate does not.
 
 ### Gates
 
@@ -122,24 +123,25 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
    heroku create <app-name>
    ```
 
-2. Deploy, then set the dyno size. The size comes second because the app needs a dyno to resize.
+2. Deploy. A new app gets a Basic dyno, which is enough for the sample.
 
    ```
    git push heroku <branch>:main
-   heroku ps:type performance-m -a <app-name>
    ```
 
-3. Open `https://<app-name>.herokuapp.com`. Start a run on the current input set, and check that its headline matches a local run of the same set.
+3. Open `https://<app-name>.herokuapp.com`. Start a run, and check that its headline matches a local run of `inputs/70a9337b7d75f668`.
 
 **No sign-in.** Anyone with the address can use the page: start runs, add files, approve input sets and read results.
 
-**Dyno size.** The page and the engine together peak at about 1.7 GB in a run with two scenarios, measured on Linux on 1 November 2026. More scenarios need more.
+**The hosted input set.** Heroku deploys `inputs/70a9337b7d75f668` alone, because `.slugignore` leaves every other set out. Heroku applies that file when it builds with a classic buildpack, as this app does. A new committed set needs its own line there, and a room test fails until it has one. The sample holds a tenth of the facilities in each portfolio and opening stage of the full book. `uv run python control_room/small_set.py` rebuilds it, and A41 in [the assumptions](assumptions.md) records how close it comes. It cannot meet the requirements' exact targets, so the page lists those differences. Locally the page still opens on the full book, because it opens on the largest set it can read.
 
-| Dyno | Memory quota | Stopped at | A two-scenario run |
-|---|---:|---:|---|
-| eco, basic, standard-1x | 0.5 GB | 1 GB | Is stopped partway |
-| standard-2x | 1 GB | 2 GB | Is over quota and close to being stopped |
-| performance-m | 2.5 GB | 5 GB | Fits |
+**Dyno size.** Measured on Linux on 1 November 2026, the page and the engine together peak at about 0.55 GB on the sample and 1.7 GB on the full book, in a run with two scenarios. More scenarios need more. Going over quota logs an R14 warning and may slow the run. Heroku stops the dyno only at the limit in the third column.
+
+| Dyno | Memory quota | Stopped at | The sample | The full book |
+|---|---:|---:|---|---|
+| eco, basic, standard-1x | 0.5 GB | 1 GB | Fits, slightly over quota | Is stopped partway |
+| standard-2x | 1 GB | 2 GB | Fits | Is over quota and close to being stopped |
+| performance-m | 2.5 GB | 5 GB | Fits | Fits |
 
 **What does not last.** Heroku clears the app's files at every deploy, config change and restart, and at least once a day. A restart also stops any run in progress. These all go with the files:
 
@@ -147,7 +149,7 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
 - input sets packaged on the page, and sign-offs made there;
 - setups saved on the page, and files added there.
 
-The committed input sets come back with each deploy. To keep a result, download the workbook from the outcomes step. Heroku is not the retention store for approved runs (OPS-03).
+The sample comes back with each deploy. To keep a result, download the workbook from the outcomes step. Heroku is not the retention store for approved runs (OPS-03).
 
 **Synthetic data only.** Files added on a hosted page leave this machine for Heroku, and anyone with the address can see them, so never add bank data there.
 

@@ -44,6 +44,22 @@ The review's findings are built and on `main`: see [its status table](docs/eba-2
 
 The baseline S2 note under "Baseline 2027 releases provisions" calls falling S2 coverage "the expected behaviour of a static balance sheet with replacement at maturity". That note is reopened: ECL-06 and the draft's ¶76, ¶123 and ¶125 read it differently (C14).
 
+## Control room: which saved set the page opens on
+
+The page has no set picker, because the owner removed an earlier one. It opens on the largest saved set it can read, then the newest, so that a sample never takes over from the full book. Two things follow. A smaller saved set can be reached only through a run's saved setup or by adding its files again. On a hosted page anyone can add a larger book, and it then opens for everyone until the next restart.
+
+### Open decision (owner)
+
+Keep this rule, name the opening set explicitly, or bring back a picker.
+
+## Control room: a restart leaves the page showing a run in progress
+
+When Heroku stopped the dyno during a run on 1 November 2026, the page stayed on "The run is in progress" and still said the run carries on if the page is closed. The restarted server had forgotten the job, and `/api/job` answered idle.
+
+### Steps
+
+- [ ] Have the page notice that the job it was following has gone, and say the run stopped.
+
 ## Loan-level ECL and term-structure table
 
 **Goal.** Two tables for every loan, built from a sealed run:

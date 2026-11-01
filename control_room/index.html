@@ -656,7 +656,7 @@ function renderStep() {
 // --- step 1: the seven files --------------------------------------------------------------------------------------------
 
 const pending = () => Object.keys(ADDED).length > 0;
-const savedSets = () => STATE.inputs.filter(r => r.runnable).sort((a, b) => b.saved_at.localeCompare(a.saved_at));
+const savedSets = () => STATE.inputs.filter(r => r.runnable);
 const setName = r => `Saved ${longStamp(r.saved_at)}${r.facilities === null ? ', unreadable' : `, ${count(r.facilities)} facilities, €${one.format(r.gca / 1000)}bn`}`;
 const names = list => list.map(s => s.label).join(', ');
 const acceptOf = role => (role.format === 'Parquet' ? '.parquet' : '.yaml,.yml');
@@ -881,7 +881,7 @@ function differencesBox() {
   return el('details', { class: 'diff' },
     el('summary', {}, `! These files differ from the requirements in ${plural(diff.differing.length, 'value')}${diff.unmeasured.length ? `, and ${plural(diff.unmeasured.length, 'comparison')} could not be made` : ''}`),
     el('p', { class: 'quiet', style: 'margin:3px 0' }, `The engine does not check this, and a run still works. ${count(diff.compared)} values were compared with the requirements.`),
-    diff.differing.length ? el('div', { class: 'scroll-x' }, table(['Item', 'Is', 'Expected'], diff.differing.map(d => row([`${d.group}: ${d.item}`, `${Array.isArray(d.actual) ? d.actual.map(fixed).join(' to ') : fixed(d.actual)} ${d.unit}`, Array.isArray(d.expected) ? d.expected.map(fixed).join(' to ') : fixed(d.expected)], i => i > 0)))) : null,
+    diff.differing.length ? el('div', { class: 'scroll-x' }, table(['Item', 'Is', 'Expected'], diff.differing.map(d => row([`${d.group}: ${d.item}`, absent(d.actual) ? gone : `${Array.isArray(d.actual) ? d.actual.map(fixed).join(' to ') : fixed(d.actual)} ${d.unit}`, Array.isArray(d.expected) ? d.expected.map(fixed).join(' to ') : fixed(d.expected)], i => i > 0)))) : null,
     diff.unmeasured.length ? el('ul', { style: 'margin:3px 0;padding-left:16px' }, diff.unmeasured.map(u => el('li', {}, `${u.group}: ${u.error}`))) : null);
 }
 

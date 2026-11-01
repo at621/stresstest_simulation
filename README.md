@@ -181,12 +181,13 @@ The control room can also be hosted as a Heroku web app: `Procfile` starts it. A
 ```
 heroku create <app-name>
 git push heroku <branch>:main
-heroku ps:type performance-m -a <app-name>
 ```
+
+Heroku gets one input set: a sample of the full book with 1,002 facilities and about €1.2bn of GCA. `.slugignore` keeps the full sets off the app. The sample is for trying the page, and its results cannot stand in for the full book's.
 
 Two limits shape how to use it:
 
-- **Memory:** a run with two scenarios needs about 1.7 GB, so smaller dynos cannot run it safely.
+- **Memory:** a run of the sample with two scenarios needs about 0.55 GB, slightly over a Basic dyno's 0.5 GB quota but well under the 1 GB where Heroku stops it. The full book needs about 1.7 GB.
 - **Files do not last:** Heroku clears the app's files at every deploy and restart, and at least once a day. Runs and anything added on the page go with them, so download the workbook to keep a result.
 
 Use synthetic data only. See [Hosting on Heroku](docs/runbook.md#hosting-on-heroku) in the runbook.

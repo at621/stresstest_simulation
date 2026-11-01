@@ -545,8 +545,9 @@ def _calibration_group(fac, grade_pd: dict, segments: dict, tolerance: float) ->
         book = fac[(fac["segment"] == name) & fac["ifrs_stage"].isin([1, 2])]
         for stage, key in ((1, "s1_pd"), (2, "s2_pd")):
             part = book[book["ifrs_stage"] == stage]
-            average = float((part["gca"] * part["current_grade"].map(grade_pd)).sum() / part["gca"].sum())
-            group.add(f"{name} S{stage}", average, target[key], "rate", abs(average - target[key]) <= tolerance)
+            average = float((part["gca"] * part["current_grade"].map(grade_pd)).sum() / part["gca"].sum()) if len(part) else None
+            group.add(f"{name} S{stage}", average, target[key], "rate",
+                      average is not None and abs(average - target[key]) <= tolerance)
     return [group]
 
 
