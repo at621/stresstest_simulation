@@ -215,9 +215,10 @@ Use synthetic data only. See [Hosting on Heroku](docs/runbook.md#hosting-on-hero
 ## Making changes
 
 - **Branches:** each improvement goes on its own branch. Nothing is committed directly to `main`.
+- **Size:** a small change, such as page wording or a document, needs only the relevant tests and a look at the result. A major change, meaning anything that touches the engine, the inputs or what the engine is said to do, needs the owner's approval of its scope first and then follows the steps below. [CLAUDE.md](CLAUDE.md) has the exact line between them.
 - **Rules:** the [design](docs/stress-engine-code-flow.html) leads, and the code rules in [architecture §2](docs/architecture.md#2-code-rules) hold.
 - **Tests:** a change that touches a calculation comes with a test that carries a marker, and expected values are read from `docs/spec/`.
-- **Gate:** before merging, `uv run pytest`, `uv run lint-imports --cache-dir tests/.import_linter_cache` and `uv run ruff check` must pass. A full run must seal, and `stress compare` against the last run shows the effect.
+- **Gate:** before merging a major change, `uv run pytest`, `uv run lint-imports --cache-dir tests/.import_linter_cache` and `uv run ruff check` must pass. A full run must seal, and `stress compare` against the last run shows the effect.
 - **Inputs:** a change to the parameter set or the generator writes a new input set. Never edit an old one; follow [the runbook](docs/runbook.md#after-changing-the-requirements-or-the-parameter-set).
 - **Records:** a new assumption, or a conflict with the design, goes into [docs/assumptions.md](docs/assumptions.md).
 

@@ -72,14 +72,14 @@ Check the protection with [runbook.md](runbook.md) after any change to `.claude/
 - **CLAUDE.md files:** at the root, plus one each in `src/stress/params/` and `src/stress/ecl/`. Those two list the "apply once" rules for R6 and R8.
 - **`.claude/settings.json`:** deny rules for the archive, `inputs/bank/` and the locked folders, and the two hooks below. The hooks run with `py -3 -I`, so they work under any active virtualenv.
 - **The guard hook** `.claude/hooks/guard_paths.py`, before every tool call.
-- **`/improve`** (`.claude/skills/improve/SKILL.md`) makes one improvement on its own branch:
+- **`/improve`** (`.claude/skills/improve/SKILL.md`) makes one major improvement on its own branch, once the user has approved its scope. The root `CLAUDE.md` sorts small changes from major ones.
   1. Tests first.
   2. The gate.
   3. A full run, compared against the run before the change.
   4. Review.
-- **`change-reviewer`** (`.claude/agents/change-reviewer.md`): a read-only reviewer that must approve every change before it is merged. It returns APPROVE or CHANGES REQUESTED.
+- **`change-reviewer`** (`.claude/agents/change-reviewer.md`): a read-only reviewer that must approve every major change before it is merged. It returns APPROVE or CHANGES REQUESTED.
 - **Test gate** `.claude/hooks/test_gate.py`, a Stop hook: when code under `src/`, `foundation/` or `tests/` has changed, it runs pytest, lint-imports and ruff, and blocks the stop until they pass.
-- **Git pre-commit hook** `tests/githooks/pre-commit`: refuses protected paths and run folders, then runs the same three checks. Enable it once per clone with `git config core.hooksPath tests/githooks`.
+- **Git pre-commit hook** `tests/githooks/pre-commit`: refuses protected paths and run folders, then runs the same three checks. It skips pytest, and checks traceability instead, when every staged file is on the small-change list in the hook. Enable it once per clone with `git config core.hooksPath tests/githooks`.
 
 ## 6. Open items
 

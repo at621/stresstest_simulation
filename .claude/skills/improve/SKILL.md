@@ -1,11 +1,13 @@
 ---
 name: improve
-description: Make one improvement to the working stress engine or its one-off steps (a fix, a new capability, a refactor, a parameter or input-set change) on its own branch. Tests first, then the gate, then a full run compared against the last one, then approval by the change-reviewer agent. Use when asked to fix, change, extend or refactor the engine (for example "/improve add a CSV export of the charges").
+description: Make one major improvement to the working stress engine or its one-off steps (a fix, a new capability, a refactor, a parameter or input-set change) on its own branch, once the user has approved its scope. Tests first, then the gate, then a full run compared against the last one, then approval by the change-reviewer agent. Use when asked to fix, change, extend or refactor the engine (for example "/improve add a CSV export of the charges"), not for a small change as CLAUDE.md defines it.
 ---
 
 # Make one improvement
 
 The argument says what to change. v1 is complete and in use, so every change starts from a working, tested engine and must leave it that way. The design (`docs/stress-engine-code-flow.html`) leads. If the change would depart from it, or another document disagrees with it, stop and tell the user before building.
+
+This process is for a major change, as `CLAUDE.md` sorts them. Unless the user has already approved the scope, give it in one line and wait. A small change does not come here.
 
 ## 1. Read before writing
 
