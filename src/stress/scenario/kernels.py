@@ -1,10 +1,7 @@
-"""Pure scenario arithmetic: compounded indices, the Z-score and its reversion after the
-last scenario year (SCN-05, SCN-08, ECL-10)."""
+"""Pure scenario arithmetic: compounded indices and the reversion of Z after the last scenario
+year (SCN-05, ECL-10). The Z-score itself is the models' (stress.models.forms)."""
 
-from collections.abc import Mapping, Sequence
-from math import isfinite
-
-from stress.contracts.errors import Block, BlockingError
+from collections.abc import Sequence
 
 STEP = "R4"
 
@@ -17,33 +14,6 @@ def compound_index(changes: Sequence[float], initial: float) -> list[float]:
         level *= 1.0 + float(change)
         levels.append(level)
     return levels
-
-
-def z_score(values: Mapping[str, float], drivers: Mapping[str, Mapping[str, float]],
-            where: str = "") -> tuple[float, dict[str, float]]:
-    """``Z = sum_i(beta_i * (x_i - mu_i) / sigma_i)`` and each driver's contribution (SCN-08).
-
-    ``drivers`` maps a driver to its ``beta``, ``mean`` and ``sd``. A missing coefficient or
-    scenario value blocks; nothing is carried forward or set to zero.
-    """
-    if not drivers:
-        raise BlockingError(STEP, Block.MISSING_PARAMETER, f"no Z-score drivers {where}")
-    contributions = {}
-    for name, coef in drivers.items():
-        for field in ("beta", "mean", "sd"):
-            if (coef is None or not isinstance(coef.get(field), (int, float))
-                    or isinstance(coef[field], bool) or not isfinite(coef[field])):
-                raise BlockingError(STEP, Block.MISSING_PARAMETER,
-                                    f"Z coefficient {field} missing for driver {name} {where}")
-        if coef["sd"] <= 0:
-            raise BlockingError(STEP, Block.MISSING_PARAMETER,
-                                f"standard deviation of driver {name} must be positive {where}")
-        x = values.get(name)
-        if x is None or not isfinite(x):
-            raise BlockingError(STEP, Block.MISSING_SCENARIO_VALUE,
-                                f"scenario value for driver {name} missing {where}")
-        contributions[name] = coef["beta"] * (x - coef["mean"]) / coef["sd"]
-    return sum(contributions.values()), contributions
 
 
 def adverse_weight(year: int, last_scenario_year: int, reversion_years: int) -> float:

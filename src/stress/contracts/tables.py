@@ -65,9 +65,16 @@ ROUTE_S3_ORIGINAL = "s3_original"
 
 # --- R4 -----------------------------------------------------------------------------------------
 
+# One Z per segment, model, country, year and scenario: each segment's PD, LGD and prepayment
+# model has its own score (MOD-01, SCN-08).
+MODEL_PD = "pd"
+MODEL_LGD = "lgd"
+MODEL_PREPAYMENT = "prepayment"
+MODEL_ROLES = (MODEL_PD, MODEL_LGD, MODEL_PREPAYMENT)
+
 Z_SCORES = TableSpec(
     "drivers", "drivers.parquet",
-    key=("segment", "country", "scenario", "year"),
+    key=("segment", "model", "country", "scenario", "year"),
     columns=("z", "z_source", "adverse_weight"),
 )
 Z_SOURCE_PATH = "scenario_path"
@@ -76,7 +83,7 @@ Z_SOURCE_FLAT = "flat"
 
 DRIVER_CONTRIBUTIONS = TableSpec(
     "driver_contributions", "driver_contributions.parquet",
-    key=("segment", "country", "scenario", "year", "driver"),
+    key=("segment", "model", "country", "scenario", "year", "driver"),
     columns=("value", "mean", "sd", "beta", "contribution"),
 )
 
@@ -127,7 +134,7 @@ PARAMETERS = TableSpec(
     "parameters", "parameters.parquet",
     key=PARAMETER_RECORD_KEY,
     columns=(
-        "fraction", "bucket_year", "t", "z", "lgd", "prepayment_rate", "not_prepaid_share",
+        "fraction", "bucket_year", "t", "z_lgd", "z_prepayment", "lgd", "prepayment_rate", "not_prepaid_share",
         "balance", "discount_factor", "undrawn", "ccf", "ead_drawn", "ead_undrawn", "ead_total",
         "adjustment", "constraint", "source_version",
     ),
@@ -234,6 +241,10 @@ class Drivers:
     z: pd.DataFrame  # Z_SCORES, scenario years plus terminal years
     contributions: pd.DataFrame  # DRIVER_CONTRIBUTIONS
     indices: pd.DataFrame  # INDICES
+
+    def of(self, model: str) -> pd.DataFrame:
+        """The Z rows of one model role (MODEL_PD, MODEL_LGD or MODEL_PREPAYMENT)."""
+        return self.z[self.z["model"] == model].reset_index(drop=True)
 
 
 @dataclass

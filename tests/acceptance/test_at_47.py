@@ -14,7 +14,7 @@ def test_pd_rises_as_z_falls(full_tables, core_run):
     case = oracle("AT-47")
     assert case["expected"]["pd_rises_as_z_falls"]
     matrices, grades = ttc_arrays(full_tables["ttc_pd_matrix"])
-    segments = full_tables["parameter_set"]["segments"]
+    segments = builders.segments(full_tables)
     zs = np.linspace(3, -3, 13)  # falling
     for segment, ttc in matrices.items():
         rho = segments[segment]["rho"]

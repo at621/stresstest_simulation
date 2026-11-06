@@ -42,24 +42,46 @@ Place calculation settings in the YAML; only `--quiet` and `--runs-dir` may acco
 
 The file is bound to the immutable base input hash. Its exact bytes and resolved inputs are
 sealed with the run. `stress rerun --run runs/<run_id>` reads the sealed copy even after the
-original YAML is removed. Read `effective_specification.json`, `macro_models.csv`,
+original YAML is removed. Read `effective_specification.json`, `segment_models.csv`,
 `analysis_readiness.csv` and, for dynamic mode, `exposure_movements.csv` and `dynamic_books.csv`.
 Complete runoff is reported as zero stock. The static EBA template replica is not applicable
 to dynamic runs and is omitted. Default commands still use static exposure.
 
-New portfolios use the same five tables and two documents as existing ones. Prepare them,
-then run `uv run python -m foundation.synth package --source <prepared-directory> --out inputs`.
+New portfolios use the same four tables, two documents and one matrix file per segment as
+existing ones, and each needs its models in `src/stress/models/` first (see "Segment models" below).
+Prepare them, then run `uv run python -m foundation.synth package --source <prepared-directory> --out inputs`.
 Supply a reporting class for each new segment. The package command does not generate or
 recalibrate loans and does not grant approval. Model calibration, official inputs and final
 regulatory acceptance remain separate dependencies.
 
+### Segment models
+
+Each segment's PD, LGD and prepayment model is a function in `src/stress/models/<portfolio>.py`, with its
+coefficients inside it and its description in its docstring (A42). The parameter set names them under
+`portfolios.<portfolio>.segments.<segment>` as `pd_model`, `lgd_model` and `prepayment_model`, beside the
+segment's `ttc_matrix` file, `asset_correlation`, `sicr_k`, `cpr_ttc` and `ccf`.
+
+- **To change a model's coefficients or description,** edit its function. That is an engine change: it
+  changes the code identity of every later run and goes through `/improve`, with a run compared against
+  the last one.
+- **To add a model,** write a function in its portfolio's module and decorate it with `@pd_model`,
+  `@lgd_model(sensitivity=...)` or `@prepayment_model(sensitivity=...)`. Point a segment at it in the
+  parameter set (a new input set) or in a run specification (`segments: {P02: {pd_model: p02.pd_nonlinear}}`).
+- **For a new portfolio,** add `src/stress/models/<portfolio>.py` and import it in
+  `src/stress/models/__init__.py`. A segment may use only models of its own portfolio.
+
+The run blocks at R2 with `UNKNOWN_MODEL` on a name the engine does not hold, or on a model of another
+role or portfolio. It blocks with `MISSING_PARAMETER` on a coefficient written into the parameter set.
+`segment_models.csv` lists the models each segment ran with. `z_scores.csv` and
+`driver_contributions.csv` carry one row per segment and model.
+
 ### A full run
 
 ```
-uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core
 ```
 
-Runs need input set `d62d0386f2c5256e` or later: since 18 October 2026 the input contract carries `credit_status_date`, and the engine blocks at R2 on the older sets. `stress rerun` of a run made on them blocks for the same reason.
+Runs need input set `57bf340df85d5a54` or later. Since 6 November 2026 the parameter set names each segment's models and matrix file (A42), and since 18 October 2026 the input contract carries `credit_status_date`. The engine blocks at R2 on older sets, and `stress rerun` of a run made on them blocks for the same reason. `57bf340df85d5a54` holds the data of `d62d0386f2c5256e` unchanged, and a run on it gives the same results.
 
 1. The command prints the run ID, the status and two headline lines. Exit code 0 means the run is sealed SYNTHETIC. Exit code 2 means it blocked: the folder is still sealed, with status BLOCKED, and the step, reason code and message are in `manifest.json` under `blocked`.
 2. Open `runs/<run_id>/results/reports/stress_report.xlsx` for the results by portfolio, baseline against adverse. Read `runs/<run_id>/run.log` for what each step did and how long it took. `summary.md` (or `uv run stress report --run runs/<run_id>`) gives the headline in text.
@@ -129,11 +151,11 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
    git push heroku <branch>:main
    ```
 
-3. Open `https://<app-name>.herokuapp.com`. Start a run, and check that its headline matches a local run of `inputs/70a9337b7d75f668`.
+3. Open `https://<app-name>.herokuapp.com`. Start a run, and check that its headline matches a local run of `inputs/ffd95cf12192d960`.
 
 **No sign-in.** Anyone with the address can use the page: start runs, add files, approve input sets and read results.
 
-**The hosted dataset.** Heroku deploys every committed input set, and the same setting as on this machine chooses the book, so the app starts on `small`, `inputs/70a9337b7d75f668`. It stays there unless the app has a `DATASET` config var. To change it, resize the dyno first if you are going to `large`, then set the var:
+**The hosted dataset.** Heroku deploys every committed input set, and the same setting as on this machine chooses the book, so the app starts on `small`, `inputs/ffd95cf12192d960`. It stays there unless the app has a `DATASET` config var. To change it, resize the dyno first if you are going to `large`, then set the var:
 
 ```
 heroku ps:type performance-m

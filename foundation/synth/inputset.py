@@ -1,9 +1,10 @@
 """Writing one hashed input set, inputs/<hash>/, with its manifest.
 
-The folder name is the first 16 hex characters of the set hash: SHA-256 over the sorted
-(file name, file SHA-256) pairs of the seven datasets. The manifest records each file's hash
-and row count and the control totals R2 checks. A new starting point is a new folder; an
-existing folder is never edited.
+An input set holds six datasets and one TTC matrix file per segment, under matrices/, at the
+path the segment's ``ttc_matrix`` names in the parameter set. The folder name is the first 16
+hex characters of the set hash: SHA-256 over the sorted (file name, file SHA-256) pairs of all
+its files. The manifest records each file's hash and row count and the control totals R2
+checks. A new starting point is a new folder; an existing folder is never edited.
 """
 
 import hashlib
@@ -20,10 +21,13 @@ FILES = {
     "obligors": "obligors.parquet",
     "commitments": "commitments.parquet",
     "opening_provisions": "opening_provisions.parquet",
-    "ttc_pd_matrix": "ttc_pd_matrix.parquet",
     "scenarios": "scenarios.yaml",
     "parameter_set": "parameter_set.yaml",
 }
+# The TTC matrices are passed in as one table with a segment column and written one file per
+# segment; ``load_matrices`` reads them back into that table.
+MATRICES = "ttc_pd_matrix"
+MATRIX_DIR = "matrices"
 MANIFEST = "manifest.json"
 APPROVAL = "approval.json"
 PREFIX = 16
@@ -59,30 +63,57 @@ def control_totals(fac: pd.DataFrame, com: pd.DataFrame, prov: pd.DataFrame) -> 
     }
 
 
-def _write_files(folder: Path, tables: dict[str, pd.DataFrame], documents: dict[str, dict]) -> None:
+def matrix_paths(parameter_set: dict) -> dict[str, str]:
+    """Each segment's TTC matrix file, as its ``ttc_matrix`` names it."""
+    return {seg: settings["ttc_matrix"] for body in parameter_set["portfolios"].values()
+            for seg, settings in body["segments"].items() if settings.get("ttc_matrix")}
+
+
+def _write_files(folder: Path, tables: dict[str, pd.DataFrame], documents: dict[str, dict]) -> dict:
+    """Write the datasets and the matrix files; return the row count of every file (None for YAML)."""
+    rows = {}
     for name, df in tables.items():
-        df.to_parquet(folder / FILES[name], index=False, engine="pyarrow", compression="snappy")
+        if name != MATRICES:
+            df.to_parquet(folder / FILES[name], index=False, engine="pyarrow", compression="snappy")
+            rows[FILES[name]] = len(df)
+    matrix = tables[MATRICES]
+    for seg, path in matrix_paths(documents["parameter_set"]).items():
+        cells = matrix[matrix["segment"] == seg].drop(columns="segment").reset_index(drop=True)
+        target = folder / path
+        if path in rows:
+            if not cells.equals(pd.read_parquet(target)):
+                raise ValueError(f"two segments name {path} with different matrices")
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        cells.to_parquet(target, index=False, engine="pyarrow", compression="snappy")
+        rows[path] = len(cells)
     for name, doc in documents.items():
         text = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100)
         (folder / FILES[name]).write_text(text, encoding="utf-8", newline="\n")
+        rows[FILES[name]] = None
+    return rows
+
+
+def load_matrices(folder: Path, parameter_set: dict) -> pd.DataFrame:
+    """The TTC matrices of an input set as one table with a segment column."""
+    frames = [pd.read_parquet(folder / path).assign(segment=seg)
+              for seg, path in matrix_paths(parameter_set).items()]
+    table = pd.concat(frames, ignore_index=True)
+    return table[["segment", *[c for c in table.columns if c != "segment"]]]
 
 
 def write_input_set(root: Path, tables: dict[str, pd.DataFrame], documents: dict[str, dict],
                     meta: dict) -> Path:
-    """Write the seven datasets and the manifest; return inputs/<hash>/."""
+    """Write the datasets, the matrix files and the manifest; return inputs/<hash>/."""
     root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=root) as tmp:
         tmp_dir = Path(tmp)
-        _write_files(tmp_dir, tables, documents)
-        hashes = {FILES[n]: sha256(tmp_dir / FILES[n]) for n in FILES}
+        rows = _write_files(tmp_dir, tables, documents)
+        hashes = {name: sha256(tmp_dir / name) for name in rows}
         digest = set_hash(hashes)
         manifest = {
             "input_set_hash": digest,
-            "files": {
-                FILES[n]: {"sha256": hashes[FILES[n]],
-                           "rows": len(tables[n]) if n in tables else None}
-                for n in FILES
-            },
+            "files": {name: {"sha256": hashes[name], "rows": rows[name]} for name in sorted(rows)},
             "control_totals": control_totals(tables["facilities"], tables["commitments"],
                                              tables["opening_provisions"]),
             **meta,
@@ -124,6 +155,7 @@ def package(source: Path, destination: Path) -> Path:
     documents = {name: yaml.safe_load((source / filename).read_text(encoding="utf-8"))
                  for name, filename in FILES.items() if filename.endswith(".yaml")}
     ps = documents["parameter_set"]
+    tables[MATRICES] = load_matrices(source, ps)
     meta = {"status": "SYNTHETIC", "spec_version": str(ps.get("spec_version", "unapproved")),
             "parameter_set_id": ps["parameter_set_id"], "generator": {"method": "supplied_datasets", "version": "1"}}
     return write_input_set(destination, tables, documents, meta)

@@ -30,7 +30,8 @@ The baseline no longer releases provisions in 2027. Most of the change comes fro
   - PD-06 and a note to PD-02 (C10);
   - MIG-07's last sentence, SYN-PAR-08 and AT-48 (C11);
   - the requirements §15 note on the draft's paragraph references (C8).
-- Approve input set `d62d0386f2c5256e`, which is PENDING_OWNER_APPROVAL.
+- Approve input set `57bf340df85d5a54`, which is PENDING_OWNER_APPROVAL. It holds the data of `d62d0386f2c5256e` with the parameter set in its new form (A42).
+- Calibrate each segment's LGD and prepayment model in `src/stress/models/`, which start as copies of its PD model's drivers (A42).
 - Decide the five settings in A30 that Claude Code proposed and the owner has not approved.
 - Not built yet:
   - split S2 by trigger in the stage-migration report;
@@ -57,6 +58,21 @@ The review of the control room's guide on 1 November 2026 ran altered copies of 
 - [ ] Reject a blank or misspelt `regulatory_approach`. `src/stress/report/excel.py` keeps only rows that say `IRB`, so a blank seals a run with a wrong workbook figure: 123.58 against 138.85 on the Portfolios sheet, for one €15.3m loan left blank on the small dataset.
 - [ ] Reject an unknown word in a variant's `repayment_profile`. It falls to the linear formula in `src/stress/cashflows/__init__.py` and seals a run: adverse €61.8m against €65.1m on the small dataset.
 - [ ] Decide whether R2 should enforce `Column.nullable` in `src/stress/contracts/inputs.py`, which no code reads, or whether to remove it.
+
+## Segment models: what the change of 6 November 2026 left to do
+
+Each segment now has its own PD, LGD and prepayment model in `src/stress/models/`, and the parameter set only names them and the segment's matrix file (A42, C20). The engine, the one-off steps, the core documents and the control room follow the new form. The items below still describe the old one.
+
+### Open decisions (owner)
+
+- Calibrate the LGD and prepayment models apart from the PD models. Each still has its PD model's drivers.
+- Amend SCN-08, LGD-10 and SYN-PAR-06 as C20 proposes; O1 then retranscribes `docs/spec/`.
+
+### Steps
+
+- [ ] Rebuild the workflow page (`docs/run-workflow/`): `template.html`, `build_page.py` and `blocked_cases.py` still describe the inline `models:` section, `macro_model` and `macro_models.csv`. The walkthrough YAMLs are already in the new form and give the page's totals unchanged (static 132.3 / 662.2 / 1,173.4, dynamic 132.3 / 636.1 / 1,023.8 EUR m), so the page needs new runs and words, not new figures.
+- [ ] Refresh the generated pages that name `ttc_pd_matrix.parquet`, `z_drivers`, `lgd_w` or `cpr_v`: `docs/run-inputs/`, `docs/input-data/input-data-overview.html`, `docs/staging/`, `docs/pd-curves/` and the technical implementation document with its PDF.
+- [ ] Control room: let a person add or replace a segment's matrix file. Today the matrix files always come from the saved set, so a parameter set that names a new matrix file cannot be assembled on the page.
 
 ## Control room: a restart leaves the page showing a run in progress
 

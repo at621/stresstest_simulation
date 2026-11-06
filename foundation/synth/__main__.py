@@ -21,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("approve", help="record the owner's approval of an input set")
     a.add_argument("folder", type=Path)
     a.add_argument("--approver", required=True)
-    p = sub.add_parser("package", help="freeze seven supplied datasets; no synthetic generation")
+    p = sub.add_parser("package", help="freeze supplied datasets and matrix files; no synthetic generation")
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--out", type=Path, default=Path("inputs"))
     argv = sys.argv[1:] if argv is None else argv

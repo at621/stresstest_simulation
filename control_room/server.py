@@ -2,16 +2,17 @@
 
     uv run python control_room/server.py      # serves and opens http://127.0.0.1:8770
 
-1. Files and settings: the seven files the run needs, each one replaceable by hand, the run settings,
-   and the engine's own check of all of it (R1 to R4, calculating nothing).
-2. Review the files: each file's contents, and the changes for this run.
+1. Files and settings: the six files the run needs, each one replaceable by hand, the run settings,
+   and the engine's own check of all of it (R1 to R4, calculating nothing). The rating transitions,
+   one file per segment, come with the saved set.
+2. Review the files: each file's contents, each segment's models and settings, and the changes.
 3. Run: what will run, Start, and the engine's progress.
 4. Outcomes: the sealed run's figures, its reproduction and a comparison.
 
 The page opens on the small or the large dataset, as --dataset or the DATASET environment variable says.
 
 Every action is an engine or one-off command: `stress run`, `stress rerun`, `foundation.synth package`,
-`foundation.synth approve`. Files added on the page wait in a temporary folder until the seven are
+`foundation.synth approve`. Files added on the page wait in a temporary folder until the files are
 packaged as inputs/<hash>/, so the input folders stay written by the one-off step alone. A setup a
 flag cannot say is written as a specification YAML under this folder's specifications/ and runs with
 --specification. This server listens on the loopback address and answers only its own page. Given
@@ -51,7 +52,7 @@ import preflight
 import nbtools as nb
 from stress.cli import EXIT_BLOCKED, EXIT_ERROR, EXIT_NOT_REPRODUCED, EXIT_OK, STEPS
 from stress.contracts.errors import BlockingError
-from stress.contracts.inputs import DATASETS, TABLE_DATASETS
+from stress.contracts.inputs import DATASETS, MATRIX_DIR, PARAMETER_SET, TABLE_DATASETS, TTC_MATRIX
 from stress.contracts.run import (
     COMPARISONS_DIR,
     HORIZON_RUNOFFS,
@@ -72,7 +73,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = nb.ROOT
 PAGE = HERE / "index.html"
 SPECS = HERE / "specifications"  # the room's own setups, saved as the engine reads them
-BOOKS = {"small": "70a9337b7d75f668", "large": "d62d0386f2c5256e"}  # docs/assumptions.md A41
+BOOKS = {"small": "ffd95cf12192d960", "large": "57bf340df85d5a54"}  # docs/assumptions.md A41
 DATASET = "small"  # the book the page opens on, unless --dataset or the DATASET environment variable says otherwise
 PAGE_POLICY = ("default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; "
                "script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'")
@@ -158,11 +159,17 @@ def closed(path: Path) -> bool:
 # --- what is available ---------------------------------------------------------------------------
 
 def contract_gaps(folder: Path) -> list[str]:
-    """Columns the input contract needs and this set lacks: R2 would block on each of them."""
+    """Columns and sections the input contract needs and this set lacks: R2 would block on each of
+    them. A parameter set from before each segment named its models has no portfolios section."""
     gaps = []
     for spec in TABLE_DATASETS:
         present = pq.read_schema(folder / spec.filename).names
         gaps += [f"{spec.name}.{name}" for name in spec.column_names if name not in present]
+    if not isinstance(read_yaml(folder / PARAMETER_SET.filename).get("portfolios"), dict):
+        return [*gaps, f"{PARAMETER_SET.name}.portfolios"]
+    for path in sorted(set(preflight.matrix_files(folder).values())):
+        present = pq.read_schema(folder / path).names
+        gaps += [f"{TTC_MATRIX.name}.{name}" for name in TTC_MATRIX.column_names if name not in present]
     return gaps
 
 
@@ -174,8 +181,9 @@ def why_unusable(gaps: list[str]) -> str:
     for gap in gaps:
         table, column = gap.split(".", 1)
         by_table.setdefault(table, []).append(column)
-    parts = [f"{preflight.FILE_GUIDE[table][0]} file has no {preflight.listed(columns)} column"
-             f"{'s' if len(columns) > 1 else ''}" for table, columns in by_table.items()]
+    parts = [f"{preflight.FILE_GUIDE[table][0]} file has no {preflight.listed(columns)} "
+             f"{'section' if table == PARAMETER_SET.name else 'column'}{'s' if len(columns) > 1 else ''}"
+             for table, columns in by_table.items()]
     return f"The {' and the '.join(parts)}, which the engine needs."
 
 
@@ -384,7 +392,7 @@ def checked_document(form: dict, inputs: list[dict]) -> dict:
         raise Refused(f"input set {folder!r} is not on offer")
     if run.get("analysis"):
         checked_yaml(run["analysis"])
-    for name in ("scenarios", "segments", "terminal_policies", "balance_sheet", "models", "reporting"):
+    for name in ("scenarios", "segments", "terminal_policies", "balance_sheet", "reporting"):
         if name in doc and not isinstance(doc[name], dict):
             raise Refused(f"{name} must be a mapping")
     for name in ("assignments", "additional_values"):
@@ -662,7 +670,7 @@ class Control:
         return self.start("run", *self.command(flags))
 
     def add_file(self, name: str, original: str, stream, length: int) -> dict:
-        """A file the page sends for one of the seven places. It waits here, and only `use_files` puts
+        """A file the page sends for one of the dataset places. It waits here, and only `use_files` puts
         it into a set. A file that fails its check stays listed, with what is wrong with it, because
         that is what the person needs to see; it cannot be used."""
         spec = SPEC_OF.get(name)
@@ -694,8 +702,9 @@ class Control:
         (self.held / spec.filename).unlink(missing_ok=True)
 
     def use_files(self, form: dict) -> Job:
-        """O-step: the files added here, with the saved set's files for the other places, frozen as
-        inputs/<hash>/ with pending approval. A set with the same contents comes back unchanged."""
+        """O-step: the files added here, with the saved set's files for the other places and its matrix
+        files, frozen as inputs/<hash>/ with pending approval. A set with the same contents comes back
+        unchanged."""
         base = form.get("base") or None
         saved = None
         if base is not None:
@@ -713,6 +722,10 @@ class Control:
                 shutil.copyfile(source, assembled / spec.filename)
             else:
                 absent.append(preflight.FILE_GUIDE[spec.name][0])
+        if saved is not None and (saved / MATRIX_DIR).is_dir():
+            shutil.copytree(saved / MATRIX_DIR, assembled / MATRIX_DIR)
+        else:
+            absent.append(preflight.FILE_GUIDE[TTC_MATRIX.name][0])
         if absent:
             raise Refused(f"still missing: {', '.join(absent)}")
         wrong = [f"{preflight.FILE_GUIDE[f['name']][0]}: {f['problem']}"

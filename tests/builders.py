@@ -13,10 +13,13 @@ import yaml
 from scipy.special import ndtri
 
 from foundation.synth import build
-from foundation.synth.inputset import FILES, write_input_set
+from foundation.synth.inputset import FILES, load_matrices, write_input_set
 from stress.cli import execute
-from stress.contracts.inputs import SCENARIO_UNITS
+from stress.contracts.inputs import SCENARIO_UNITS, segments_of
 from stress.contracts.run import RunConfig
+from stress.ingest import attach_models
+from stress.models import LGD, PD, PREPAYMENT, REGISTRY, Model, register
+from stress.models.forms import linear
 from tests.support import ROOT, SPEC_DIR, oracle
 
 PARAMS = ROOT / "foundation" / "parameter_set.yaml"
@@ -31,12 +34,47 @@ def full_input_set(root: Path) -> Path:
 
 
 def load(input_dir: Path) -> dict:
-    out = {name: pd.read_parquet(input_dir / FILES[name]) for name in TABLES}
+    out = {name: pd.read_parquet(input_dir / FILES[name]) for name in TABLES if name in FILES}
     for name in DOCUMENTS:
         with (input_dir / FILES[name]).open(encoding="utf-8") as fh:
             out[name] = yaml.safe_load(fh)
+    out["ttc_pd_matrix"] = load_matrices(input_dir, out["parameter_set"])
     out["_meta"] = json.loads((input_dir / "manifest.json").read_text(encoding="utf-8"))
     return out
+
+
+def settings(tables: dict, segment: str) -> dict:
+    """A segment's settings in the parameter set's own tree, to change before writing."""
+    return next(body["segments"][segment] for body in tables["parameter_set"]["portfolios"].values()
+                if segment in body["segments"])
+
+
+def segments(tables: dict) -> dict:
+    """The segments as the engine reads them: by segment, under the engine's names, with the
+    LGD and prepayment sensitivities of their models (R2)."""
+    ps = {"segments": segments_of(tables["parameter_set"])}
+    attach_models(ps)
+    return ps["segments"]
+
+
+def model(name: str, role: str, function=None, sensitivity: float | None = None,
+          drivers: dict | None = None) -> str:
+    """Register a model for a test and return its name. It scores with ``function``, or linearly
+    on ``drivers``; a test model replaces an earlier one of the same name."""
+    if function is None:
+        def function(economy, drivers=drivers):
+            return linear(economy, drivers)
+    REGISTRY.pop(name, None)
+    register(Model(name, role, function, None if role == PD else float(sensitivity)))
+    return name
+
+
+def neutral(tables: dict, segment: str, lgd_w: float = 0.0, cpr_v: float = 0.0) -> None:
+    """Point a segment's LGD and prepayment at its own models' scores with other sensitivities."""
+    own = settings(tables, segment)
+    for role, setting, value in ((LGD, "lgd_model", lgd_w), (PREPAYMENT, "prepayment_model", cpr_v)):
+        base = REGISTRY[own[setting]]
+        own[setting] = model(f"{base.name}__test_{value:g}", role, base.function, value)
 
 
 def mini(tables: dict, per_cell: int = 2) -> dict:
@@ -146,13 +184,17 @@ def _terminal_book(t: dict) -> dict:
     i = oracle("AT-06")["input"]
     adverse, baseline = i["adverse"], i["baseline"]
     segment = REFERENCE_SEGMENTS["AT-06"]
-    params = t["parameter_set"]["segments"][segment]
-    driver = next(iter(params["z_drivers"]))
+    params = settings(t, segment)
+    driver = "gdp_growth"
     x = {v["scenario"]: v["value"] * SCENARIO_UNITS[v["unit"]] for v in t["scenarios"]["values"]
          if v["variable"] == driver and v["year"] == i["valuation_year"]}
-    params["z_drivers"] = {driver: {"beta": 1.0, "mean": x["baseline"], "sd": x["baseline"] - x["adverse"]}}
-    params["rho"] = float(ndtri(adverse["pd"]) - ndtri(baseline["pd"])) ** 2
-    params["lgd_w"] = float(ndtri(adverse["lgd"]) - ndtri(baseline["lgd"]))
+    drivers = {driver: {"beta": 1.0, "mean": x["baseline"], "sd": x["baseline"] - x["adverse"]}}
+    prefix = segment.lower()
+    params["pd_model"] = model(f"{prefix}.at06_pd", PD, drivers=drivers)
+    params["lgd_model"] = model(f"{prefix}.at06_lgd", LGD, drivers=drivers,
+                                sensitivity=float(ndtri(adverse["lgd"]) - ndtri(baseline["lgd"])))
+    params["prepayment_model"] = model(f"{prefix}.at06_prepayment", PREPAYMENT, drivers=drivers, sensitivity=0.0)
+    params["asset_correlation"] = float(ndtri(adverse["pd"]) - ndtri(baseline["pd"])) ** 2
     return {"AT-06": {"segment": segment, "grade": _pd_row(t, segment, baseline["pd"]),
                       "gca": oracle("AT-34")["input"]["drawn"], "lgd": baseline["lgd"]}}
 
@@ -204,7 +246,8 @@ def reference_set(tables: dict) -> tuple[dict, dict[str, str]]:
     """
     t = copy_tables(tables)
     for segment in ("P03", *REFERENCE_SEGMENTS.values()):
-        t["parameter_set"]["segments"][segment].update({"rho": 0.0, "lgd_w": 0.0, "cpr_ttc": 0.0, "cpr_v": 0.0})
+        settings(t, segment).update({"asset_correlation": 0.0, "cpr_ttc": 0.0})
+        neutral(t, segment)
     book = _reference_book(t)
     fac, prov = t["facilities"], t["opening_provisions"]
     template = t["commitments"].iloc[0]

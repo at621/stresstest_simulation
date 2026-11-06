@@ -14,7 +14,7 @@ def test_lgd_shift(full_tables, core_run, reference_runs):
     e = case["expected"]
     tol = e["z_zero_returns_ttc_within"]
     interior = [s["reference_lgd"] for s in spec_yaml("calibration_targets.yaml")["segments"].values()]
-    ws = [p["lgd_w"] for p in full_tables["parameter_set"]["segments"].values()]
+    ws = [p["lgd_w"] for p in builders.segments(full_tables).values()]
     for w in ws:
         assert np.all(np.abs(lgd_from_z(interior, w, case["input"]["z"]["zero"]) - interior) <= tol)
         for edge in case["input"]["lgd_ttc_boundaries"]:
@@ -29,7 +29,7 @@ def test_lgd_shift(full_tables, core_run, reference_runs):
     ctx, _ = core_run
     fac = full_tables["facilities"][["facility_id", "segment", "ttc_lgd"]]
     run = builders.result(ctx, "lgd_of_year.parquet").merge(fac, on="facility_id")
-    weights = run["segment"].map(lambda s: full_tables["parameter_set"]["segments"][s]["lgd_w"])
+    weights = run["segment"].map(lambda s: builders.segments(full_tables)[s]["lgd_w"])
     assert np.allclose(run["lgd"], lgd_from_z(run["ttc_lgd"], weights, run["z"]), rtol=0, atol=tol)
     assert run["lgd"].between(0, 1, inclusive="neither").all()
     by_rising_z = run.drop_duplicates(["facility_id", "z"]).sort_values(["facility_id", "z"])
@@ -42,9 +42,10 @@ def test_lgd_shift(full_tables, core_run, reference_runs):
     facts = full_tables["facilities"][["facility_id", "obligor_id", "segment", "ttc_lgd"]].merge(
         full_tables["obligors"][["obligor_id", "country"]], on="obligor_id")
     z = builders.result(ctx, "drivers.parquet").rename(columns={"year": "bucket_year"})
+    z = z[z["model"] == "lgd"].drop(columns="model")  # each segment's LGD model
     buckets = params.merge(facts, on="facility_id").merge(z, on=["segment", "country", "scenario", "bucket_year"])
     assert len(buckets) == len(params) and set(buckets["scenario"]) == {"baseline", "adverse"}
-    weights = buckets["segment"].map(lambda s: full_tables["parameter_set"]["segments"][s]["lgd_w"])
+    weights = buckets["segment"].map(lambda s: builders.segments(full_tables)[s]["lgd_w"])
     assert np.allclose(buckets["lgd"], lgd_from_z(buckets["ttc_lgd"], weights, buckets["z"]), rtol=0, atol=tol)
     # A facility with w > 0 whose baseline Z is zero keeps its TTC LGD in a run.
     reference, _ = reference_runs["core"]

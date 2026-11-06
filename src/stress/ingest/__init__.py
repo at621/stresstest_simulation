@@ -5,12 +5,14 @@ and control totals.
 Section 4.2, DAT-02, DAT-03, OPS-01.
 """
 
+import dataclasses
 import hashlib
 import json
 import logging
 import re
 import shutil
 from datetime import date
+from pathlib import PurePosixPath
 
 import numpy as np
 import pandas as pd
@@ -23,6 +25,8 @@ from stress.contracts.inputs import (
     DATASETS,
     FACILITIES,
     INPUT_MANIFEST,
+    MATRIX_DIR,
+    MODEL_SETTINGS,
     OBLIGORS,
     OPENING_PROVISIONS,
     PARAMETER_SET,
@@ -32,14 +36,17 @@ from stress.contracts.inputs import (
     SCENARIO_VALUE_FIELDS,
     SCENARIO_VALUE_TYPES,
     SCENARIOS,
-    TTC_PD_MATRIX,
+    TTC_MATRIX,
     DatasetSpec,
     LoadedInputs,
     TypedTable,
+    segments_of,
 )
 from stress.contracts.run import RunContext
 from stress.contracts.status import ALL_STATUSES, STATUS_SUFFIX, ValueStatus
+from stress.contracts.tables import MODEL_LGD, MODEL_PREPAYMENT
 from stress.ingest import specification
+from stress.models import resolve
 
 STEP = "R2"
 LOG = logging.getLogger("stress.R2")
@@ -61,28 +68,35 @@ def input_set_hash(file_hashes: dict[str, str]) -> str:
 
 
 def check_hashes(ctx: RunContext, manifest: dict) -> dict[str, str]:
+    """Every file the manifest lists, the fixed datasets and the matrix files, against its hash."""
     files = manifest.get("files", {})
-    hashes = {}
     for spec in DATASETS:
-        path = ctx.input_dir / spec.filename
-        if not path.is_file():
+        if spec.filename not in files or not (ctx.input_dir / spec.filename).is_file():
             raise BlockingError(STEP, Block.UNREADABLE_FILE, f"{spec.filename} is missing")
-        expected = files.get(spec.filename, {}).get("sha256")
+    hashes = {}
+    for name in sorted(files):
+        if PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts or "\\" in name:
+            raise BlockingError(STEP, Block.UNREADABLE_FILE, f"manifest names {name}, outside the input set")
+        path = ctx.input_dir / name
+        if not path.is_file():
+            raise BlockingError(STEP, Block.UNREADABLE_FILE, f"{name} is missing")
+        expected = files[name].get("sha256")
         actual = _hash(path)
         if actual != expected:
             raise BlockingError(STEP, Block.INPUT_HASH_MISMATCH,
-                                f"{spec.filename} hash {actual[:12]} differs from the manifest")
-        hashes[spec.filename] = actual
+                                f"{name} hash {actual[:12]} differs from the manifest")
+        hashes[name] = actual
     if input_set_hash(hashes) != ctx.input_set_hash:
         raise BlockingError(STEP, Block.INPUT_HASH_MISMATCH, "input-set hash differs from R1")
     return hashes
 
 
-def copy_raw(ctx: RunContext) -> None:
+def copy_raw(ctx: RunContext, files) -> None:
     """Keep the raw files unchanged in runs/<run_id>/data/ (DAT-03)."""
     ctx.data_dir.mkdir(parents=True, exist_ok=False)
-    for spec in DATASETS:
-        shutil.copy2(ctx.input_dir / spec.filename, ctx.data_dir / spec.filename)
+    for name in files:
+        (ctx.data_dir / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ctx.input_dir / name, ctx.data_dir / name)
     shutil.copy2(ctx.input_dir / INPUT_MANIFEST, ctx.data_dir / INPUT_MANIFEST)
 
 
@@ -225,18 +239,53 @@ def read_scenarios(ctx: RunContext) -> tuple[pd.DataFrame, dict]:
 
 
 def read_parameter_set(ctx: RunContext) -> dict:
+    """The parameter set, with its portfolio tree read into one entry per segment."""
     doc = _read_yaml(ctx, PARAMETER_SET)
     missing = [k for k in PARAMETER_SET_TOP_KEYS if k not in doc]
     if missing:
         raise BlockingError(STEP, Block.MISSING_PARAMETER, f"parameter_set.yaml lacks {missing}")
+    try:
+        doc["segments"] = segments_of(doc)
+    except (TypeError, ValueError) as exc:
+        raise BlockingError(STEP, Block.MISSING_PARAMETER, f"parameter_set.yaml: {exc}") from exc
+    del doc["portfolios"]
     return doc
 
 
-def read_matrix(ctx: RunContext) -> pd.DataFrame:
-    table = read_table(ctx, TTC_PD_MATRIX)
-    if (table.status["probability"] == str(ValueStatus.MISSING)).any():
-        raise BlockingError(STEP, Block.INVALID_MATRIX, "ttc_pd_matrix has a missing probability")
-    return table.data
+def read_matrices(ctx: RunContext, segments: dict, listed) -> pd.DataFrame:
+    """Each segment's TTC matrix from the file its ``ttc_matrix`` names, with the segment added.
+    The file must be one of the input set's own: listed in its manifest, under matrices/."""
+    frames = []
+    for segment, settings in sorted(segments.items()):
+        name = settings.get("ttc_matrix")
+        if name is None:
+            continue  # R3 blocks: the segment lacks a setting
+        path = PurePosixPath(str(name))
+        if path.is_absolute() or ".." in path.parts or path.parts[0] != MATRIX_DIR or str(path) not in listed:
+            raise BlockingError(STEP, Block.UNREADABLE_FILE,
+                                f"segment {segment}: ttc_matrix {name} is not a matrix file of this input set")
+        table = read_table(ctx, dataclasses.replace(TTC_MATRIX, filename=str(path)))
+        if (table.status["probability"] == str(ValueStatus.MISSING)).any():
+            raise BlockingError(STEP, Block.INVALID_MATRIX, f"{path} has a missing probability")
+        frames.append(table.data.assign(segment=segment)[["segment", *TTC_MATRIX.column_names]])
+    if not frames:
+        raise BlockingError(STEP, Block.INVALID_MATRIX, "no segment names a TTC matrix")
+    return pd.concat(frames, ignore_index=True)
+
+
+def attach_models(parameter_set: dict) -> None:
+    """Check each segment's models against the registry (stress.models) and copy the LGD and
+    prepayment sensitivities next to the segment's settings, where R3 checks them and R6 reads
+    them. A model the segment does not name stays absent: R3 blocks on it."""
+    for segment, settings in parameter_set["segments"].items():
+        for role, setting in MODEL_SETTINGS.items():
+            if setting not in settings:
+                continue
+            model = resolve(settings[setting], role, settings.get("model_portfolio"), f"segment {segment}: ")
+            if role == MODEL_LGD:
+                settings["lgd_w"] = model.sensitivity
+            elif role == MODEL_PREPAYMENT:
+                settings["cpr_v"] = model.sensitivity
 
 
 # --- control totals -------------------------------------------------------------------------------
@@ -287,8 +336,8 @@ def compare_controls(loaded: dict, expected: dict, tol: dict) -> list[str]:
 def load_inputs(ctx: RunContext) -> LoadedInputs:
     """R2: hash-check, copy raw files, parse typed tables with a status on every value."""
     manifest = json.loads((ctx.input_dir / INPUT_MANIFEST).read_text(encoding="utf-8"))
-    check_hashes(ctx, manifest)
-    copy_raw(ctx)
+    hashes = check_hashes(ctx, manifest)
+    copy_raw(ctx, hashes)
     approval_path = ctx.input_dir / APPROVAL_FILE
     approval = {"status": "MISSING", "input_set_hash": ctx.input_set_hash}
     if approval_path.is_file():
@@ -311,22 +360,22 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
     obligors = read_table(ctx, OBLIGORS)
     commitments = read_table(ctx, COMMITMENTS)
     provisions = read_table(ctx, OPENING_PROVISIONS)
-    matrix = read_matrix(ctx)
     scenario_values, scenario_meta = read_scenarios(ctx)
     parameter_set = read_parameter_set(ctx)
+    matrix = read_matrices(ctx, parameter_set["segments"], hashes)
     loaded_controls = control_totals(facilities.data, commitments.data, provisions.data)
     tol = parameter_set["tolerances"]["aggregate"]
     problems = compare_controls(loaded_controls, manifest.get("control_totals", {}), tol)
     if problems:
         raise BlockingError(STEP, Block.CONTROL_TOTAL_MISMATCH, "; ".join(problems[:5]))
-    LOG.info("all %d files match their manifest hashes (input set %s)", len(DATASETS),
+    LOG.info("all %d files match their manifest hashes (input set %s)", len(hashes),
              ctx.input_set_hash[:16])
     LOG.info("raw files kept unchanged in %s/", ctx.data_dir.name)
     for name, table in (("facilities", facilities), ("obligors", obligors),
                         ("commitments", commitments), ("opening_provisions", provisions)):
         missing = int((table.status == "missing").sum().sum())
         LOG.info("loaded %-18s %8s rows, %s missing value(s)", name, f"{len(table.data):,}", missing)
-    LOG.info("loaded %-18s %8s rows", "ttc_pd_matrix", f"{len(matrix):,}")
+    LOG.info("loaded %-18s %8s rows from %d files", "TTC matrices", f"{len(matrix):,}", matrix["segment"].nunique())
     LOG.info("loaded %-18s %8s values, converted to decimal fractions", "scenarios",
              f"{len(scenario_values):,}")
     LOG.info("parameter set %s (%s)", parameter_set["parameter_set_id"], parameter_set["status"])
@@ -350,6 +399,7 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
         parameter_set=parameter_set, load_controls=controls, analysis=analysis, approval=approval,
     )
     specification.apply(loaded, ctx)
+    attach_models(loaded.parameter_set)
     return loaded
 
 

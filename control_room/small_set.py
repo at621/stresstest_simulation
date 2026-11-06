@@ -19,7 +19,14 @@ import numpy as np
 import pandas as pd
 from server import BOOKS, ROOT
 
-from stress.contracts.inputs import COMMITMENTS, DATASETS, FACILITIES, OBLIGORS, OPENING_PROVISIONS
+from stress.contracts.inputs import (
+    COMMITMENTS,
+    DATASETS,
+    FACILITIES,
+    MATRIX_DIR,
+    OBLIGORS,
+    OPENING_PROVISIONS,
+)
 
 FULL = ROOT / "inputs" / BOOKS["large"]
 SHARE = 10
@@ -40,9 +47,10 @@ def chosen(facilities: pd.DataFrame) -> pd.Series:
 
 
 def write_sample(source: Path, target: Path) -> None:
-    """The seven files of `source`, with the four tables cut down to the kept facilities."""
+    """The files of `source`, with the four tables cut down to the kept facilities."""
     for spec in DATASETS:
         shutil.copyfile(source / spec.filename, target / spec.filename)
+    shutil.copytree(source / MATRIX_DIR, target / MATRIX_DIR)
     facilities = pd.read_parquet(source / FACILITIES.filename)
     ids = chosen(facilities)
     owners = facilities.loc[facilities["facility_id"].isin(ids), "obligor_id"]

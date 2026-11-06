@@ -16,7 +16,7 @@ uv run stress run --specification docs/examples/configurable-projection.yaml
 Or use the original command without a specification:
 
 ```
-uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core
 ```
 
 With `--specification`, calculation flags must be placed in `run`, not on the command line.
@@ -83,7 +83,7 @@ definitions are `src/stress/contracts/inputs.py`; R3 enforces scope and applicab
 | `obligors.parquet` | `obligor_id` | `obligor_id`, `group_id`, `entity_id`, `country`, `counterparty_sector`, `nace_code`, `nace_version`, `principal_activity`, `sme_flag`, `regulatory_default`, `snapshot_date` |
 | `commitments.parquet` | `commitment_id` | `commitment_id`, `facility_id`, `currency`, `nominal_undrawn`, `accounting_ccf`, `ccf_source`, `asset_category`, `provision_classification`, `snapshot_date` |
 | `opening_provisions.parquet` | `facility_id` | `facility_id`, `currency`, `allowance_on`, `provision_off`, `overlay_amount`, `overlay_risk`, `overlay_owner`, `overlay_reason`, `method`, `frozen`, `snapshot_date` |
-| `ttc_pd_matrix.parquet` | `segment`, `from_grade`, `to_grade` | Keys plus `probability`, `from_rank`, `to_rank`, `master_scale_pd` |
+| `matrices/<segment>.parquet`, one per segment, at the path its `ttc_matrix` names | `from_grade`, `to_grade` | Keys plus `probability`, `from_rank`, `to_rank`, `master_scale_pd` |
 | `scenarios.yaml` | scenario, variable, country, year | Structure below |
 | `parameter_set.yaml` | `parameter_set_id` | Structure below |
 
@@ -124,8 +124,11 @@ is likewise `0.01` decimal, not `100` decimal. Annual price changes compound.
 - `parameter_set_id`, `version`, `status` (existing values remain PROPOSED).
 - `horizon`: `snapshot_date`, `snapshot_year`, `projection_years`, `last_bucket_year`.
 - `master_scale`: `grades`, `default_grade`, `ttc_pd`.
-- `segments`: per segment `portfolio`, `z_drivers`, `rho`, `sicr_k`, `lgd_w`, `cpr_ttc`,
-  `cpr_v`, `ccf`; optional `macro_model`, `template_class`.
+- `portfolios`: per portfolio its `segments`, and per segment exactly `pd_model`, `lgd_model`,
+  `prepayment_model`, `ttc_matrix`, `asset_correlation`, `sicr_k`, `cpr_ttc` and `ccf`. A model
+  is named `<portfolio>.<function>`, a function in `src/stress/models/` of the segment's own
+  portfolio that holds its coefficients (A42); `ttc_matrix` names a file of the input set under
+  `matrices/`. Any other setting, such as `z_drivers`, `rho`, `lgd_w` or `cpr_v`, blocks at R2.
 - `terminal_rule`: `method`, `baseline`, `last_scenario_year`, `reversion_years`,
   `s1_end_of_horizon`. Supported execution is the existing linear reversion/flat-baseline
   convention with the selectable treatment above; arbitrary method strings are not plugins.
@@ -138,10 +141,10 @@ is likewise `0.01` decimal, not `100` decimal. Annual price changes compound.
 - `sicr_triggers`: `enabled`, `dpd_days`, `hold`, `definitions`, `source`. Supported hold is
   until_default; configured DPD/watchlist/forborne flags are observed at `credit_status_date`.
 
-Core parameter domains: `0 <= rho < 1`, positive `sicr_k`, nonnegative `lgd_w`/`cpr_v`,
-`0 <= cpr_ttc <= 1`; CCF in [0,1] when applicable. Each Z driver has finite `beta`, `mean`,
-and positive `sd`. Shared grade scale and independently validated matrix rows remain required
-even when a different macro model supplies the score.
+Core parameter domains: `0 <= asset_correlation < 1`, positive `sicr_k`, nonnegative LGD and
+prepayment model sensitivities, `0 <= cpr_ttc <= 1`; CCF in [0,1] when applicable. Each linear
+driver in a model has finite `beta`, `mean` and positive `sd`. Shared grade scale and
+independently validated matrix rows remain required whichever model supplies the score.
 
 ## New scenarios and supplementary history
 
@@ -163,9 +166,11 @@ every model dependency; there is no automatic interpolation or missing-history i
 
 ## Portfolio and sector assignment
 
-`segments` maps a segment name to overrides of `portfolio`, `macro_model`, `template_class`,
-`z_drivers`, `rho`, `sicr_k`, `lgd_w`, `cpr_ttc`, `cpr_v`, `ccf`. A new segment requires
-`inherits: <existing-segment>`, which explicitly copies its TTC matrix and parameter defaults.
+`segments` maps a segment name to overrides of `portfolio`, `template_class`, `pd_model`,
+`lgd_model`, `prepayment_model`, `asset_correlation`, `sicr_k`, `cpr_ttc`, `ccf`. A new segment
+requires `inherits: <existing-segment>`, which explicitly copies its TTC matrix, models and
+parameter defaults. Its models must stay those of its parent's portfolio, even when `portfolio`
+reports it elsewhere.
 Existing segments cannot be reparented. Supply a genuinely new matrix through the base input
 set when copying is not the intended modelling assumption.
 
@@ -173,43 +178,48 @@ set when copying is not the intended modelling assumption.
 change facility membership. `ccf` is a nullable alignment expectation for the supplied
 commitments, not an effective CCF override. A conflicting specification expectation blocks
 the whole run. Use a named base variant's CCF settings for a sensitivity, or package updated
-commitment data. Legacy `z_drivers` accepts exactly `beta`, `mean`, `sd`; lagged/polynomial
-terms belong in a named model. Unknown coefficient fields and invalid domains block.
+commitment data. Coefficients are not specification data: point the segment at another model
+of its portfolio instead. Unknown fields and invalid domains block.
 
 `assignments` contains rows with `where`, `segment` and optional `portfolio`. Selectors are
 exact matches on `facility_id`, `portfolio`, `segment`, borrower `country` or `nace_code`.
 All predicates in a selector must match. Empty, unmatched or overlapping assignments block.
 The assignment changes segmentation only; exposure amounts and opening provisions are retained.
 
-For sector stress, assign the affected NACE population to a dedicated segment and attach a
-model using a supplied driver such as `manufacturing_gva`. Other sectors keep their models.
+For sector stress, assign the affected NACE population to a dedicated segment and point it
+at a model of its portfolio that reads a supplied driver such as `manufacturing_gva`. Other sectors keep their models.
 This is explicit segmentation, not an inferred relation between an arbitrary NACE code and GDP.
 
 `reporting.template_classes` maps segment identifiers to nonempty reporting labels. It can
 also be supplied as `segments.<id>.template_class`. Legacy P01–P06 mappings remain defaults;
 new static-run segments need explicit mappings. These labels are not an approved FINREP mapping.
 
-## Macro models
+## Segment models
 
-`models` maps an identifier to `kind`, `source`, `version` and model-specific data. Attach
-one using `segments.<id>.macro_model`. Unassigned definitions and missing references block.
-Omitting a model preserves the original segment Z drivers.
+Each segment has a PD, an LGD and a prepayment model, each a function in
+`src/stress/models/<portfolio>.py` that holds its coefficients and whose docstring describes it.
+The parameter set names them; a specification may point a segment at another model of the same
+portfolio and role, for example `segments: {P02: {pd_model: p02.pd_nonlinear}}`. Names outside
+the registry, models of another role or portfolio, and coefficients in YAML block at R2
+(`UNKNOWN_MODEL`, `MISSING_PARAMETER`). The inline `models:` section is no longer accepted.
 
-| Kind | Additional fields | Equation / interpretation |
+The model functions are built from three forms in `stress.models.forms`:
+
+| Form | Data in the function | Equation / interpretation |
 |---|---|---|
-| `linear` | `drivers`: variable to `{beta, mean, sd}` | Z = sum beta × (value − mean) / sd |
-| `polynomial` | `terms`, optional `intercept` (default 0) | Z = intercept + sum beta × ((lagged value − mean) / sd)^power |
-| `supplied` | `values`: `{scenario, country, year, z}` rows | Complete output from an external macro model |
+| `linear` | drivers: variable to `{beta, mean, sd}` | Z = sum beta × (value − mean) / sd |
+| `polynomial` | intercept and terms | Z = intercept + sum beta × ((lagged value − mean) / sd)^power |
+| `supplied` | scores by scenario and year | Z taken as given, the same in every country |
 
-Each polynomial term has a unique name, `variable`, `mean`, `sd`, `beta`, optional integer
-`lag` (default 0, nonnegative), and `power` (default 1; 1, 2 or 3). `__intercept__` is reserved.
-Coefficients and outputs must be finite. Supplied-score keys are unique and cover every
-requested scenario/country/projection year evaluated for the segment. Current R4 evaluates
-all configured segments across the base scenario countries, so provide coverage for that
-grid, including countries with no exposure in a particular segment.
+Each polynomial term has `variable`, `mean`, `sd`, `beta`, optional integer `lag` (default 0,
+nonnegative), and `power` (default 1; 1, 2 or 3). Coefficients and outputs must be finite. A
+supplied score must cover every scenario and projection year of the run. R4 scores every
+configured segment's three models across the base scenario countries.
 
-One resolved Z still drives matrix PD, LGD and prepayment. Model identity/version/source are
-in `macro_models.csv`; terms and their contributions are in `driver_contributions.csv`.
+Each model's Z drives its own parameter: the PD model's the matrix, the LGD model's the LGD and
+the prepayment model's prepayment. The models each segment ran with, their location,
+sensitivity and the first line of their description are in `segment_models.csv`; terms and
+their contributions are in `driver_contributions.csv`, by model.
 The effective specification retains lag, power, coefficients, inherited assumptions and
 external-score data. This is model execution, not estimation or bank validation.
 

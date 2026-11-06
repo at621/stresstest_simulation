@@ -31,7 +31,7 @@ import server
 from stress.lineage import CODE_PATHS
 
 nb = server.nb
-INPUTS = "inputs/d62d0386f2c5256e"
+INPUTS = "inputs/57bf340df85d5a54"
 WALKTHROUGH = "docs/run-workflow/walkthrough.yaml"
 RUN = {"inputs": INPUTS, "scenarios": ["baseline", "adverse"], "variant": "core", "balance_sheet": "static",
        "terminal_treatment": "z", "s2_treatment": "repriced", "horizon_runoff": "contractual", "lgd_path": "annual"}
@@ -40,7 +40,7 @@ PLAIN = {"schema_version": 1, "status": "SYNTHETIC", "source": "test", "version"
 CRISIS = {**PLAIN, "version": "test-crisis", "run": {**RUN, "scenarios": ["baseline", "adverse", "deeper"]},
           "scenarios": {"deeper": {"inherits": "adverse", "narrative": "A deeper 2027.", "overrides": [
               {"variable": "gdp_growth", "country": "*", "year": 2027, "value": -6.0, "unit": "percent", "value_type": "growth"}]}},
-          "segments": {"P01": {"rho": 0.2}}, "terminal_policies": {"deeper": {"method": "flat"}}}
+          "segments": {"P01": {"asset_correlation": 0.2}}, "terminal_policies": {"deeper": {"method": "flat"}}}
 
 
 def with_hash(doc: dict) -> dict:
@@ -104,7 +104,7 @@ def test_the_run_is_what_the_setup_said(sealed):
     assert view["scenarios"] == ["baseline", "adverse", "deeper"] and view["specification"] == "test-crisis"
     assert view["results"]["kpis"]["deeper"]["cumulative"] > view["results"]["kpis"]["adverse"]["cumulative"]
     sealed_copy = folder / "data" / "specification.yaml"
-    assert sealed_copy.is_file() and "rho: 0.2" in sealed_copy.read_text(encoding="utf-8")
+    assert sealed_copy.is_file() and "asset_correlation: 0.2" in sealed_copy.read_text(encoding="utf-8")
 
 
 def test_the_summary_ties_to_the_sealed_headline(sealed):
@@ -146,7 +146,7 @@ def test_the_run_loads_back_as_the_setup_it_was_started_with(sealed):
     loaded = server.setup_of({"run": folder.name}, control.runs_dir)
     doc = loaded["document"]
     assert doc["run"]["inputs"] == INPUTS and doc["scenarios"]["deeper"]["overrides"][0]["value"] == -6.0
-    assert doc["segments"] == {"P01": {"rho": 0.2}} and doc["terminal_policies"] == {"deeper": {"method": "flat"}}
+    assert doc["segments"] == {"P01": {"asset_correlation": 0.2}} and doc["terminal_policies"] == {"deeper": {"method": "flat"}}
     written = (folder / "data" / "specification.yaml").read_text(encoding="utf-8").split("\n", 1)[1]
     assert server.specification_text(doc, server.SPECS) == written
     assert control.preflight({"document": doc, "name": loaded["name"]})["verdict"] == "ready"
@@ -227,14 +227,16 @@ def test_a_broken_transfer_leaves_the_earlier_file(tmp_path):
     assert (control.held / "scenarios.yaml").read_bytes() == source.read_bytes()
 
 
-def test_seven_files_added_by_hand_become_a_set_and_leave_the_list(tmp_path, monkeypatch):
-    """The committed set's seven files, added one by one, package to the very same input set."""
-    monkeypatch.setattr(nb, "INPUTS_DIR", tmp_path / "inputs")
-    (tmp_path / "inputs").mkdir()
+def test_files_added_by_hand_become_a_set_and_leave_the_list(tmp_path, monkeypatch):
+    """The committed set's six files, added one by one, with its own matrix files, package to the very
+    same input set. Without a saved set there are no matrix files, and nothing is packaged."""
+    committed_set_in(tmp_path, monkeypatch)
     control = server.Control(tmp_path)
     for role in preflight.file_roles():
         add(control, role["name"], server.ROOT / INPUTS / role["file"])
-    job = wait(control.use_files({}))
+    with pytest.raises(server.Refused, match="still missing: Rating transitions"):
+        control.use_files({})
+    job = wait(control.use_files({"base": INPUTS}))
     assert job.state == "done" and job.input_set == INPUTS.split("/")[1], list(job.lines)
     saved = tmp_path / "inputs" / job.input_set
     assert (saved / "manifest.json").is_file()
@@ -244,7 +246,7 @@ def test_seven_files_added_by_hand_become_a_set_and_leave_the_list(tmp_path, mon
 
 def test_replacing_one_file_keeps_the_other_six_and_the_saved_set(tmp_path, monkeypatch):
     original = committed_set_in(tmp_path, monkeypatch)
-    before = {p.name: p.read_bytes() for p in original.iterdir()}
+    before = {p.relative_to(original).as_posix(): p.read_bytes() for p in original.rglob("*") if p.is_file()}
     changed = tmp_path / "scenarios_new.yaml"
     changed.write_text((original / "scenarios.yaml").read_text(encoding="utf-8") + "\n# revised\n", encoding="utf-8")
     table = pd.read_parquet(original / "obligors.parquet")
@@ -257,7 +259,7 @@ def test_replacing_one_file_keeps_the_other_six_and_the_saved_set(tmp_path, monk
     fresh = tmp_path / "inputs" / job.input_set
     assert pd.read_parquet(fresh / "obligors.parquet").loc[0, "principal_activity"] == "Changed by hand"
     assert (fresh / "scenarios.yaml").read_bytes() == (original / "scenarios.yaml").read_bytes()
-    assert {p.name: p.read_bytes() for p in original.iterdir()} == before
+    assert {p.relative_to(original).as_posix(): p.read_bytes() for p in original.rglob("*") if p.is_file()} == before
 
 
 def test_files_that_are_not_complete_or_not_right_are_not_packaged(tmp_path, monkeypatch):
@@ -290,19 +292,23 @@ def test_older_sets_say_in_words_why_they_cannot_run():
     rows = server.input_inventory()
     assert next(r for r in rows if r["inputs"] == INPUTS)["why_not"] is None
     older = [r for r in rows if not r["runnable"]]
-    assert older and all("Facilities file has no credit_status_date column" in r["why_not"] for r in older)
+    assert older and all("Facilities file has no credit_status_date column" in r["why_not"]
+                         or "Parameters file has no portfolios section" in r["why_not"] for r in older)
+    assert any("Parameters file has no portfolios section" in r["why_not"] for r in older)
     assert all(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", r["saved_at"]) for r in rows)
 
 
 def test_approval_is_recorded_by_the_one_off_step_and_nothing_else_changes(tmp_path, monkeypatch):
     copy = committed_set_in(tmp_path, monkeypatch)
     monkeypatch.setattr(server, "ROOT", tmp_path)  # a run's paths are read from here
-    before = {p.name: p.read_bytes() for p in copy.iterdir() if p.name != "approval.json"}
+    before = {p.relative_to(copy).as_posix(): p.read_bytes() for p in copy.rglob("*")
+              if p.is_file() and p.name != "approval.json"}
     job = wait(server.Control(tmp_path).approve({"inputs": INPUTS, "approver": "O. Wner"}))
     assert job.state == "done", list(job.lines)
     approval = json.loads((copy / "approval.json").read_text(encoding="utf-8"))
     assert approval["status"] == "APPROVED" and approval["approved_by"] == "O. Wner"
-    assert {p.name: p.read_bytes() for p in copy.iterdir() if p.name != "approval.json"} == before
+    assert {p.relative_to(copy).as_posix(): p.read_bytes() for p in copy.rglob("*")
+              if p.is_file() and p.name != "approval.json"} == before
     for bad in ({"inputs": "inputs/0000000000000000", "approver": "x"}, {"inputs": INPUTS, "approver": "x; rm"},
                 {"inputs": INPUTS, "approver": ""}):
         with pytest.raises(server.Refused):
@@ -409,8 +415,8 @@ def test_a_job_follows_the_engine_log():
     assert job.step == "R11" and job.detail == server.STEPS["R11"]
     assert job.run_id == "20261031T2029Z-core-3e7f2cd1"
     packaging = server.Job("package", "package")
-    packaging.add("input set inputs/d62d0386f2c5256e")
-    assert packaging.input_set == "d62d0386f2c5256e"
+    packaging.add("input set inputs/57bf340df85d5a54")
+    assert packaging.input_set == "57bf340df85d5a54"
 
 
 @pytest.mark.parametrize(("kind", "code", "state"), [
@@ -600,7 +606,7 @@ def test_a_refused_setup_starts_nothing(site):
 @pytest.mark.parametrize("path", [
     "/docs/run-workflow/stress-run-workflow.html", "/api/runs/..%2F..%2Fpyproject.toml", "/api/runs/comparisons",
     "/api/runs/20261031T2029Z-core-3e7f2cd1", "/api/inputs/bank", "/api/inputs/..%2F..", "/api/inputs/0000000000000000",
-    "/api/inputs/d62d0386f2c5256e/preview?table=nothing", "/api/inputs/d62d0386f2c5256e/matrix?segment=nothing", "/nothing",
+    "/api/inputs/57bf340df85d5a54/preview?table=nothing", "/api/inputs/57bf340df85d5a54/matrix?segment=nothing", "/nothing",
     "/api/browse?path=docs", "/api/text?path=pyproject.toml",
 ])
 def test_nothing_outside_the_offer_is_served(site, path):
@@ -617,13 +623,13 @@ def test_the_routes_of_the_steps_answer(site):
     answer = json.loads(payload)
     assert response.status == 200 and answer["verdict"] == "ready" and answer["shown"].startswith("uv run stress run")
     assert not answer["needs_specification"] and answer["yaml"].startswith("schema_version: 1")
-    response, payload = call(site, "GET", "/api/inputs/d62d0386f2c5256e")
+    response, payload = call(site, "GET", "/api/inputs/57bf340df85d5a54")
     view = json.loads(payload)
     assert response.status == 200 and "P01" in view["base"]["segments"] and view["summary"]["facilities"]["rows"] == 10_000
     assert [f["file"] for f in view["files"]][:2] == ["facilities.parquet", "obligors.parquet"]
-    response, payload = call(site, "GET", "/api/inputs/d62d0386f2c5256e/preview?table=facilities&q=F07001")
+    response, payload = call(site, "GET", "/api/inputs/57bf340df85d5a54/preview?table=facilities&q=F07001")
     assert response.status == 200 and json.loads(payload)["total"] == 1
-    response, payload = call(site, "GET", "/api/inputs/d62d0386f2c5256e/matrix?segment=P01")
+    response, payload = call(site, "GET", "/api/inputs/57bf340df85d5a54/matrix?segment=P01")
     assert response.status == 200 and len(json.loads(payload)["grid"]) == 11
     text = (server.ROOT / WALKTHROUGH).read_text(encoding="utf-8")
     response, payload = post(site, "/api/yaml", {"yaml": text})

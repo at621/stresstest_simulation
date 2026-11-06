@@ -26,6 +26,9 @@ from stress.contracts.tables import (
     BASIS_ACCOUNTING,
     COHORT_PERFORMING,
     LGD_OF_YEAR,
+    MODEL_LGD,
+    MODEL_PD,
+    MODEL_PREPAYMENT,
     PIT_MATRICES,
     ROUTE_PERFORMING,
     Drivers,
@@ -182,8 +185,9 @@ def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: p
                         terminal_treatment: str = "z",
                         horizon_runoff: str = RUNOFF_CONTRACTUAL,
                         lgd_z: pandas.DataFrame | None = None) -> pandas.DataFrame:
-    """LGD, prepayment and EAD per facility, scenario, valuation date and default bucket. ``lgd_z``
-    replaces the Z of LGD only, for the trough reading (C16)."""
+    """LGD, prepayment and EAD per facility, scenario, valuation date and default bucket. ``z`` is
+    the prepayment model's Z and ``lgd_z`` the LGD model's, each segment's own (MOD-01); without
+    ``lgd_z`` both use ``z``. The trough reading (C16) hands in an LGD Z taken from its worst year."""
     segments = ps["segments"]
     lgd_z = z if lgd_z is None else lgd_z
     attrs = perf[["facility_id", "segment", "country", "ttc_lgd", "undrawn"]].copy()
@@ -220,7 +224,8 @@ def facility_parameters(schedule: pandas.DataFrame, perf: pandas.DataFrame, z: p
             reverted = (a * lgd_from_z(rows["ttc_lgd"], w, za)
                         + (1 - a) * lgd_from_z(rows["ttc_lgd"], w, zb))
             rows["lgd"] = np.where(rows["bucket_year"] > last, reverted, rows["lgd"])
-        rows["prepayment_rate"] = prepayment_rate(cpr_ttc.to_numpy(), cpr_v.to_numpy(), rows["z"].to_numpy())
+        rows = rows.rename(columns={"z": "z_prepayment"})
+        rows["prepayment_rate"] = prepayment_rate(cpr_ttc.to_numpy(), cpr_v.to_numpy(), rows["z_prepayment"].to_numpy())
         if not np.isfinite(rows["prepayment_rate"]).all():
             raise BlockingError(STEP, Block.MISSING_PARAMETER, "non-finite prepayment rate")
         if horizon_runoff == RUNOFF_REPLACED:  # paragraph 125: run-off only after the horizon (C15)
@@ -263,7 +268,7 @@ def effective_ccf(portfolio: pandas.DataFrame, variant: dict) -> pandas.Series:
 
 def lgd_of_year(portfolio: pandas.DataFrame, z: pandas.DataFrame, ps: dict, scenarios: list[str],
                 variant: dict) -> pandas.DataFrame:
-    """LGD of each projection year per facility (ECL-11), from the Z of that year, with the
+    """LGD of each projection year per facility (ECL-11), from the LGD model's Z of that year, with the
     facility's effective CCF for the off-balance part of its S3 slices."""
     years = [int(y) for y in ps["horizon"]["projection_years"]]
     rows = portfolio[["facility_id", "segment", "country", "ttc_lgd"]].assign(
@@ -291,7 +296,8 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
         raise BlockingError(STEP, Block.INVALID_MATRIX, "the master scale must end with D")
     scenarios = scenario_order(ctx.scenarios)
     perf = routed.portfolio[routed.portfolio["route"] == ROUTE_PERFORMING]
-    lookup = z_lookup(drivers.z)
+    pd_z, lgd_z, prepayment_z = (drivers.of(m) for m in (MODEL_PD, MODEL_LGD, MODEL_PREPAYMENT))
+    lookup = z_lookup(pd_z)
     book = PitBook(ttc, ps["segments"], lookup, tol,
                    ps["terminal_rule"] if ctx.config.terminal_treatment == "parameters" else None,
                    ps.get("terminal_policies"))
@@ -301,17 +307,16 @@ def build_parameters(routed: RoutedPortfolio, schedule: pandas.DataFrame, driver
     for segment, country in keys:
         for scenario in scenarios:
             require_years(lookup, segment, country, scenario, range(first, int(schedule["bucket_year"].max()) + 1))
-    lgd_z = drivers.z
     if ctx.config.lgd_path == LGD_TROUGH:
         facilities = loaded.facilities.data.assign(ltv_status=loaded.facilities.status["ltv"])
         in_book = facilities[facilities["facility_id"].isin(routed.portfolio["facility_id"])]
-        lgd_z = lgd_drivers(drivers.z, ps, set(in_book.loc[usable_ltv(in_book, STEP), "segment"]))
+        lgd_z = lgd_drivers(lgd_z, ps, set(in_book.loc[usable_ltv(in_book, STEP), "segment"]))
     version = store.source_version(ps, __version__)
     pit = pit_table(book, [(s, c, sc) for s, c in keys for sc in scenarios],
                     range(first, last_reported + 1), grades)
     curves = store.finalise_pd_curves(pd_curves(book, schedule, perf, scenarios, grades, tol), version)
     facility = store.finalise_parameters(
-        facility_parameters(schedule, perf, drivers.z, ps, ps["variants"][ctx.variant], scenarios,
+        facility_parameters(schedule, perf, prepayment_z, ps, ps["variants"][ctx.variant], scenarios,
                             ctx.config.terminal_treatment, ctx.config.horizon_runoff, lgd_z), version)
     lgd = lgd_of_year(routed.portfolio, lgd_z, ps, scenarios, ps["variants"][ctx.variant])
     LOG.info("PiT matrices: %d distinct shifts; every row sums to 1 within %g and PD rises with the grade",

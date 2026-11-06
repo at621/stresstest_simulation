@@ -7,7 +7,9 @@ import pytest
 import yaml
 
 from stress.cli import cmd_rerun, execute
+from stress.contracts.inputs import MODEL_SETTINGS
 from stress.contracts.run import RunConfig
+from stress.models import REGISTRY
 from tests import builders
 
 
@@ -79,8 +81,12 @@ def test_specification_rejects_invalid_input(mini, tmp_path, change):
 def test_new_segment_uses_configured_reporting_class(mini, tmp_path):
     mini["facilities"].loc[mini["facilities"].segment == "P03", ["portfolio", "segment"]] = ["P07", "P07_SME"]
     mini["ttc_pd_matrix"].loc[mini["ttc_pd_matrix"].segment == "P03", "segment"] = "P07_SME"
-    mini["parameter_set"]["segments"]["P07_SME"] = mini["parameter_set"]["segments"].pop("P03")
-    mini["parameter_set"]["segments"]["P07_SME"]["portfolio"] = "P07"
+    portfolios = mini["parameter_set"]["portfolios"]
+    sme = portfolios.pop("P03")["segments"]["P03"]
+    for role, setting in MODEL_SETTINGS.items():  # a new portfolio has models of its own
+        own = REGISTRY[sme[setting]]
+        sme[setting] = builders.model(f"p07.sme_{role}", role, own.function, own.sensitivity)
+    portfolios["P07"] = {"segments": {"P07_SME": sme}}
     inputs = builders.write(mini, tmp_path / "inputs")
     template_class = "Loans and advances - NFC - SME - Other loans"
     doc = specification(inputs, reporting={"template_classes": {"P07_SME": template_class}})
@@ -98,8 +104,11 @@ def test_packaging_preserves_supplied_exposure_and_frozen_provisions(mini, tmp_p
     inputs = builders.write(mini, tmp_path / "inputs")
     packaged = package(inputs, tmp_path / "packaged")
     for name in builders.TABLES:
-        pd.testing.assert_frame_equal(pd.read_parquet(inputs / f"{name}.parquet"),
-                                      pd.read_parquet(packaged / f"{name}.parquet"))
+        if name != "ttc_pd_matrix":
+            pd.testing.assert_frame_equal(pd.read_parquet(inputs / f"{name}.parquet"),
+                                          pd.read_parquet(packaged / f"{name}.parquet"))
+    for path in sorted((inputs / "matrices").iterdir()):
+        assert (packaged / "matrices" / path.name).read_bytes() == path.read_bytes()
     assert json.loads((packaged / "approval.json").read_text())["status"] == "PENDING_OWNER_APPROVAL"
 
 
@@ -148,10 +157,10 @@ def test_duplicate_yaml_setting_is_rejected(tmp_path):
 
 @pytest.mark.req("SCN-08", "EAD-04", "DAT-02")
 @pytest.mark.parametrize("override", [
-    {"z_drivers": {"gdp_growth": {"beta": 1, "mean": 0, "sd": 1, "lag": 1}}},
-    {"z_drivers": {"gdp_growth": []}}, {"z_drivers": []}, {"z_drivers": {}},
-    {"z_drivers": {"gdp_growth": {"beta": True, "mean": 0, "sd": 1}}},
-    {"z_drivers": {"gdp_growth": {"beta": 1, "mean": 0, "sd": 0}}},
+    {"z_drivers": {"gdp_growth": {"beta": 1, "mean": 0, "sd": 1}}},  # coefficients live in the models
+    {"lgd_w": 0.1}, {"cpr_v": 0.1}, {"rho": 0.1}, {"macro_model": "p03.pd"},
+    {"pd_model": 3}, {"lgd_model": ""},
+    {"asset_correlation": 1.0}, {"asset_correlation": True}, {"sicr_k": 0}, {"cpr_ttc": 1.5},
     {"ccf": "invalid"}, {"ccf": 1.5},
 ])
 def test_segment_override_is_strict_data(mini, override):
@@ -160,7 +169,8 @@ def test_segment_override_is_strict_data(mini, override):
     from stress.contracts.errors import BlockingError
     from stress.ingest.specification import apply_segments
 
-    loaded = SimpleNamespace(parameter_set=mini["parameter_set"], ttc_pd_matrix=mini["ttc_pd_matrix"],
+    loaded = SimpleNamespace(parameter_set={**mini["parameter_set"], "segments": builders.segments(mini)},
+                             ttc_pd_matrix=mini["ttc_pd_matrix"],
                              facilities=SimpleNamespace(data=mini["facilities"]),
                              obligors=SimpleNamespace(data=mini["obligors"]),
                              commitments=SimpleNamespace(data=mini["commitments"]))

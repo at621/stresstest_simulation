@@ -3,9 +3,9 @@ schema_version: 1
 status: SYNTHETIC
 source: "Configurable projection demonstration, 31 October 2026"
 version: demo-v1
-input_set_hash: d62d0386f2c5256eb50fbc787678fdc420fc5bda42ab5f8100a147d097dc91ee
+input_set_hash: 57bf340df85d5a5425789efdfd6fe56ce4e532f3667b4672bed07c007cbf00c6
 run:
-  inputs: ../../inputs/d62d0386f2c5256e
+  inputs: ../../inputs/57bf340df85d5a54
   scenarios: [baseline, adverse, energy_crisis]
   variant: core
   balance_sheet: dynamic
@@ -17,18 +17,12 @@ scenarios:
       - {variable: gdp_growth, country: '*', year: 2027, value: -0.08, unit: decimal, value_type: growth}
       - {variable: gdp_growth, country: '*', year: 2028, value: -0.04, unit: decimal, value_type: growth}
       - {variable: reference_rate, country: '*', year: 2027, value: 0.06, unit: decimal, value_type: level}
-models:
-  consumer_nonlinear:
-    kind: polynomial
-    source: "Illustrative coefficients for demonstrating model routing"
-    version: demo-v1
-    terms:
-      activity: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: 0.6}
-      activity_squared: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: -0.08, power: 2}
-      unemployment: {variable: unemployment, mean: 0.07, sd: 0.025, beta: -0.3}
+# P02 points its three models at the illustrative nonlinear functions in src/stress/models/p02.py.
 segments:
   P02:
-    macro_model: consumer_nonlinear
+    pd_model: p02.pd_nonlinear
+    lgd_model: p02.lgd_nonlinear
+    prepayment_model: p02.prepayment_nonlinear
 terminal_policies:
   energy_crisis: {method: flat}
 balance_sheet:

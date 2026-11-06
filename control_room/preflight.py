@@ -1,7 +1,8 @@
 """What goes into a run, judged by the engine itself before anything is calculated.
 
-- ``base_of``: what an input set offers the editor: its scenarios and paths, its segments and their
-  parameters, its variants and portfolios. Every value is read from the set's own files.
+- ``base_of``: what an input set offers the editor: its scenarios and paths, its portfolios and segments
+  with each segment's models (read from stress.models, docstring and all) and settings, and its variants.
+  Every value is read from the set's own files and the engine's model registry.
 - ``dry_run``: the engine's own verdict on a setup. It calls R1 to R4 as ``cli.pipeline`` does, in a
   temporary folder, and stops before R5. Nothing is calculated, and nothing reaches runs/.
 - ``differences``: the base input set against docs/spec/, the one check the engine does not make. The tests use it; the page does not.
@@ -27,16 +28,22 @@ from stress.contracts.errors import RUN_BLOCKING_REASONS, BlockingError, Reason
 from stress.contracts.inputs import (
     APPROVAL_FILE,
     DATASETS,
+    ENGINE_NAMES,
     INPUT_MANIFEST,
+    MATRIX_DIR,
+    MODEL_SETTINGS,
     PARAMETER_SET_TOP_KEYS,
     SCENARIO_TOP_KEYS,
     TABLE_DATASETS,
+    TTC_MATRIX,
     DatasetSpec,
+    segments_of,
 )
 from stress.contracts.run import RunConfig
 from stress.contracts.specification import validate_document
 from stress.contracts.status import STATUS_SUFFIX
 from stress.ingest.specification import SpecificationLoader
+from stress.models import of_portfolio, resolve
 from stress.projection.dynamic import validate_assumptions
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
@@ -44,21 +51,22 @@ SPEC_DIR = ROOT / "docs" / "spec"
 MILLION = 1_000_000.0
 SPECIFICATION_PHASE = "specification"
 PHASES = (SPECIFICATION_PHASE, "R1", "R2", "R3", "R4")
-SEGMENT_FIELDS = ("rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v", "ccf")
+# A segment's own settings, under the parameter set's names; its models hold their coefficients.
+SEGMENT_FIELDS = ("asset_correlation", "sicr_k", "cpr_ttc", "ccf")
 # What only a specification can carry. A setup with any of these runs from a file, not from flags.
-SECTIONS = ("scenarios", "segments", "terminal_policies", "balance_sheet", "models", "assignments",
+SECTIONS = ("scenarios", "segments", "terminal_policies", "balance_sheet", "assignments",
             "reporting", "additional_values")
 ENVELOPE = ("schema_version", "status", "source", "version", "input_set_hash")
 INPUT_SET = re.compile(r"[0-9a-f]{16}")  # inputs/<hash>/, as nbtools names them
 SAMPLE = 6
 PREVIEW_ROWS = 12
 TOP = 12  # a breakdown lists this many groups at most
-FILE_GUIDE = {  # what each of the seven files is called on the page, and what it holds
+FILE_GUIDE = {  # what each kind of file is called on the page, and what it holds
     "facilities": ("Facilities", "One row per loan: portfolio, stage, grade, balance, rate, maturity"),
     "obligors": ("Obligors", "One row per borrower: country, sector, SME flag, default flag"),
     "commitments": ("Commitments", "Undrawn amounts and conversion factors, per facility"),
     "opening_provisions": ("Opening provisions", "Provisions at the snapshot date, per facility"),
-    "ttc_pd_matrix": ("Rating transitions", "One-year transition probabilities between grades, per segment"),
+    "ttc_matrix": ("Rating transitions", "One-year transition probabilities between grades, one file per segment"),
     "scenarios": ("Scenarios", "Macro paths by scenario, country, variable and year"),
     "parameter_set": ("Parameters", "Horizon, master scale, segment parameters and run variants"),
 }
@@ -114,11 +122,17 @@ def base_of(folder: Path) -> dict:
         same = part["value"].nunique() == 1
         common.setdefault(name, {}).setdefault(variable, {})[int(year)] = plain(part["value"].iloc[0]) if same else None
     held = fac.groupby("segment").agg(facilities=("facility_id", "size"), gca=("gca", "sum"))
-    segments = {name: {"portfolio": s.get("portfolio"), "macro_model": s.get("macro_model"),
-                       "z_drivers": s.get("z_drivers", {}), **{f: s.get(f) for f in SEGMENT_FIELDS},
-                       "facilities": int(held["facilities"].get(name, 0)),
-                       "gca": float(held["gca"].get(name, 0.0)) / MILLION}
-                for name, s in ps["segments"].items()}
+    segments = {}
+    for name, s in segments_of(ps).items():
+        segments[name] = {"portfolio": s["portfolio"], **{f: s.get(ENGINE_NAMES.get(f, f)) for f in SEGMENT_FIELDS},
+                          "ttc_matrix": s.get("ttc_matrix"),
+                          **{setting: s.get(setting) for setting in MODEL_SETTINGS.values()},
+                          "models": {role: model_view(s.get(setting), role, s["model_portfolio"])
+                                     for role, setting in MODEL_SETTINGS.items()},
+                          "facilities": int(held["facilities"].get(name, 0)),
+                          "gca": float(held["gca"].get(name, 0.0)) / MILLION}
+    choices = {p: {role: [model_view(m.name, role, p) for m in of_portfolio(p, role)] for role in MODEL_SETTINGS}
+               for p in sorted({s["portfolio"] for s in segments.values()})}
     return {
         "hash": manifest["input_set_hash"], "folder": f"inputs/{folder.name}", "status": manifest.get("status"),
         "approval": approval, "generator": manifest.get("generator"),
@@ -126,7 +140,7 @@ def base_of(folder: Path) -> dict:
         "horizon": ps["horizon"], "terminal_rule": ps["terminal_rule"], "sicr_triggers": ps.get("sicr_triggers"),
         "variants": [{"id": name, "label": v["label"], "bullet": set(v["repayment_profile"].values()) == {"bullet"}}
                      for name, v in ps["variants"].items()],
-        "segments": segments, "portfolios": portfolios,
+        "segments": segments, "portfolios": portfolios, "model_choices": choices,
         "facilities": len(fac), "gca": float(fac["gca"].sum()) / MILLION,
         "scenarios": [{"id": s["id"], "label": s["label"]} for s in paths["scenarios"]],
         "variables": [{"id": v["id"], "label": v["label"], "unit": v["unit"], "value_type": v["value_type"]}
@@ -136,6 +150,23 @@ def base_of(folder: Path) -> dict:
     }
 
 
+def model_view(name, role: str, portfolio: str) -> dict:
+    """A model as the page shows it: its name, where its function lives, its sensitivity and its
+    docstring as written. A name the registry does not hold says so, as R2 would."""
+    try:
+        model = resolve(name, role, portfolio)
+    except BlockingError as exc:
+        return {"name": name, "problem": exc.message}
+    return {"name": model.name, "location": model.location, "sensitivity": model.sensitivity,
+            "description": model.description}
+
+
+def matrix_files(folder: Path) -> dict[str, str]:
+    """Each segment's TTC matrix file, as the parameter set names it."""
+    return {seg: s["ttc_matrix"] for seg, s in segments_of(read_yaml(folder / "parameter_set.yaml")).items()
+            if s.get("ttc_matrix")}
+
+
 def _table_shape(path: Path) -> tuple[int, list[str]]:
     meta = pq.read_metadata(path)
     return meta.num_rows, [c for c in pq.read_schema(path).names if not c.endswith(STATUS_SUFFIX)]
@@ -143,11 +174,17 @@ def _table_shape(path: Path) -> tuple[int, list[str]]:
 
 def files_of(folder: Path) -> list[dict]:
     """Each file an input set must hold, as it stands on disk: present, size, rows, hash against the
-    manifest, columns against the contract. The manifest and the approval record follow."""
+    manifest, columns against the contract. The datasets come first, then each segment's matrix file,
+    then the manifest and the approval record."""
     manifest_path = folder / INPUT_MANIFEST
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
     rows = []
-    for spec in DATASETS:
+    try:
+        matrices = sorted(set(matrix_files(folder).values()))
+    except (OSError, KeyError, TypeError, ValueError, AttributeError, yaml.YAMLError):
+        matrices = sorted(f for f in manifest.get("files", {}) if f.startswith(MATRIX_DIR + "/"))
+    specs = (*DATASETS, *(DatasetSpec(TTC_MATRIX.name, f, TTC_MATRIX.key, TTC_MATRIX.columns) for f in matrices))
+    for spec in specs:
         path = folder / spec.filename
         record = manifest.get("files", {}).get(spec.filename)
         row = {"name": spec.name, "file": spec.filename, "required": True, "present": path.is_file(), "bytes": None,
@@ -156,7 +193,7 @@ def files_of(folder: Path) -> list[dict]:
         if row["present"]:
             row["bytes"] = path.stat().st_size
             row["hash_ok"] = (ingest._hash(path) == record.get("sha256")) if record else None
-            if spec in TABLE_DATASETS:
+            if spec in TABLE_DATASETS or spec.name == TTC_MATRIX.name:
                 try:
                     row["rows"], names = _table_shape(path)
                     row["columns"] = len(names)
@@ -191,7 +228,8 @@ def listed(names: list[str], limit: int = 4) -> str:
 
 
 def file_roles() -> list[dict]:
-    """The seven files a run needs, in the engine's order, with what each one holds in words."""
+    """The files a person can add, in the engine's order, with what each one holds in words. The matrix
+    files come from the saved set, one per segment."""
     return [{"name": spec.name, "file": spec.filename, "label": FILE_GUIDE[spec.name][0],
              "holds": FILE_GUIDE[spec.name][1], "format": "Parquet" if spec in TABLE_DATASETS else "YAML"}
             for spec in DATASETS]
@@ -226,7 +264,7 @@ def inspected(spec: DatasetSpec, path: Path) -> dict:
 
 
 def prepared_status(folder: Path) -> dict:
-    """A folder of files before it is packaged: which of the seven it holds, and what is wrong with them."""
+    """A folder of files before it is packaged: which of the datasets it holds, and what is wrong with them."""
     rows = []
     for spec in DATASETS:
         path = folder / spec.filename
@@ -254,7 +292,9 @@ def table_summary(folder: Path) -> dict:
     obligors = read_table(folder, "obligors.parquet")
     com = read_table(folder, "commitments.parquet")
     prov = read_table(folder, "opening_provisions.parquet")
-    matrix = read_table(folder, "ttc_pd_matrix.parquet")
+    files = matrix_files(folder)
+    matrix = pd.concat([read_table(folder, path).assign(segment=seg) for seg, path in files.items()],
+                       ignore_index=True)
     names = read_yaml(SPEC_DIR / "targets.yaml")["portfolios"]
     by_portfolio = []
     for portfolio, part in fac.groupby("portfolio"):
@@ -290,19 +330,23 @@ def table_summary(folder: Path) -> dict:
                                                  "provision_off": float(g["provision_off"].sum()) / MILLION}
                                                 for p, g in allowances.groupby("portfolio")]},
         "ttc_pd_matrix": {"rows": len(matrix), "segments": sorted(matrix["segment"].unique()),
+                          "files": dict(sorted(files.items())),
                           "grades": list(matrix[["from_rank", "from_grade"]].drop_duplicates().sort_values("from_rank")["from_grade"])},
     }
 
 
 def matrix_of(folder: Path, segment: str) -> dict | None:
-    """One segment's TTC matrix as a grid, grades in rank order."""
-    table = read_table(folder, "ttc_pd_matrix.parquet")
-    cells = table[table["segment"] == segment]
+    """One segment's TTC matrix as a grid, grades in rank order, from the file the segment names."""
+    path = matrix_files(folder).get(segment)
+    if path is None:
+        return None
+    cells = read_table(folder, path)
     if cells.empty:
         return None
     grid = cells.pivot(index="from_rank", columns="to_rank", values="probability").sort_index(axis=0).sort_index(axis=1)
     grades = list(cells[["from_rank", "from_grade"]].drop_duplicates().sort_values("from_rank")["from_grade"])
-    return {"segment": segment, "grades": grades, "grid": [[plain(v) for v in row] for row in grid.to_numpy()]}
+    return {"segment": segment, "file": path, "grades": grades,
+            "grid": [[plain(v) for v in row] for row in grid.to_numpy()]}
 
 
 def preview(folder: Path, name: str, offset: int = 0, query: str = "") -> dict | None:
@@ -349,12 +393,14 @@ def _rejections(rejections: pd.DataFrame) -> list[dict]:
 
 
 def _z_view(loaded, drivers) -> list[dict]:
-    """The Z each segment gets in each scenario and year: R4's reading of the paths."""
+    """The Z each segment's PD, LGD and prepayment model gets in each scenario and year: R4's reading
+    of the paths."""
     horizon = [int(y) for y in loaded.parameter_set["horizon"]["projection_years"]]
     part = drivers.z[drivers.z["year"].isin(horizon)]
-    grouped = part.groupby(["segment", "scenario", "year"])["z"].agg(["mean", "min", "max"]).reset_index()
-    return [{"segment": r.segment, "scenario": r.scenario, "year": int(r.year), "mean": plain(r.mean),
-             "min": plain(r.min), "max": plain(r.max)} for r in grouped.itertuples(index=False)]
+    grouped = part.groupby(["segment", "model", "scenario", "year"])["z"].agg(["mean", "min", "max"]).reset_index()
+    return [{"segment": r.segment, "model": r.model, "scenario": r.scenario, "year": int(r.year),
+             "mean": plain(r.mean), "min": plain(r.min), "max": plain(r.max)}
+            for r in grouped.itertuples(index=False)]
 
 
 def _effective_book(routed) -> list[dict]:

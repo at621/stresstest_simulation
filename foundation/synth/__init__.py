@@ -18,7 +18,7 @@ from foundation import matrices as o2
 from foundation.synth import config as cfg
 from foundation.synth.allowances import opening_allowances
 from foundation.synth.generate import Generator
-from foundation.synth.inputset import write_input_set
+from foundation.synth.inputset import MATRIX_DIR, write_input_set
 
 GENERATOR_VERSION = "0.1.0"
 
@@ -84,18 +84,20 @@ def parameter_document(params: dict, spec: dict) -> dict:
     years = list(scen["years"])
     weights = spec["AT-52"]["expected"]["adverse_weights"]
     zero_year = min(int(y) for y, w in weights.items() if w == 0)
-    segments = {}
-    for seg, sp in params["segments"].items():
-        portfolio = cal["segments"][seg]["portfolio"]
-        segments[seg] = {
-            "portfolio": portfolio,
-            "z_drivers": {
-                d: {"beta": b, **params["driver_moments"][d]} for d, b in sp["betas"].items()
-            },
-            "rho": sp["rho"], "sicr_k": sp["sicr_k"], "lgd_w": sp["lgd_w"],
-            "cpr_ttc": sp["cpr_ttc"], "cpr_v": sp["cpr_v"],
-            "ccf": targets["portfolios"][portfolio]["ccf"],
-        }
+    portfolios = {}
+    for portfolio, body in params["portfolios"].items():
+        segments = {}
+        for seg, sp in body["segments"].items():
+            if cal["segments"][seg]["portfolio"] != portfolio:
+                raise ValueError(f"segment {seg} is in portfolio {portfolio}, the spec says "
+                                 f"{cal['segments'][seg]['portfolio']}")
+            segments[seg] = {
+                "pd_model": sp["pd_model"], "lgd_model": sp["lgd_model"], "prepayment_model": sp["prepayment_model"],
+                "ttc_matrix": f"{MATRIX_DIR}/{seg}.parquet",
+                "asset_correlation": sp["asset_correlation"], "sicr_k": sp["sicr_k"], "cpr_ttc": sp["cpr_ttc"],
+                "ccf": targets["portfolios"][portfolio]["ccf"],
+            }
+        portfolios[portfolio] = {"segments": segments}
     variants = {}
     ccf_to = spec["AT-35"]["input"]["ccf_to"]
     for name, v in params["variants"].items():
@@ -118,13 +120,19 @@ def parameter_document(params: dict, spec: dict) -> dict:
             "last_bucket_year": last_bucket_year,
         },
         "master_scale": params["master_scale"],
-        "segments": segments,
+        "portfolios": portfolios,
         "terminal_rule": terminal,
         "conventions": params["conventions"],
         "sicr_triggers": params["sicr_triggers"],
         "tolerances": targets["tolerances"],
         "variants": variants,
     }
+
+
+def segment_settings(param_doc: dict) -> dict:
+    """The parameter set's segments by segment, with their portfolio, for O3 and O4."""
+    return {seg: {**settings, "portfolio": portfolio}
+            for portfolio, body in param_doc["portfolios"].items() for seg, settings in body["segments"].items()}
 
 
 def build(spec_dir: Path, params_path: Path, out_root: Path, seed: int = cfg.SEED) -> Path:
@@ -144,14 +152,15 @@ def build(spec_dir: Path, params_path: Path, out_root: Path, seed: int = cfg.SEE
             raise ValueError(f"TTC matrix {seg} is invalid: {problems or 'lifetime PD not monotone'}")
     plan = o2.calibration_plan(pds, spec["calibration"], targets["risk_profiles"])
     param_doc = parameter_document(params, spec)
+    working = {**param_doc, "segments": segment_settings(param_doc)}
 
     # O3: the portfolio.
     snapshot = date.fromisoformat(param_doc["horizon"]["snapshot_date"])
     facilities, obligors, commitments = Generator(
-        targets, spec["calibration"], plan, param_doc, matrices, snapshot, seed).run()
+        targets, spec["calibration"], plan, working, matrices, snapshot, seed).run()
 
     # O4: frozen opening allowances.
-    provisions = opening_allowances(facilities, commitments, matrices, param_doc, grades,
+    provisions = opening_allowances(facilities, commitments, matrices, working, grades,
                                     param_doc["horizon"]["snapshot_date"])
 
     tables = {

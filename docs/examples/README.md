@@ -10,8 +10,8 @@ The preparation sidecar described below remains optional and separate.
 Generate a new sidecar package without changing the committed synthetic input set:
 
 ```powershell
-uv run python -m foundation.synth.analysis --inputs inputs/d62d0386f2c5256e --out docs/examples/preparation.yaml
-uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core --analysis docs/examples/preparation.yaml
+uv run python -m foundation.synth.analysis --inputs inputs/57bf340df85d5a54 --out docs/examples/preparation.yaml
+uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core --analysis docs/examples/preparation.yaml
 ```
 
 The generator refuses to overwrite an existing output. Use a new filename when generating
@@ -25,7 +25,7 @@ is represented as an approved regulatory input.
 For a separate terminal-method sensitivity:
 
 ```powershell
-uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core --terminal-treatment parameters --analysis docs/examples/preparation.yaml
+uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core --terminal-treatment parameters --analysis docs/examples/preparation.yaml
 uv run stress compare --base runs/<default_run> --new runs/<parameter_run>
 ```
 

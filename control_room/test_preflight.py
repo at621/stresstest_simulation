@@ -31,7 +31,7 @@ from stress.contracts.errors import BlockingError
 from stress.contracts.inputs import DATASETS, FACILITIES
 
 nb = server.nb
-SOURCE = server.ROOT / "inputs" / "d62d0386f2c5256e"
+SOURCE = server.ROOT / "inputs" / "57bf340df85d5a54"
 OLDER = server.ROOT / "inputs" / "514ed0e86e3dc760"
 EXAMPLES = sorted(path for folder in (server.ROOT / "docs" / "examples", server.ROOT / "docs" / "run-workflow")
                   for path in folder.glob("*.yaml")
@@ -45,7 +45,7 @@ def config_of(folder: Path) -> server.RunConfig:
 def reseal(work: Path, totals: bool = False) -> Path:
     """Re-hash a changed copy as the one-off steps would, so that it looks like a valid input set."""
     manifest = json.loads((work / "manifest.json").read_text(encoding="utf-8"))
-    hashes = {spec.filename: ingest._hash(work / spec.filename) for spec in DATASETS}
+    hashes = {name: ingest._hash(work / name) for name in manifest["files"]}
     for name, digest in hashes.items():
         manifest["files"][name]["sha256"] = digest
     if totals:
@@ -87,8 +87,16 @@ def test_the_base_of_a_set_is_what_its_files_hold():
     base = preflight.base_of(SOURCE)
     ps = yaml.safe_load((SOURCE / "parameter_set.yaml").read_text(encoding="utf-8"))
     assert base["hash"].startswith(SOURCE.name) and base["folder"] == f"inputs/{SOURCE.name}"
-    assert base["segments"]["P01"]["rho"] == ps["segments"]["P01"]["rho"] == 0.15
-    assert base["segments"]["P01"]["z_drivers"] == ps["segments"]["P01"]["z_drivers"]
+    p01 = ps["portfolios"]["P01"]["segments"]["P01"]
+    assert base["segments"]["P01"]["asset_correlation"] == p01["asset_correlation"] == 0.15
+    assert base["segments"]["P01"]["ttc_matrix"] == p01["ttc_matrix"] == "matrices/P01.parquet"
+    models = base["segments"]["P01"]["models"]
+    assert [models[role]["name"] for role in ("pd", "lgd", "prepayment")] == [p01["pd_model"], p01["lgd_model"],
+                                                                               p01["prepayment_model"]]
+    assert models["pd"]["location"] == "src/stress/models/p01.py, function pd"
+    assert models["pd"]["description"].startswith("Residential mortgages: PD model.")
+    assert models["lgd"]["sensitivity"] == 0.2 and models["pd"]["sensitivity"] is None
+    assert {m["name"] for m in base["model_choices"]["P02"]["pd"]} == {"p02.pd", "p02.pd_nonlinear"}
     assert sum(s["facilities"] for s in base["segments"].values()) == base["facilities"] == 10_000
     assert sum(p["facilities"] for p in base["portfolios"]) == 10_000 and len(base["portfolios"]) == 6
     assert base["common"]["adverse"]["gdp_growth"] == {2027: -3.0, 2028: -2.0, 2029: 0.5}
@@ -98,10 +106,11 @@ def test_the_base_of_a_set_is_what_its_files_hold():
 
 def test_the_files_of_a_set_are_reported_as_they_stand(copy_of_set):
     rows = {row["file"]: row for row in preflight.files_of(SOURCE)}
-    assert len(rows) == len(DATASETS) + 2
+    assert len(rows) == len(DATASETS) + 7 + 2  # the datasets, a matrix file per segment, manifest and approval
+    assert rows["matrices/P06_CI.parquet"]["rows"] == 121 and rows["matrices/P06_CI.parquet"]["hash_ok"] is True
     assert rows["facilities.parquet"]["rows"] == 10_000 and rows["facilities.parquet"]["hash_ok"] is True
     assert rows["facilities.parquet"]["columns"] == 35 and rows["facilities.parquet"]["missing_columns"] == []
-    assert rows["scenarios.yaml"]["hash_ok"] is True and rows["manifest.json"]["detail"].startswith("input set d62d")
+    assert rows["scenarios.yaml"]["hash_ok"] is True and rows["manifest.json"]["detail"].startswith("input set 57bf")
     assert rows["approval.json"]["detail"].startswith("PENDING")
     older = {row["file"]: row for row in preflight.files_of(OLDER)}
     assert older["facilities.parquet"]["missing_columns"] == ["credit_status_date"]
@@ -176,7 +185,7 @@ def test_a_scenarios_file_with_five_scenarios_is_read_as_it_stands(copy_of_set):
     result = preflight.dry_run(config)
     assert result["verdict"] == "ready", result["blocked"]
     assert {z["scenario"] for z in result["z"]} == set(config.scenarios)
-    assert len(result["z"]) == 7 * 5 * 3
+    assert len(result["z"]) == 7 * 3 * 5 * 3
 
 
 # --- the engine's own verdict -----------------------------------------------------------------------------
@@ -185,7 +194,7 @@ def test_the_committed_set_is_ready_and_matches_every_requirement():
     result = preflight.dry_run(config_of(SOURCE))
     assert result["verdict"] == "ready" and result["reached"] == "R4" and result["blocked"] is None
     assert result["accepted"] == 10_000 and result["rejected"] == 0 and result["records"] == []
-    assert len(result["z"]) == 7 * 2 * 3 and sum(p["facilities"] for p in result["book"]) == 10_000
+    assert len(result["z"]) == 7 * 3 * 2 * 3 and sum(p["facilities"] for p in result["book"]) == 10_000
     gap = preflight.differences(SOURCE)
     assert gap["differing"] == [] and gap["unmeasured"] == [] and gap["compared"] > 100
 
@@ -215,10 +224,10 @@ def test_a_bad_parameter_is_the_engines_own_message(tmp_path):
     base = preflight.base_of(SOURCE)
     doc = {"schema_version": 1, "status": "SYNTHETIC", "source": "test", "version": "bad", "input_set_hash": base["hash"],
            "run": {"inputs": base["folder"], "scenarios": ["baseline", "adverse"], "variant": "core"},
-           "segments": {"P01": {"rho": 1.5}}}
+           "segments": {"P01": {"asset_correlation": 1.5}}}
     result = dry_run_of(doc, tmp_path)
     assert result["verdict"] == "blocked" and result["blocked"]["code"] == "INVALID_SPECIFICATION"
-    assert "rho" in result["blocked"]["message"] and result["z"] is None
+    assert "asset_correlation" in result["blocked"]["message"] and result["z"] is None
 
 
 # --- the two layers catch different things ----------------------------------------------------------------
@@ -340,8 +349,8 @@ def test_an_unreadable_set_does_not_hide_the_others(tmp_path, monkeypatch):
 @pytest.mark.parametrize("doc, needed", [
     ({"run": {"balance_sheet": "static"}}, False),
     ({"run": {"balance_sheet": "dynamic"}}, True),
-    ({"run": {}, "segments": {"P01": {"rho": 0.2}}}, True),
-    ({"run": {}, "scenarios": {}, "models": {}, "assignments": []}, False),
+    ({"run": {}, "segments": {"P01": {"asset_correlation": 0.2}}}, True),
+    ({"run": {}, "scenarios": {}, "assignments": []}, False),
 ])
 def test_only_what_a_flag_cannot_say_needs_a_file(doc, needed):
     assert preflight.needs_specification(doc) is needed
@@ -350,11 +359,11 @@ def test_only_what_a_flag_cannot_say_needs_a_file(doc, needed):
 def test_a_setup_round_trips_through_yaml(tmp_path):
     doc = {"schema_version": 1, "status": "SYNTHETIC", "source": "test", "version": "v", "input_set_hash": "h",
            "run": {"inputs": f"inputs/{SOURCE.name}", "scenarios": ["baseline", "adverse"], "variant": "core", "analysis": None},
-           "segments": {"P01": {"rho": 0.2}}, "models": {}, "terminal_policies": {}}
+           "segments": {"P01": {"asset_correlation": 0.2}}, "terminal_policies": {}}
     text = server.specification_text(doc, tmp_path)
-    assert "models" not in text and "analysis" not in text and "terminal_policies" not in text, "empty is left out"
+    assert "analysis" not in text and "terminal_policies" not in text, "empty is left out"
     back = preflight.parse_yaml(text, tmp_path)
-    assert back["run"]["inputs"] == f"inputs/{SOURCE.name}" and back["segments"] == {"P01": {"rho": 0.2}}
+    assert back["run"]["inputs"] == f"inputs/{SOURCE.name}" and back["segments"] == {"P01": {"asset_correlation": 0.2}}
     assert set(back) == {"schema_version", "status", "source", "version", "input_set_hash", "run", "segments"}
 
 

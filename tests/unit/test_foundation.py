@@ -61,7 +61,7 @@ def test_reported_stage_is_the_pd_test_or_a_flag(full_tables):
     from stress.params import ttc_arrays
     from stress.validate.sicr import TtcLifetime, qualitative_trigger, sicr_rank
 
-    ps = full_tables["parameter_set"]
+    ps = {**full_tables["parameter_set"], "segments": builders.segments(full_tables)}
     fac = full_tables["facilities"]
     perf = fac[fac["ifrs_stage"] < 3]
     matrices, grades = ttc_arrays(full_tables["ttc_pd_matrix"])
@@ -99,7 +99,7 @@ def test_the_committed_set_is_what_the_generator_produces(full_inputs):
 
 @pytest.mark.req("OPS-01")
 def test_the_committed_set_passes_r2_on_every_system():
-    folder = INPUTS_DIR / "d62d0386f2c5256e"
+    folder = INPUTS_DIR / "57bf340df85d5a54"
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert folder.name == manifest["input_set_hash"][:16]
     check_hashes(SimpleNamespace(input_dir=folder, input_set_hash=manifest["input_set_hash"]), manifest)
@@ -123,5 +123,7 @@ def test_parameter_set_documents_its_status(full_inputs):
         params = yaml.safe_load(fh)
     assert params["status"] == "PROPOSED"
     assert len(params["master_scale"]["grades"]) == len(params["master_scale"]["ttc_pd"])
-    for seg in params["segments"].values():
-        assert all(seg[k] is not None for k in ("rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v"))
+    for body in params["portfolios"].values():
+        for seg in body["segments"].values():
+            assert all(seg[k] is not None for k in ("pd_model", "lgd_model", "prepayment_model", "ttc_matrix",
+                                                    "asset_correlation", "sicr_k", "cpr_ttc"))

@@ -8,7 +8,7 @@ from math import isfinite
 from stress.contracts.errors import BlockingError
 
 TOP_FIELDS = {"schema_version", "status", "source", "version", "input_set_hash", "run",
-              "scenarios", "models", "segments", "assignments", "reporting", "balance_sheet",
+              "scenarios", "segments", "assignments", "reporting", "balance_sheet",
               "terminal_policies", "additional_values"}
 RUN_FIELDS = {"inputs", "scenarios", "variant", "mode", "terminal_treatment", "analysis",
               "s2_treatment", "horizon_runoff", "lgd_path", "balance_sheet"}
@@ -63,7 +63,7 @@ def validate_document(doc: dict) -> dict:
     for name, value in run.items():
         if name != "scenarios":
             text(value, f"run.{name}")
-    for name in ("scenarios", "models", "segments", "reporting", "balance_sheet", "terminal_policies"):
+    for name in ("scenarios", "segments", "reporting", "balance_sheet", "terminal_policies"):
         if name in doc and not isinstance(doc[name], dict):
             invalid(f"{name} must be a mapping")
     if "assignments" in doc and not isinstance(doc["assignments"], list):

@@ -382,12 +382,14 @@ def sheet_parameters(wb: Workbook, z: pd.DataFrame, pd_tab: pd.DataFrame, lgd_ta
     _title(ws, "Scenario drivers and risk parameters",
            "Z > 0 is a better economy than average (SCN-08). One-year PD weighted by drawn exposure "
            "(RPT-06); LGD weighted by reference GCA. Terminal policies are recorded in the effective specification.")
-    # Z by segment, scenario and year (common paths: the same in every country).
-    zz = z[z["year"] <= last_reported].groupby(["segment", "scenario", "year"])["z"].mean().unstack("year").reset_index()
-    zz = zz.sort_values(["scenario", "segment"], key=lambda s: s.map(_order) if s.name == "scenario" else s)
-    z_years = [c for c in zz.columns if c not in ("segment", "scenario")]
+    # Z by segment, model, scenario and year (common paths: the same in every country).
+    zz = (z[z["year"] <= last_reported].groupby(["segment", "model", "scenario", "year"])["z"].mean()
+          .unstack("year").reset_index())
+    zz = zz.sort_values(["scenario", "segment", "model"], key=lambda s: s.map(_order) if s.name == "scenario" else s)
+    z_years = [c for c in zz.columns if c not in ("segment", "model", "scenario")]
     zdf = zz.rename(columns={y: str(y) for y in z_years})
-    zcols = [Col("segment", "Segment", "text", "segment", width=10), Col("scenario", "Scenario", "text", "scenario", width=11)]
+    zcols = [Col("segment", "Segment", "text", "segment", width=10), Col("model", "Model", "text", "model", width=11),
+             Col("scenario", "Scenario", "text", "scenario", width=11)]
     zcols += [Col(f"y{y}", str(y), "num", str(y), width=8, group="Z-score by year") for y in z_years]
     t = write_table(ws, zdf, zcols, top=4, autofilter=False)
     row = t["last"] + 3

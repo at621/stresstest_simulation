@@ -154,12 +154,14 @@ OPENING_PROVISIONS = DatasetSpec(
     ),
 )
 
-TTC_PD_MATRIX = DatasetSpec(
-    name="ttc_pd_matrix",
-    filename="ttc_pd_matrix.parquet",
-    key=("segment", "from_grade", "to_grade"),
+# One TTC matrix file per segment, at the path its ``ttc_matrix`` names in the parameter set,
+# for example matrices/P01.parquet. R2 reads each one and adds the segment to its rows.
+MATRIX_DIR = "matrices"
+TTC_MATRIX = DatasetSpec(
+    name="ttc_matrix",
+    filename=f"{MATRIX_DIR}/<segment>.parquet",
+    key=("from_grade", "to_grade"),
     columns=(
-        Column("segment", "str"),
         Column("from_grade", "str"),
         Column("to_grade", "str"),
         Column("probability", "float"),
@@ -173,8 +175,9 @@ TTC_PD_MATRIX = DatasetSpec(
 SCENARIOS = DatasetSpec(name="scenarios", filename="scenarios.yaml", key=("scenario", "variable", "year"))
 PARAMETER_SET = DatasetSpec(name="parameter_set", filename="parameter_set.yaml", key=("parameter_set_id",))
 
-DATASETS = (FACILITIES, OBLIGORS, COMMITMENTS, OPENING_PROVISIONS, TTC_PD_MATRIX, SCENARIOS, PARAMETER_SET)
-TABLE_DATASETS = (FACILITIES, OBLIGORS, COMMITMENTS, OPENING_PROVISIONS, TTC_PD_MATRIX)
+# The files every input set has; the matrix files come on top, one per segment.
+DATASETS = (FACILITIES, OBLIGORS, COMMITMENTS, OPENING_PROVISIONS, SCENARIOS, PARAMETER_SET)
+TABLE_DATASETS = (FACILITIES, OBLIGORS, COMMITMENTS, OPENING_PROVISIONS)
 
 SCENARIO_TOP_KEYS = (
     "scenario_set_id", "source", "release", "revision", "status", "scenarios", "variables", "values",
@@ -188,10 +191,43 @@ SCENARIO_VALUE_TYPES = ("level", "growth", "index", "cumulative_change", "pp_cha
 SYNTHETIC = "SYNTHETIC"
 
 PARAMETER_SET_TOP_KEYS = (
-    "parameter_set_id", "version", "status", "horizon", "master_scale", "segments", "terminal_rule",
+    "parameter_set_id", "version", "status", "horizon", "master_scale", "portfolios", "terminal_rule",
     "conventions", "tolerances", "variants", "sicr_triggers",
 )
-SEGMENT_PARAMETERS = ("z_drivers", "rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v", "ccf")
+# What each segment states in the parameter set, under portfolios.<portfolio>.segments.<segment>:
+# where its three models and its TTC matrix live, and its own settings. The models hold their
+# coefficients themselves (src/stress/models/).
+MODEL_SETTINGS = {"pd": "pd_model", "lgd": "lgd_model", "prepayment": "prepayment_model"}
+SEGMENT_PARAMETERS = (*MODEL_SETTINGS.values(), "ttc_matrix", "asset_correlation", "sicr_k", "cpr_ttc", "ccf")
+# The engine's own name for a setting where it differs from the parameter set's.
+ENGINE_NAMES = {"asset_correlation": "rho"}
+
+
+def segments_of(parameter_set: dict) -> dict[str, dict]:
+    """The segments of a parameter set by segment, each with its portfolio and its settings under
+    the engine's names. ``model_portfolio`` is the portfolio the segment's models must belong to: the
+    one it is filed under here, which a run specification never changes, even when it reports the
+    segment, or a new segment inherited from it, under another portfolio. A setting the file lacks stays absent: R3 blocks on it (MISSING_PARAMETER).
+    Raises TypeError for a wrong shape and ValueError for a setting the parameter set does not have."""
+    portfolios = parameter_set.get("portfolios")
+    if not isinstance(portfolios, dict) or not portfolios:
+        raise TypeError("portfolios must be a nonempty mapping of portfolio to segments")
+    out = {}
+    for portfolio, body in portfolios.items():
+        if not isinstance(body, dict) or set(body) != {"segments"} or not isinstance(body["segments"], dict):
+            raise TypeError(f"portfolio {portfolio} must hold only a mapping of segments")
+        for segment, settings in body["segments"].items():
+            if not isinstance(settings, dict):
+                raise TypeError(f"segment {segment} must be a mapping")
+            unknown = sorted(set(settings) - set(SEGMENT_PARAMETERS))
+            if unknown:
+                raise ValueError(f"segment {segment}: {unknown} not a parameter-set setting; a segment names "
+                                 f"its models, whose coefficients live in src/stress/models/")
+            if segment in out:
+                raise ValueError(f"segment {segment} is in two portfolios")
+            out[segment] = {"portfolio": portfolio, "model_portfolio": portfolio,
+                            **{ENGINE_NAMES.get(k, k): v for k, v in settings.items()}}
+    return out
 
 INPUT_MANIFEST = "manifest.json"
 APPROVAL_FILE = "approval.json"

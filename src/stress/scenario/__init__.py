@@ -1,8 +1,8 @@
-"""R4 scenarios and Z-score: compound property indices, standardise the drivers and combine
-them into one Z per segment, country, year and scenario. Extend Z past 2029 by the
-terminal rule.
+"""R4 scenarios and Z-score: compound property indices and score each segment's three models
+(PD, LGD and prepayment, from stress.models) into one Z per segment, model, country, year and
+scenario. Extend Z past 2029 by the terminal rule.
 
-SCN-01–SCN-05, SCN-08, ECL-10.
+SCN-01–SCN-05, SCN-08, ECL-10, MOD-01.
 """
 
 import logging
@@ -10,20 +10,21 @@ import logging
 import pandas as pd
 
 from stress.contracts.errors import Block, BlockingError
-from stress.contracts.inputs import SYNTHETIC, LoadedInputs
+from stress.contracts.inputs import MODEL_SETTINGS, SYNTHETIC, LoadedInputs
 from stress.contracts.run import BASELINE, RunContext
-from stress.contracts.specification import invalid, terminal_weight
+from stress.contracts.specification import terminal_weight
 from stress.contracts.tables import (
     DRIVER_CONTRIBUTIONS,
     INDICES,
+    MODEL_PD,
     Z_SCORES,
     Z_SOURCE_FLAT,
     Z_SOURCE_PATH,
     Z_SOURCE_REVERSION,
     Drivers,
 )
-from stress.scenario.kernels import STEP, compound_index, z_score
-from stress.scenario.models import evaluate_model
+from stress.models import Economy, resolve
+from stress.scenario.kernels import STEP, compound_index
 
 LOG = logging.getLogger("stress.R4")
 
@@ -71,53 +72,37 @@ def build_drivers(loaded: LoadedInputs, ctx: RunContext) -> Drivers:
     order = [BASELINE] + [s for s in requested if s != BASELINE] if BASELINE in requested else list(requested)
 
     z_rows, contrib_rows = [], []
-    z_last: dict[tuple[str, str, str], float] = {}
+    z_last: dict[tuple[str, str, str, str], float] = {}
     for scenario in order:
         for segment in sorted(ps["segments"]):
-            drivers = ps["segments"][segment]["z_drivers"]
-            for country in countries:
-                for year in years:
-                    model_id = ps["segments"][segment].get("macro_model")
-                    if model_id:
-                        model = ps.get("macro_models", {}).get(model_id)
-                        if model is None:
-                            invalid(f"unknown macro model {model_id} for {segment}")
-                        z, terms = evaluate_model(model, index, scenario, country, year)
-                        z_rows.append((segment, country, scenario, year, z, Z_SOURCE_PATH, 1.0))
-                        contrib_rows.extend((segment, country, scenario, year, *term) for term in terms)
+            settings = ps["segments"][segment]
+            for role, setting in MODEL_SETTINGS.items():
+                model = resolve(settings.get(setting), role, settings.get("model_portfolio"), f"segment {segment}: ")
+                for country in countries:
+                    for year in years:
+                        score = model.score(Economy(scenario, country, year, index))
+                        z_rows.append((segment, role, country, scenario, year, score.z, Z_SOURCE_PATH, 1.0))
+                        contrib_rows.extend((segment, role, country, scenario, year, t.driver, t.value, t.mean,
+                                             t.sd, t.beta, t.contribution) for t in score.terms)
                         if year == last:
-                            z_last[(segment, country, scenario)] = z
-                        continue
-                    x = {}
-                    for name in drivers:
-                        value, status = index.get((scenario, name, country, year), (None, "missing"))
-                        x[name] = None if status == "missing" else value
-                    where = f"for {segment}/{country}/{scenario}/{year}"
-                    z, parts = z_score(x, drivers, where)
-                    z_rows.append((segment, country, scenario, year, z, Z_SOURCE_PATH, 1.0))
-                    for name, part in parts.items():
-                        coef = drivers[name]
-                        contrib_rows.append((segment, country, scenario, year, name, x[name],
-                                             coef["mean"], coef["sd"], coef["beta"], part))
-                    if year == last:
-                        z_last[(segment, country, scenario)] = z
-                for year in range(last + 1, last_bucket + 1):
-                    if scenario == BASELINE:
-                        z = z_last[(segment, country, BASELINE)]
-                        z_rows.append((segment, country, scenario, year, z, Z_SOURCE_FLAT, 1.0))
-                    else:
-                        a = terminal_weight(ps, scenario, year)
-                        z = (a * z_last[(segment, country, scenario)]
-                             + (1 - a) * z_last[(segment, country, BASELINE)])
-                        source = Z_SOURCE_REVERSION if a > 0 else Z_SOURCE_FLAT
-                        z_rows.append((segment, country, scenario, year, z, source, a))
+                            z_last[(segment, role, country, scenario)] = score.z
+                    for year in range(last + 1, last_bucket + 1):
+                        if scenario == BASELINE:
+                            z = z_last[(segment, role, country, BASELINE)]
+                            z_rows.append((segment, role, country, scenario, year, z, Z_SOURCE_FLAT, 1.0))
+                        else:
+                            a = terminal_weight(ps, scenario, year)
+                            z = (a * z_last[(segment, role, country, scenario)]
+                                 + (1 - a) * z_last[(segment, role, country, BASELINE)])
+                            source = Z_SOURCE_REVERSION if a > 0 else Z_SOURCE_FLAT
+                            z_rows.append((segment, role, country, scenario, year, z, source, a))
     z_table = pd.DataFrame(z_rows, columns=list(Z_SCORES.all_columns))
     contributions = pd.DataFrame(contrib_rows, columns=list(DRIVER_CONTRIBUTIONS.all_columns))
     LOG.info("scenario provenance checked: %s, all SYNTHETIC", ", ".join(requested))
     for scenario in order:
-        path = z_table[(z_table["scenario"] == scenario) & z_table["year"].isin(years)]
+        path = z_table[(z_table["scenario"] == scenario) & z_table["year"].isin(years) & (z_table["model"] == MODEL_PD)]
         by_year = path.groupby("year")["z"].mean()
-        LOG.info("%s Z by year (mean over %d segments): %s", scenario, len(ps["segments"]),
+        LOG.info("%s PD-model Z by year (mean over %d segments): %s", scenario, len(ps["segments"]),
                  ", ".join(f"{y} {v:+.2f}" for y, v in by_year.items()))
     LOG.info("Z extended to %d; default reversion to baseline %d over %d years; scenario policies: %s",
              last_bucket, last, reversion, ps.get("terminal_policies", {}) or "none")

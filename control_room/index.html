@@ -171,8 +171,8 @@ th.scen { border-bottom-color: var(--axis); }
 tr.pick { cursor: pointer; }
 tr.pick:hover td { background: var(--surface-2); }
 tr.picked td { background: var(--run-soft); }
-tr.drivers td { background: var(--surface-2); padding: 6px 8px; }
-.drivers table { width: auto; }
+.model { margin: 8px 0; padding: 6px 8px; border-left: 3px solid var(--line); }
+pre.doc { white-space: pre-wrap; font: inherit; font-size: 12px; margin: 4px 0 0; color: var(--fg); }
 td.z { font-variant-numeric: tabular-nums; text-align: right; padding-right: 8px; }
 td.z.stress { color: var(--block); }
 td.z.lift { color: var(--ok); }
@@ -291,7 +291,7 @@ svg text { font-family: var(--sans); }
 
   <section id="step-2" hidden>
     <div id="contents-body"></div>
-    <div class="card" id="effective-card"><h2>Macro index Z by segment and year</h2><div id="effective-body"></div></div>
+    <div class="card" id="effective-card"><h2>Macro index Z by segment, model and year</h2><div id="effective-body"></div></div>
   </section>
 
   <section id="step-3" hidden>
@@ -373,7 +373,7 @@ let STATE = null, SET = null, DOC = null, PRE = null, RESULT = null, COMPARE = n
 let ADDED = {}, STEP = 1, checking = false, preTimer = null, preTicket = 0, setTicket = 0, runTicket = 0, compareTicket = 0;
 let jobRunning = false, watching = false, yamlDirty = false, selectedRun = null, setupName = defaultName(), farthest = 1;
 let finishedAt = null, methodOpen = false, paramsOpen = false;
-const open = { drivers: new Set(), previews: new Map(), matrix: null };
+const open = { previews: new Map(), segments: new Set() };
 const uploading = new Set();
 
 const SERIES = [1, 2, 3, 4, 5, 6, 7, 8].map(n => `var(--series-${n})`);
@@ -387,9 +387,10 @@ const dot = name => el('span', { class: 'dot', style: `background:${colourOf(nam
 
 // --- the setup: a document that mirrors the specification YAML ---------------------------------------------
 
-const FIELDS = ['rho', 'sicr_k', 'lgd_w', 'cpr_ttc', 'cpr_v'];
-const FIELD_NAME = { rho: 'Asset correlation', sicr_k: 'Stage 2 multiple', lgd_w: 'LGD sensitivity', cpr_ttc: 'Prepayment rate', cpr_v: 'Prepayment sensitivity' };
-const FIELD_HELP = { rho: 'asset correlation (rho), 0 to below 1', sicr_k: 'significant increase in credit risk: multiple of lifetime PD (sicr_k), above 0', lgd_w: 'LGD sensitivity to Z (lgd_w), 0 or more', cpr_ttc: 'through-the-cycle prepayment rate (cpr_ttc), 0 to 1', cpr_v: 'prepayment sensitivity to Z (cpr_v), 0 or more' };
+const FIELDS = ['asset_correlation', 'sicr_k', 'cpr_ttc'];
+const FIELD_NAME = { asset_correlation: 'Asset correlation', sicr_k: 'Stage 2 multiple', cpr_ttc: 'Prepayment rate', ccf: 'Conversion factor' };
+const FIELD_HELP = { asset_correlation: 'asset correlation (asset_correlation), 0 to below 1', sicr_k: 'significant increase in credit risk: multiple of lifetime PD (sicr_k), above 0', cpr_ttc: 'through-the-cycle prepayment rate (cpr_ttc), 0 to 1', ccf: 'accounting conversion factor of the undrawn amount (ccf)' };
+const ROLES = [['pd', 'pd_model', 'PD model'], ['lgd', 'lgd_model', 'LGD model'], ['prepayment', 'prepayment_model', 'Prepayment model']];
 const UNIT = { percent: 0.01, decimal: 1, index: 1 };
 const DEFAULTS = { variant: 'core', balance_sheet: 'static', terminal_treatment: 'z', s2_treatment: 'repriced', horizon_runoff: 'contractual', lgd_path: 'annual' };
 
@@ -479,16 +480,6 @@ function setSegment(name, field, value) {
   if (!Object.keys(DOC.segments[name]).length) delete DOC.segments[name];
   prune('segments');
 }
-function driversOf(name) {
-  const base = BASE().segments[name]?.z_drivers ?? BASE().segments[DOC.segments?.[name]?.inherits]?.z_drivers ?? {};
-  return DOC.segments?.[name]?.z_drivers ?? base;
-}
-function setDriver(segment, driver, key, value) {
-  const drivers = JSON.parse(JSON.stringify(driversOf(segment)));
-  drivers[driver] = { ...drivers[driver], [key]: value };
-  const same = JSON.stringify(drivers) === JSON.stringify(BASE().segments[segment]?.z_drivers ?? {});
-  setSegment(segment, 'z_drivers', same ? null : drivers);
-}
 function syncVolumes() {
   if (DOC.run.balance_sheet !== 'dynamic') { delete DOC.balance_sheet; return; }
   const portfolios = (BASE()?.portfolios || []).map(p => p.id);
@@ -498,7 +489,7 @@ function syncVolumes() {
   }
   DOC.balance_sheet = { ...(DOC.balance_sheet || {}), assumptions: keep };
 }
-const adjusted = () => ['scenarios', 'segments', 'terminal_policies', 'balance_sheet', 'models', 'assignments', 'reporting', 'additional_values'].filter(name => DOC[name] && Object.keys(DOC[name]).length);
+const adjusted = () => ['scenarios', 'segments', 'terminal_policies', 'balance_sheet', 'assignments', 'reporting', 'additional_values'].filter(name => DOC[name] && Object.keys(DOC[name]).length);
 
 // --- loading ---------------------------------------------------------------------------------------------------
 
@@ -527,7 +518,7 @@ async function loadSet(folder) {
     SET = view;
     if (view.base) DOC.input_set_hash = view.base.hash;
     open.previews.clear();
-    open.matrix = view.summary?.ttc_pd_matrix.segments[0] ?? null;
+    open.segments.clear();
   } catch (fault) {
     if (ticket !== setTicket) return;
     SET = null;
@@ -871,7 +862,7 @@ function renderSettings() {
     BASE() ? el('details', { class: 'method', open: paramsOpen, ontoggle: e => { paramsOpen = e.target.open; } },
       el('summary', {}, el('b', {}, 'Segment parameters'), el('span', { class: 'quiet', id: 'params-note' }, paramsNote())),
       el('div', { class: 'scroll-x', style: 'margin-top:4px' }, segmentsTable(true)),
-      el('button', { class: 'link', type: 'button', style: 'margin-top:4px', onclick: () => { delete DOC.segments; open.drivers.clear(); renderSettings(); check(); } }, 'Back to the file\'s values')) : null,
+      el('button', { class: 'link', type: 'button', style: 'margin-top:4px', onclick: () => { delete DOC.segments; renderSettings(); check(); } }, 'Back to the file\'s values')) : null,
     BASE() ? yamlBox() : null];
   $('#settings-body').replaceChildren(...nodes.filter(Boolean));
 }
@@ -971,22 +962,53 @@ function previewBox(name) {
   return box;
 }
 
-function matrixBox() {
-  const s = SET.summary.ttc_pd_matrix;
-  const host = el('div', { class: 'scroll-x' });
-  const draw = async segment => {
-    open.matrix = segment;
+function heatmap(segment) {
+  const host = el('div', { class: 'scroll-x' }, el('p', { class: 'quiet small' }, 'Loading…'));
+  (async () => {
     try {
       const m = await api(`/api/inputs/${SET.folder.split('/')[1]}/matrix?segment=${encodeURIComponent(segment)}`);
       const heat = v => (v === null ? '' : `background: color-mix(in srgb, var(--stage-2) ${Math.round(Math.min(1, v) * 85)}%, transparent)`);
       host.replaceChildren(table([el('th', {}, 'from \\ to'), ...m.grades.map(g => el('th', {}, g))],
         m.grid.map((cells, i) => el('tr', {}, el('td', {}, m.grades[i]), ...cells.map(v => el('td', { style: heat(v), title: v === null ? '' : v.toFixed(6) }, v === null ? gone : v === 0 ? '·' : v < 0.0005 ? '<0.1%' : pct(v, 1))))), () => false, 'heat'));
     } catch (fault) { host.replaceChildren(el('p', { class: 'notice block' }, `✕ ${fault.message}`)); }
+  })();
+  return host;
+}
+
+function modelBlock(label, model, chosen) {  // a model as the engine registers it: its name, where it lives, its docstring as written
+  if (!model) return null;
+  const head = [el('b', {}, label), ' ', el('code', {}, model.name ?? gone)];
+  if (chosen) head.push(el('span', { class: 'quiet small' }, ' chosen for this run'));
+  if (model.problem) return el('div', { class: 'model' }, el('div', {}, head), el('p', { class: 'notice block' }, `✕ ${model.problem}`));
+  return el('div', { class: 'model' }, el('div', {}, head),
+    el('div', { class: 'quiet small' }, model.location, model.sensitivity === null || model.sensitivity === undefined ? '' : ` · sensitivity ${fixed(model.sensitivity)}`),
+    el('pre', { class: 'doc' }, model.description || 'This function has no description.'));
+}
+
+function segmentCard(name) {
+  const base = BASE().segments[name];
+  const held = DOC.segments?.[name] || {};
+  const chosenModel = (role, setting) => {
+    const pick = held[setting];
+    if (!pick || pick === base[setting]) return [base.models[role], false];
+    return [(BASE().model_choices[base.portfolio]?.[role] || []).find(m => m.name === pick) ?? { name: pick, problem: 'not a model of this portfolio' }, true];
   };
-  const pick = select(s.segments.map(x => ({ value: x, label: x })), open.matrix ?? s.segments[0], e => draw(e.target.value));
-  pick.className = 'inline';
-  draw(open.matrix ?? s.segments[0]);
-  return el('div', {}, el('div', { class: 'inrow', style: 'margin-bottom:5px' }, el('span', { class: 'small' }, 'Segment'), pick), host);
+  const settings = [...FIELDS, 'ccf'].map(f => el('span', { class: 'chip', title: FIELD_HELP[f] }, `${FIELD_NAME[f]} ${held[f] ?? base[f] ?? gone}${held[f] !== undefined && held[f] !== base[f] ? ' (this run)' : ''}`));
+  const showing = open.segments.has(name);
+  return el('details', { class: 'file', open: showing, ontoggle: e => { e.target.open ? open.segments.add(name) : open.segments.delete(name); } },
+    el('summary', {}, el('b', {}, name), el('span', { class: 'quiet' }, `${count(base.facilities)} facilities · €${one.format(base.gca)}m · ${ROLES.map(([role, setting]) => chosenModel(role, setting)[0]?.name ?? gone).join(', ')}`)),
+    el('div', { class: 'body' },
+      el('div', { class: 'chips' }, settings),
+      ROLES.map(([role, setting, label]) => modelBlock(label, ...chosenModel(role, setting))),
+      el('p', { class: 'small' }, el('b', {}, 'TTC matrix '), el('code', {}, base.ttc_matrix ?? gone)),
+      heatmap(name)));
+}
+
+function portfolioCards() {
+  const base = BASE();
+  return base.portfolios.map(p => el('div', { class: 'card' },
+    el('h2', {}, `${p.id} ${p.name ?? ''} `, el('span', { class: 'quiet', style: 'font-weight:400;font-size:12px' }, `${plural(p.segments.length, 'segment')} · models in src/stress/models/${p.id.toLowerCase()}.py`)),
+    Object.keys(base.segments).filter(name => base.segments[name].portfolio === p.id).map(segmentCard)));
 }
 
 function chips(items, unit = '') {
@@ -1011,11 +1033,11 @@ function renderContents() {
         previewBox('commitments')),
       fileCard('opening_provisions', 'opening_provisions.parquet', `${count(s.opening_provisions.rows)} rows × ${s.opening_provisions.columns} columns · €${one.format(s.opening_provisions.allowance_on)}m on-balance allowances, €${one.format(s.opening_provisions.provision_off)}m off-balance provisions`,
         el('div', { class: 'scroll-x' }, table(['Portfolio', 'Allowance on, EUR m', 'Provision off, EUR m'], s.opening_provisions.by_portfolio.map(p => row([p.portfolio, amount(p.allowance_on), amount(p.provision_off)], i => i >= 1)), i => i >= 1)),
-        previewBox('opening_provisions')),
-      fileCard('ttc_pd_matrix', 'ttc_pd_matrix.parquet', `${count(s.ttc_pd_matrix.rows)} cells · ${s.ttc_pd_matrix.segments.length} segments · grades ${s.ttc_pd_matrix.grades.join(', ')}`, matrixBox(), previewBox('ttc_pd_matrix'))),
+        previewBox('opening_provisions'))),
     el('div', { class: 'card' }, el('h2', {}, 'scenarios.yaml ', el('span', { class: 'quiet', style: 'font-weight:400;font-size:12px' }, `${plural(scenarioIds().length, 'scenario')} · ${base.variables.length} variables · countries ${base.countries.join(', ')} · years ${years().join(', ')}`)),
       el('div', { class: 'scenario-grid' }, scenarioIds().map(id => scenarioCard(id)))),
-    el('div', { class: 'card' }, el('h2', {}, 'parameter_set.yaml'), el('div', { class: 'scroll-x' }, segmentsTable())),
+    el('div', { class: 'card' }, el('h2', {}, 'parameter_set.yaml ', el('span', { class: 'quiet', style: 'font-weight:400;font-size:12px' }, `each segment names its three models and its TTC matrix file · ${count(s.ttc_pd_matrix.rows)} matrix cells in ${plural(Object.keys(s.ttc_pd_matrix.files).length, 'file')} under matrices/ · grades ${s.ttc_pd_matrix.grades.join(', ')}`))),
+    ...portfolioCards(),
   ];
   box.replaceChildren(...cards);
 }
@@ -1074,34 +1096,28 @@ function scenarioCard(name, editable = false) {
 }
 
 function segmentRow(name, base, isNew, editable) {
-  const again = () => (editable ? renderSettings() : renderContents());
   const held = DOC.segments?.[name] || {};
-  const showing = open.drivers.has(name);
   const cells = [el('td', {}, el('b', {}, name), isNew ? el('span', { class: 'quiet' }, ` new, from ${held.inherits}`) : null),
     el('td', { class: 'quiet' }, (id => BASE().portfolios.find(p => p.id === id)?.name ?? id ?? '')(held.portfolio ?? base.portfolio)),
     el('td', { class: 'num' }, base.facilities === undefined ? gone : count(base.facilities)),
     el('td', { class: 'num' }, base.gca === undefined ? gone : amount(base.gca))];
   for (const field of FIELDS) cells.push(editable ? el('td', { class: 'cell' }, numberInput(held[field] ?? null, base[field], v => setSegment(name, field, v), { title: `${FIELD_HELP[field]}; in the file ${fixed(base[field])}` })) : el('td', { class: 'cell', title: FIELD_HELP[field] }, fixed(held[field] ?? base[field])));
-  const models = Object.keys(DOC.models || {});
-  const drivers = driversOf(name);
-  const model = held.macro_model ?? base.macro_model ?? '';
-  cells.push(el('td', { class: 'nowrap' },
-    models.length && editable ? (() => { const s = select([{ value: '', label: 'Z drivers' }, ...models.map(m => ({ value: m, label: `model ${m}` }))], model, e => { setSegment(name, 'macro_model', e.target.value || null); renderSettings(); check(); }); s.className = 'inline'; return s; })() : !editable && model ? model : null,
-    model ? null : el('button', { class: 'link', type: 'button', onclick: () => { showing ? open.drivers.delete(name) : open.drivers.add(name); again(); } }, `${Object.keys(drivers).length} drivers${held.z_drivers ? ', changed' : ''} ${showing ? '▴' : '▾'}`)));
-  const rows = [el('tr', {}, cells)];
-  if (showing && !model) {
-    const baseDrivers = BASE().segments[name]?.z_drivers ?? BASE().segments[held.inherits]?.z_drivers ?? {};
-    rows.push(el('tr', { class: 'drivers' }, el('td', { colSpan: 4 + FIELDS.length + 1 }, el('div', { class: 'drivers' },
-      table(['Driver', 'beta', 'mean', 'sd'], Object.entries(drivers).map(([driver, c]) => row([driver,
-        ...['beta', 'mean', 'sd'].map(key => el('td', { class: 'cell' }, editable ? numberInput(c[key] === baseDrivers[driver]?.[key] ? null : c[key], baseDrivers[driver]?.[key], v => setDriver(name, driver, key, v ?? baseDrivers[driver]?.[key]), { title: `${driver} ${key}; file ${fixed(baseDrivers[driver]?.[key])}` }) : fixed(c[key])))])))))));
+  for (const [role, setting, label] of ROLES) {
+    const options = (BASE().model_choices[held.portfolio ?? base.portfolio]?.[role] || []).map(m => ({ value: m.name, label: m.name }));
+    const current = held[setting] ?? base[setting] ?? '';
+    if (!editable || options.length < 2) { cells.push(el('td', { class: 'nowrap' }, el('code', {}, current || gone))); continue; }
+    const pick = select(options, current, e => { setSegment(name, setting, e.target.value === base[setting] ? null : e.target.value); renderSettings(); check(); });
+    pick.className = 'inline';
+    pick.setAttribute('aria-label', `${name} ${label}`);
+    cells.push(el('td', { class: 'nowrap' }, pick));
   }
-  return rows;
+  return [el('tr', {}, cells)];
 }
 
 function segmentsTable(editable = false) {
   const base = BASE();
   const names = [...Object.keys(base.segments), ...Object.keys(DOC.segments || {}).filter(n => !base.segments[n])];
-  const headers = ['Segment', 'Portfolio', 'Facilities', 'Gross carrying amount, EUR m', ...FIELDS.map(f => el('th', { class: 'cell', style: 'white-space:normal;min-width:78px;vertical-align:bottom', title: FIELD_HELP[f] }, FIELD_NAME[f])), 'Macro model'];
+  const headers = ['Segment', 'Portfolio', 'Facilities', 'Gross carrying amount, EUR m', ...FIELDS.map(f => el('th', { class: 'cell', style: 'white-space:normal;min-width:78px;vertical-align:bottom', title: FIELD_HELP[f] }, FIELD_NAME[f])), ...ROLES.map(([, , label]) => label)];
   return table(headers, names.flatMap(name => {
     const held = DOC.segments?.[name] || {};
     const b = base.segments[name] ?? { ...(base.segments[held.inherits] ?? {}), facilities: undefined, gca: undefined };
@@ -1144,21 +1160,24 @@ function renderEffective() {
 function zTable() {
   if (!PRE?.z) return el('p', { class: 'quiet small' }, 'Not reached.');
   const order = runOrder();
-  const cells = new Map(PRE.z.map(z => [`${z.segment}|${z.scenario}|${z.year}`, z]));
-  const segments = [...new Set(PRE.z.map(z => z.segment))].sort();
-  const headers = [el('th', {}, 'Segment'), ...order.flatMap(name => years().map((y, i) => el('th', { class: `cell${i === 0 ? ' scen' : ''}`, title: scenarioName(name) }, i === 0 ? [dot(name), ` ${scenarioName(name)} ${y}`] : String(y))))];
-  const rows = segments.map(segment => el('tr', {}, el('td', {}, segment), ...order.flatMap(name => years().map(y => {
-    const z = cells.get(`${segment}|${name}|${y}`);
+  const cells = new Map(PRE.z.map(z => [`${z.segment}|${z.model}|${z.scenario}|${z.year}`, z]));
+  const pairs = [...new Set(PRE.z.map(z => `${z.segment}|${z.model}`))].sort((a, b) => {
+    const [sa, ma] = a.split('|'), [sb, mb] = b.split('|');
+    return sa === sb ? ROLES.findIndex(r => r[0] === ma) - ROLES.findIndex(r => r[0] === mb) : sa.localeCompare(sb);
+  });
+  const headers = [el('th', {}, 'Segment'), el('th', {}, 'Model'), ...order.flatMap(name => years().map((y, i) => el('th', { class: `cell${i === 0 ? ' scen' : ''}`, title: scenarioName(name) }, i === 0 ? [dot(name), ` ${scenarioName(name)} ${y}`] : String(y))))];
+  const rows = pairs.map(pair => pair.split('|')).map(([segment, model]) => el('tr', {}, el('td', {}, segment), el('td', { class: 'quiet' }, ROLES.find(r => r[0] === model)?.[2] ?? model), ...order.flatMap(name => years().map(y => {
+    const z = cells.get(`${segment}|${model}|${name}|${y}`);
     if (!z) return el('td', { class: 'z quiet' }, gone);
     const spread = z.min !== z.max ? ` (${z.min.toFixed(2)} to ${z.max.toFixed(2)} across countries)` : '';
-    return el('td', { class: `z${z.mean < -0.5 ? ' stress' : z.mean > 0.5 ? ' lift' : ''}`, title: `${segment}, ${scenarioName(name)} ${y}: Z ${z.mean.toFixed(3)}${spread}` }, z.mean.toFixed(2));
+    return el('td', { class: `z${z.mean < -0.5 ? ' stress' : z.mean > 0.5 ? ' lift' : ''}`, title: `${segment} ${model} model, ${scenarioName(name)} ${y}: Z ${z.mean.toFixed(3)}${spread}` }, z.mean.toFixed(2));
   }))));
   return el('div', { class: 'scroll-x' }, table(headers, rows));
 }
 
 // --- step 3: run -------------------------------------------------------------------------------------------------------
 
-const CHANGE_NAMES = { scenarios: 'new scenarios', segments: 'segment parameters', terminal_policies: 'paths after 2029', balance_sheet: 'yearly volumes', models: 'macro models', assignments: 'segment assignments', reporting: 'reporting classes', additional_values: 'extra driver values' };
+const CHANGE_NAMES = { scenarios: 'new scenarios', segments: 'segment settings and models', terminal_policies: 'paths after 2029', balance_sheet: 'yearly volumes', assignments: 'segment assignments', reporting: 'reporting classes', additional_values: 'extra driver values' };
 const changeNames = () => (DOC ? adjusted().map(name => CHANGE_NAMES[name]) : []);
 function startRun() { startJob('/api/start', { document: DOC, name: setupName }); }
 

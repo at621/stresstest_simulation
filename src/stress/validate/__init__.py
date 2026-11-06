@@ -15,6 +15,7 @@ from stress.contracts.inputs import (
     CENTRAL_BANK_SECTOR,
     CURRENCY,
     DEFAULT_GRADE,
+    ENGINE_NAMES,
     OFF_BALANCE_CATEGORY,
     ON_BALANCE_CATEGORY,
     PRODUCTS,
@@ -141,7 +142,7 @@ def _check_parameters(ps: dict, segments: set[str], variant: str) -> None:
         params = ps["segments"].get(seg)
         if params is None:
             raise BlockingError(STEP, Block.MISSING_PARAMETER, f"no parameters for segment {seg}")
-        missing = [p for p in SEGMENT_PARAMETERS if p not in params]
+        missing = [p for p in SEGMENT_PARAMETERS if ENGINE_NAMES.get(p, p) not in params]
         if missing:
             raise BlockingError(STEP, Block.MISSING_PARAMETER, f"segment {seg} lacks {missing}")
         for name in ("rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v"):
@@ -156,8 +157,6 @@ def _check_parameters(ps: dict, segments: set[str], variant: str) -> None:
             if not valid:
                 raise BlockingError(STEP, Block.MISSING_PARAMETER,
                                     f"segment {seg}: {name} outside its allowed domain")
-        if not params["z_drivers"]:
-            raise BlockingError(STEP, Block.MISSING_PARAMETER, f"segment {seg}: no Z drivers")
     _check_triggers(ps["sicr_triggers"])
 
 
@@ -196,7 +195,7 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     tol_amount = ps["tolerances"]["amount"]["abs"]
     tol_agg = ps["tolerances"]["aggregate"]
     matrices, grades = matrix_set(loaded.ttc_pd_matrix, tol_prob)
-    _check_parameters(ps, set(matrices), ctx.variant)
+    _check_parameters(ps, set(matrices) | set(ps["segments"]), ctx.variant)
     scale = ps["master_scale"]["grades"]
     if list(scale) != list(grades):
         raise BlockingError(STEP, Block.INVALID_MATRIX,

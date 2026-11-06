@@ -57,6 +57,7 @@ from stress.contracts.tables import (
     GRADE_FLOWS,
     INDICES,
     LGD_OF_YEAR,
+    MODEL_PD,
     PARAMETERS,
     PD_CURVES,
     PIT_MATRICES,
@@ -196,7 +197,7 @@ def pipeline(ctx) -> dict:
     for name in parameters.scenario_order(ctx.scenarios):
         state = projection.opening_slices(routed.portfolio, routed.grades, start, name)
         with step("R8", f"{name} {start}, diagnostic of the opening"):
-            opening = ecl.year_end_provisions(state, params, drivers.z, routed.portfolio, name, start,
+            opening = ecl.year_end_provisions(state, params, drivers.of(MODEL_PD), routed.portfolio, name, start,
                                               routed.grades, last, opening=True)
         out["slices"].append(state)
         out["provisions"].append(opening.provisions)
@@ -214,7 +215,7 @@ def pipeline(ctx) -> dict:
                                                 name, gen, tol, track_s2=held)
             with step("R8", f"{name} {year}"):
                 # The first year books the scenario with perfect foresight; only then does S2 hold.
-                provided = ecl.year_end_provisions(moved.slices, params, drivers.z, routed.portfolio,
+                provided = ecl.year_end_provisions(moved.slices, params, drivers.of(MODEL_PD), routed.portfolio,
                                                    name, year, routed.grades, last,
                                                    s2_stayers=moved.s2_stayers if year > years[0] else None)
             with step("R9", f"{name} {year}"):

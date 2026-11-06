@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from stress.contracts.errors import Block, BlockingError
-from stress.contracts.inputs import CURRENCY, ON_BALANCE_CATEGORY, LoadedInputs
+from stress.contracts.inputs import CURRENCY, MODEL_SETTINGS, ON_BALANCE_CATEGORY, LoadedInputs
 from stress.contracts.preparation import ANALYSIS_RATES
 from stress.contracts.run import (
     ADVERSE,
@@ -26,7 +26,8 @@ from stress.contracts.run import (
     TERMINAL_Z,
     RunContext,
 )
-from stress.contracts.tables import METHOD_S2_HELD, Drivers, Parameters, RoutedPortfolio
+from stress.contracts.tables import METHOD_S2_HELD, MODEL_PD, Drivers, Parameters, RoutedPortfolio
+from stress.models import resolve
 from stress.report import comparison
 from stress.report.assessment import (
     average_maturity,
@@ -166,6 +167,19 @@ def stage_migration(results: dict, portfolio: pd.DataFrame, tol: dict) -> tuple[
         ["gca", "undrawn", "allowance_on", "provision_off"]].sum().reset_index()
     grades = results["grade_flows"].groupby(["scenario", "year", "segment", "from_grade", "to_grade"])["gca"].sum().reset_index()
     return migration, cohorts, grades
+
+
+def segment_models(ps: dict) -> pd.DataFrame:
+    """The models each segment ran with: name, where the function lives, its sensitivity and the
+    first line of its description (MOD-01)."""
+    rows = []
+    for segment, settings in sorted(ps["segments"].items()):
+        for role, setting in MODEL_SETTINGS.items():
+            model = resolve(settings[setting], role, settings["model_portfolio"])
+            rows.append({"segment": segment, "portfolio": settings["portfolio"], "model": role,
+                         "name": model.name, "location": model.location, "sensitivity": model.sensitivity,
+                         "description": model.description.splitlines()[0] if model.description else ""})
+    return pd.DataFrame(rows)
 
 
 def parameter_reports(ctx: RunContext, drivers: Drivers, params: Parameters, results: dict,
@@ -454,14 +468,7 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     (ctx.reports_dir / "effective_specification.json").write_text(
         json.dumps(_json_values(effective), indent=2, sort_keys=True, default=str, allow_nan=False),
         encoding="utf-8", newline="\n")
-    models = []
-    for segment, settings in ps["segments"].items():
-        model_id = settings.get("macro_model", "legacy_linear_z")
-        model = ps.get("macro_models", {}).get(model_id, {})
-        models.append({"segment": segment, "model_id": model_id,
-                       "kind": model.get("kind", "linear"), "version": model.get("version", ps["version"]),
-                       "source": model.get("source", ps["parameter_set_id"])})
-    _write(ctx, "macro_models.csv", pd.DataFrame(models))
+    _write(ctx, "segment_models.csv", segment_models(ps))
     meta = workbook_meta(ctx, loaded, routed, results, years)
     write_workbook(ctx.reports_dir / WORKBOOK_FILE, meta, {
         "impairment": imp, "by_stage": by_stage, "migration": migration, "cohorts": cohorts,
@@ -476,7 +483,7 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     extra["maturity"] = average_maturity(port, results["slices"], schedule)
     if ctx.config.balance_sheet == "static":
         extra["template_replica"] = template_replica(results["slices"], results["stage_flows"], params.lgd_of_year,
-                                                     drivers.z, port, years, tol,
+                                                     drivers.of(MODEL_PD), port, years, tol,
                                                      {s: p["template_class"] for s, p in ps["segments"].items()
                                                       if "template_class" in p})
     if "plausibility" in loaded.analysis and ADVERSE in ctx.scenarios:

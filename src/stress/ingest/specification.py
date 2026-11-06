@@ -11,7 +11,12 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from stress.contracts.inputs import SCENARIO_UNITS, SCENARIO_VALUE_TYPES
+from stress.contracts.inputs import (
+    ENGINE_NAMES,
+    MODEL_SETTINGS,
+    SCENARIO_UNITS,
+    SCENARIO_VALUE_TYPES,
+)
 from stress.contracts.specification import (
     invalid,
     mapping,
@@ -86,11 +91,6 @@ def apply(loaded, ctx):
     apply_scenarios(loaded, doc.get("scenarios", {}))
     add_values(loaded, doc.get("additional_values", []))
     apply_segments(loaded, doc.get("segments", {}), doc.get("assignments", []))
-    loaded.parameter_set["macro_models"] = copy.deepcopy(doc.get("models", {}))
-    selected = {s.get("macro_model") for s in loaded.parameter_set["segments"].values()
-                if s.get("macro_model")}
-    if set(doc.get("models", {})) - selected:
-        invalid("a supplied macro model is not assigned to any segment")
     policies = doc.get("terminal_policies", {})
     names = {row["id"] for row in loaded.scenario_meta["scenarios"]}
     for name, policy in policies.items():
@@ -181,13 +181,18 @@ def apply_scenarios(loaded, definitions):
     loaded.scenario_values = values
 
 
+SEGMENT_FIELDS = {"inherits", "portfolio", "template_class", *MODEL_SETTINGS.values(),
+                  "asset_correlation", "sicr_k", "cpr_ttc", "ccf"}
+
+
 def apply_segments(loaded, definitions, assignments):
+    """Point segments at other models of their portfolio or change their settings; a new segment
+    inherits an existing one's models, settings and TTC matrix. Settings use the parameter set's
+    names, and a model is named the same way (``p02.pd_nonlinear``)."""
     segments = loaded.parameter_set["segments"]
-    allowed = {"inherits", "portfolio", "macro_model", "template_class", "z_drivers",
-               "rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v", "ccf"}
     for name, definition in definitions.items():
         text(name, "segment")
-        mapping(definition, allowed, f"segment {name}")
+        mapping(definition, SEGMENT_FIELDS, f"segment {name}")
         validate_segment_overrides(name, definition)
         if name not in segments:
             parent = text(definition.get("inherits"), "inherited segment")
@@ -199,8 +204,9 @@ def apply_segments(loaded, definitions, assignments):
             loaded.ttc_pd_matrix = pd.concat([loaded.ttc_pd_matrix, matrix], ignore_index=True)
         elif "inherits" in definition:
             invalid("existing segments cannot be reparented")
-        segments[name].update({k: copy.deepcopy(v) for k, v in definition.items() if k != "inherits"})
-        for field in ("portfolio", "macro_model", "template_class"):
+        segments[name].update({ENGINE_NAMES.get(k, k): copy.deepcopy(v) for k, v in definition.items()
+                               if k != "inherits"})
+        for field in ("portfolio", "template_class", *MODEL_SETTINGS.values()):
             if field in definition:
                 text(definition[field], f"{name}.{field}")
     facilities = loaded.facilities.data
@@ -241,22 +247,11 @@ def apply_segments(loaded, definitions, assignments):
 
 
 def validate_segment_overrides(name, definition):
-    if "z_drivers" in definition:
-        drivers = definition["z_drivers"]
-        if not isinstance(drivers, dict) or not drivers:
-            invalid(f"{name}.z_drivers must be a nonempty mapping")
-        for driver, coefficients in drivers.items():
-            text(driver, "driver name")
-            mapping(coefficients, {"beta", "mean", "sd"}, f"{name}.{driver}", ("beta", "mean", "sd"))
-            for field in ("beta", "mean", "sd"):
-                number(coefficients[field], f"{name}.{driver}.{field}")
-            if coefficients["sd"] <= 0:
-                invalid("driver sd must be positive")
-    for field in ("rho", "sicr_k", "lgd_w", "cpr_ttc", "cpr_v", "ccf"):
+    for field in ("asset_correlation", "sicr_k", "cpr_ttc", "ccf"):
         if field not in definition or (field == "ccf" and definition[field] is None):
             continue
         value = number(definition[field], f"{name}.{field}", 0)
-        if ((field == "rho" and value >= 1) or (field == "sicr_k" and value <= 0)
+        if ((field == "asset_correlation" and value >= 1) or (field == "sicr_k" and value <= 0)
                 or (field in ("ccf", "cpr_ttc") and value > 1)):
             invalid(f"{name}.{field} outside its allowed domain")
 
