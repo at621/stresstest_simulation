@@ -20,7 +20,7 @@ from foundation.synth.allowances import opening_allowances
 from foundation.synth.generate import Generator
 from foundation.synth.inputset import MATRIX_DIR, write_input_set
 
-GENERATOR_VERSION = "0.1.0"
+GENERATOR_VERSION = "0.2.0"
 
 
 def _load(path: Path) -> dict:
