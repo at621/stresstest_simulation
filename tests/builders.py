@@ -25,6 +25,7 @@ from tests.support import ROOT, SPEC_DIR, oracle
 PARAMS = ROOT / "foundation" / "parameter_set.yaml"
 TABLES = ("facilities", "obligors", "commitments", "opening_provisions", "ttc_pd_matrix")
 DOCUMENTS = ("scenarios", "parameter_set")
+ENGINE_MODELS = frozenset(REGISTRY)  # the engine's own models; a test never replaces one
 # Cases that read a whole segment or rewrite grade rows; the others share P03.
 REFERENCE_SEGMENTS = {"AT-02": "P01", "AT-29": "P02", "AT-25": "P04", "AT-06": "P05"}
 
@@ -64,6 +65,8 @@ def model(name: str, role: str, function=None, sensitivity: float | None = None,
     if function is None:
         def function(economy, drivers=drivers):
             return linear(economy, drivers)
+    if name in ENGINE_MODELS:
+        raise ValueError(f"{name} is a model of the engine; a test model needs a name of its own")
     REGISTRY.pop(name, None)
     register(Model(name, role, function, None if role == PD else float(sensitivity)))
     return name

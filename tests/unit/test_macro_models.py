@@ -133,6 +133,33 @@ def test_an_lgd_model_moves_lgd_alone(mini, tmp_path):
     assert (before["prepayment_rate"] == after["prepayment_rate"]).all()
     assert (before.loc[other, "lgd"] == after.loc[other, "lgd"]).all()
     assert not before.loc[~other, "lgd"].equals(after.loc[~other, "lgd"])
+    yearly = [builders.result(c, "lgd_of_year.parquet") for c in (reference, current)]
+    p02 = yearly[0]["facility_id"].isin(mini["facilities"].loc[mini["facilities"]["segment"] == "P02", "facility_id"])
+    assert (yearly[0].loc[~p02, "lgd"] == yearly[1].loc[~p02, "lgd"]).all()
+    assert not yearly[0].loc[p02, "lgd"].equals(yearly[1].loc[p02, "lgd"])
+
+
+@pytest.mark.req("MOD-01", "EAD-11", "PD-10", "LGD-12")
+def test_a_prepayment_model_moves_prepayment_alone(mini, tmp_path):
+    """A segment's prepayment model with other drivers changes its prepayment and nothing of its PD
+    or LGD: prepayment takes the prepayment model's Z, not the PD model's."""
+    reference, result = builders.run(builders.write(builders.copy_tables(mini), tmp_path / "a"), tmp_path / "ra")
+    assert result["status"] == "SYNTHETIC"
+    own = REGISTRY[builders.settings(mini, "P01")["prepayment_model"]]
+    builders.settings(mini, "P01")["prepayment_model"] = builders.model(
+        "p01.test_prepayment_on_rates", PREPAYMENT, sensitivity=own.sensitivity,
+        drivers={"reference_rate": {"beta": -1.0, "mean": 0.025, "sd": 0.015}})
+    current, result = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "rb")
+    assert result["status"] == "SYNTHETIC", result.get("blocked")
+    pd.testing.assert_frame_equal(builders.result(reference, "pit_matrices.parquet"),
+                                  builders.result(current, "pit_matrices.parquet"))
+    pd.testing.assert_frame_equal(builders.result(reference, "lgd_of_year.parquet"),
+                                  builders.result(current, "lgd_of_year.parquet"))
+    before, after = (builders.result(c, "parameters.parquet") for c in (reference, current))
+    p01 = before["facility_id"].isin(mini["facilities"].loc[mini["facilities"]["segment"] == "P01", "facility_id"])
+    assert (before["lgd"] == after["lgd"]).all()
+    assert (before.loc[~p01, "prepayment_rate"] == after.loc[~p01, "prepayment_rate"]).all()
+    assert not before.loc[p01, "prepayment_rate"].equals(after.loc[p01, "prepayment_rate"])
 
 
 @pytest.mark.req("MOD-01", "MOD-06", "SCN-03", "SCN-08")
@@ -156,6 +183,11 @@ def test_a_specification_points_a_segment_at_another_model_of_its_portfolio(mini
     mask = old.segment.ne("P02") & within
     pd.testing.assert_frame_equal(old.loc[mask].reset_index(drop=True), new.loc[mask].reset_index(drop=True))
     assert not old.loc[old.segment.eq("P02"), "probability"].equals(new.loc[new.segment.eq("P02"), "probability"])
+    before, after = (builders.result(c, "parameters.parquet") for c in (reference, current))
+    for column in ("lgd", "prepayment_rate"):  # the PD model's Z drives neither
+        assert (before[column] == after[column]).all(), column
+    pd.testing.assert_frame_equal(builders.result(reference, "lgd_of_year.parquet"),
+                                  builders.result(current, "lgd_of_year.parquet"))
     models = pd.read_csv(current.reports_dir / "segment_models.csv").set_index(["segment", "model"])
     assert models.loc[("P02", PD), "name"] == "p02.pd_nonlinear" and models.loc[("P02", LGD), "name"] == "p02.lgd"
     assert models.loc[("P02", PD), "description"].startswith("Consumer credit: illustrative nonlinear PD model")
@@ -199,6 +231,11 @@ def test_a_carved_out_segment_keeps_its_parents_models_under_a_new_portfolio(min
     report = pd.read_csv(ctx.reports_dir / "analysis_template_replica.csv")
     assert "P03_SECTOR" in set(report.segment)
     assert "P07" in set(pd.read_csv(ctx.reports_dir / "impairment.csv").portfolio)
+    elsewhere = builders.model("p07.test_pd", PD, drivers={"sector_gva": {"mean": 0, "sd": 1, "beta": 1}})
+    doc["segments"]["P03_SECTOR"]["pd_model"] = elsewhere
+    _, manifest = execute(RunConfig("", (), "core", specification=write_spec(tmp_path / "p07.yaml", doc)),
+                          tmp_path / "runs")
+    assert manifest["status"] == "BLOCKED" and manifest["blocked"]["code"] == Block.UNKNOWN_MODEL
 
 
 @pytest.mark.req("DAT-02", "OPS-01")
@@ -225,14 +262,26 @@ def test_a_matrix_the_input_set_does_not_hold_blocks(mini, tmp_path, pointer):
 
 
 @pytest.mark.req("DAT-02", "OPS-01")
-def test_a_manifest_naming_a_file_outside_the_set_blocks(mini, tmp_path):
+@pytest.mark.parametrize("name", ["../outside.parquet", "C:/Windows/win.ini", "C:outside.parquet", "D:x",
+                                  "/etc/hosts", "\\\\server\\share\\x", "matrices\\P01.parquet",
+                                  "matrices/./P01.parquet", ""])
+def test_a_manifest_naming_a_file_outside_the_set_blocks(mini, tmp_path, name):
     import json
     from types import SimpleNamespace
 
     from stress import ingest
     inputs = builders.write(mini, tmp_path / "in")
     manifest = json.loads((inputs / "manifest.json").read_text(encoding="utf-8"))
-    manifest["files"]["../outside.parquet"] = {"sha256": "x", "rows": 0}
+    manifest["files"][name] = {"sha256": "x", "rows": 0}
     with pytest.raises(BlockingError) as caught:
         ingest.check_hashes(SimpleNamespace(input_dir=inputs, input_set_hash=manifest["input_set_hash"]), manifest)
     assert caught.value.code == Block.UNREADABLE_FILE
+
+
+@pytest.mark.req("OPS-01", "DAT-03")
+@pytest.mark.parametrize("pointer", ["../outside.parquet", "matrices/../facilities.parquet", "C:/x.parquet",
+                                     "matrices/sub/P01.parquet"])
+def test_packaging_refuses_a_matrix_outside_matrices(mini, tmp_path, pointer):
+    builders.settings(mini, "P01")["ttc_matrix"] = pointer
+    with pytest.raises(ValueError, match="directly under matrices/"):
+        builders.write(mini, tmp_path / "in")

@@ -42,7 +42,7 @@ paths. Changing a specification creates a different run identity and requires a 
 | `input_set_hash` | Full hash in the base input set's `manifest.json` |
 | `run` | Mapping of the run options below |
 
-Optional top-level sections are `scenarios`, `additional_values`, `models`, `segments`,
+Optional top-level sections are `scenarios`, `additional_values`, `segments`,
 `assignments`, `reporting`, `terminal_policies`, and `balance_sheet`. Unknown top-level or
 extension fields block. Names and classifications are case-sensitive. YAML is data; no
 expressions, executable model paths or scripts are evaluated.

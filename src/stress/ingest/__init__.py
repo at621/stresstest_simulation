@@ -40,6 +40,7 @@ from stress.contracts.inputs import (
     DatasetSpec,
     LoadedInputs,
     TypedTable,
+    inside_set,
     segments_of,
 )
 from stress.contracts.run import RunContext
@@ -75,7 +76,7 @@ def check_hashes(ctx: RunContext, manifest: dict) -> dict[str, str]:
             raise BlockingError(STEP, Block.UNREADABLE_FILE, f"{spec.filename} is missing")
     hashes = {}
     for name in sorted(files):
-        if PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts or "\\" in name:
+        if not inside_set(name):
             raise BlockingError(STEP, Block.UNREADABLE_FILE, f"manifest names {name}, outside the input set")
         path = ctx.input_dir / name
         if not path.is_file():
@@ -261,7 +262,7 @@ def read_matrices(ctx: RunContext, segments: dict, listed) -> pd.DataFrame:
         if name is None:
             continue  # R3 blocks: the segment lacks a setting
         path = PurePosixPath(str(name))
-        if path.is_absolute() or ".." in path.parts or path.parts[0] != MATRIX_DIR or str(path) not in listed:
+        if not inside_set(name) or path.parts[0] != MATRIX_DIR or str(path) not in listed:
             raise BlockingError(STEP, Block.UNREADABLE_FILE,
                                 f"segment {segment}: ttc_matrix {name} is not a matrix file of this input set")
         table = read_table(ctx, dataclasses.replace(TTC_MATRIX, filename=str(path)))
