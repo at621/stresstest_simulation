@@ -34,7 +34,8 @@ Never touch the protected folders listed in the root `CLAUDE.md`. `docs/spec/`, 
 
 ## 4. Build
 
-- Write the code in the step's own package. Steps share only `stress.contracts`; a new table between steps is a `TableSpec` there. `cli.py` is the only module that wires steps.
+- Write the code in the step's own package. Steps share only `stress.contracts` and the segment models in `stress.models`; a new table between steps is a `TableSpec` there. `cli.py` is the only module that wires steps.
+- A new or changed segment model is a documented function in its portfolio's module under `src/stress/models/`, registered by its role's decorator, with its coefficients inside it.
 - Amounts in EUR, rates as decimal fractions, float64, unrounded until R10. Missing is never zero: block the calculation that needs a missing value.
 - A parameter-set or generator change writes a new input set: follow `docs/runbook.md` "After changing the requirements or the parameter set", and update the current input-set hash wherever it is named.
 

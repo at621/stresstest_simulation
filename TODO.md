@@ -72,6 +72,7 @@ Each segment now has its own PD, LGD and prepayment model in `src/stress/models/
 
 - [ ] Rebuild the workflow page (`docs/run-workflow/`): `template.html`, `build_page.py` and `blocked_cases.py` still describe the inline `models:` section, `macro_model` and `macro_models.csv`. The walkthrough YAMLs are already in the new form and give the page's totals unchanged (static 132.3 / 662.2 / 1,173.4, dynamic 132.3 / 636.1 / 1,023.8 EUR m), so the page needs new runs and words, not new figures.
 - [ ] Refresh the generated pages that name `ttc_pd_matrix.parquet`, `z_drivers`, `lgd_w` or `cpr_v`: `docs/run-inputs/`, `docs/input-data/input-data-overview.html`, `docs/staging/`, `docs/pd-curves/` and the technical implementation document with its PDF.
+- [ ] Two places still state the old rules: the status deck's architecture slide (`docs/status-deck/slides/architecture.html`, "One Z drives PD, LGD and prepayment") and the docstring of `src/stress/__init__.py` ("Pipeline steps share only stress.contracts"). The docstring is in `src/`, so fixing it goes through `/improve`.
 - [ ] Control room: let a person add or replace a segment's matrix file. Today the matrix files always come from the saved set, so a parameter set that names a new matrix file cannot be assembled on the page.
 
 ## Control room: a restart leaves the page showing a run in progress
@@ -261,7 +262,7 @@ Settled by the owner on 18 October 2026: all four recommendations confirmed, as 
 - Keep the loss-rate blend for end-2029 S1: it is the draft's own formula (Boxes 4–5).
 - For D5's S2 choice, the owner picks one of two:
   - (i) sign off Z reversion as the project's reading and record the ¶124 wording as a conflict in `docs/assumptions.md`, with the size above (+1.6% of adverse S2);
-  - (ii) follow ¶124 and revert the matrices and LGD linearly after 2029. That departs from "one Z drives matrix, LGD and prepayment" after the horizon, and goes through `/improve` with a design update.
+  - (ii) follow ¶124 and revert the matrices and LGD linearly after 2029. That departs from "each value is stressed by its own model's Z" after the horizon, and goes through `/improve` with a design update.
 - With the effect this small, (i) is enough for v1.
 
 ### Open decisions (owner)

@@ -544,7 +544,7 @@ assignments:
     <ul class="plain">
       <li>A model can serve several segments: name it under each.</li>
       <li>A link replaces the segment's Z only. Its matrix, <code>rho</code>, <code>sicr_k</code>, <code>lgd_w</code> and prepayment settings stay, unless you override them here.</li>
-      <li>One Z drives PD, LGD and prepayment together. You cannot give PD one model and LGD another.</li>
+      <li>Each segment has its own PD, LGD and prepayment model, and each value moves with its own model's Z. A segment can pick another model of its portfolio, but cannot carry coefficients in the specification.</li>
       <li>A defined model with no segment stops the run, and so does a link to a model that is not defined.</li>
       <li>A new segment in a static run needs a <code>template_class</code>.</li>
     </ul>
