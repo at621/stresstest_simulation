@@ -6,6 +6,7 @@ companion ``<field>__status`` column; without one, R2 infers the status from the
 """
 
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath, PureWindowsPath
 
 import pandas as pd
 
@@ -199,6 +200,16 @@ PARAMETER_SET_TOP_KEYS = (
 # coefficients themselves (src/stress/models/).
 MODEL_SETTINGS = {"pd": "pd_model", "lgd": "lgd_model", "prepayment": "prepayment_model"}
 SEGMENT_PARAMETERS = (*MODEL_SETTINGS.values(), "ttc_matrix", "asset_correlation", "sicr_k", "cpr_ttc", "ccf")
+def inside_set(name) -> bool:
+    """Whether a file name stays inside its input set: a plain relative path with forward slashes,
+    no drive, no root and no ``..``, read the same way on every system."""
+    if not isinstance(name, str) or not name or "\\" in name or ":" in name:
+        return False
+    posix, windows = PurePosixPath(name), PureWindowsPath(name)
+    return not (posix.is_absolute() or windows.is_absolute() or windows.drive or windows.root
+                or ".." in posix.parts or str(posix) != name)
+
+
 # The engine's own name for a setting where it differs from the parameter set's.
 ENGINE_NAMES = {"asset_correlation": "rho"}
 

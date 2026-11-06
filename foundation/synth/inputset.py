@@ -9,6 +9,7 @@ checks. A new starting point is a new folder; an existing folder is never edited
 
 import hashlib
 import json
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -63,10 +64,19 @@ def control_totals(fac: pd.DataFrame, com: pd.DataFrame, prov: pd.DataFrame) -> 
     }
 
 
+MATRIX_FILE = re.compile(r"matrices/[A-Za-z0-9_.-]+\.parquet")
+
+
 def matrix_paths(parameter_set: dict) -> dict[str, str]:
-    """Each segment's TTC matrix file, as its ``ttc_matrix`` names it."""
-    return {seg: settings["ttc_matrix"] for body in parameter_set["portfolios"].values()
-            for seg, settings in body["segments"].items() if settings.get("ttc_matrix")}
+    """Each segment's TTC matrix file, as its ``ttc_matrix`` names it: a file directly under
+    matrices/, so that packaging never reads or writes outside its folders."""
+    paths = {seg: settings["ttc_matrix"] for body in parameter_set["portfolios"].values()
+             for seg, settings in body["segments"].items() if settings.get("ttc_matrix")}
+    wrong = sorted(p for p in paths.values() if not isinstance(p, str) or not MATRIX_FILE.fullmatch(p)
+                   or ".." in p)
+    if wrong:
+        raise ValueError(f"ttc_matrix must name a file directly under matrices/: {wrong}")
+    return paths
 
 
 def _write_files(folder: Path, tables: dict[str, pd.DataFrame], documents: dict[str, dict]) -> dict:
