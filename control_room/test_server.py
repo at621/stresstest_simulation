@@ -542,6 +542,14 @@ def test_the_page_does_not_compare_the_files_with_the_requirements():
     assert "differences" not in server.Control(nb.RUNS_DIR).preflight({"document": with_hash(PLAIN), "name": "check"})
 
 
+def test_the_results_use_the_ebas_labels():
+    page = server.PAGE.read_text(encoding="utf-8")
+    assert all(label in page for label in ("Impairment losses", "Stock of provisions", "Stage 3 exposure",
+                                           "coverage ratio"))
+    assert not any(label in page for label in ("Annual charge", "Cumulative charge", "Closing provisions",
+                                               "'S3'", "S3 gross carrying amount"))
+
+
 def test_the_steps_carry_only_the_standard_labels():
     page = server.PAGE.read_text(encoding="utf-8")
     start = page.index("function stepNote")
