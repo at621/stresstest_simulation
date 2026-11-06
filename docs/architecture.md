@@ -20,19 +20,23 @@ How this repository is organised and what is enforced. The engine design is in [
 Checked by `lint-imports`, configured in `pyproject.toml`:
 
 - `foundation` and `stress` never import each other.
-- Pipeline steps are independent packages that share only `stress.contracts`, and `cli.py` wires them in order. A step gets another step's output as a table defined in `contracts`, never by importing that step.
+- Pipeline steps are independent packages that share only `stress.contracts` and the segment models in `stress.models`, and `cli.py` wires them in order. A step gets another step's output as a table defined in `contracts`, never by importing that step. `stress.models` imports only `contracts`.
 
 Held by the engine and its tests:
 
 - Every input enters through R2. No later step reads a file.
 - Optional specification resolution is an R2 preflight before R1 so the resolved settings enter
   run identity. R2 captures those same bytes and applies overrides to in-memory tables only.
-- The configurable extension (31 October 2026, A37–A40) routes one model per segment and can
+- Each segment has its own PD, LGD and prepayment model (6 November 2026, A42): a documented function
+  in `src/stress/models/<portfolio>.py` that holds its coefficients. The parameter set and a run
+  specification name a model only as `<portfolio>.<function>`, from that closed registry, and only a
+  model of the segment's own portfolio, never an import path or coefficients.
+- The configurable extension (31 October 2026, A37–A40) can point a segment at another model of its portfolio and can
   adjust performing drawn/undrawn volume before R7. S3 stocks/floors are retained. The R5
   reference schedule remains common; R8 scales reference EAD to current slices. Dynamic is an
   internal option, not a relaxation of the EBA static requirement. See the operational specification.
 - R5 is the only step that creates cash flows. They are contractual and the same in every scenario.
-- One Z per segment, country, year and scenario drives the PD matrix, LGD and prepayment. Nothing is stressed twice. The selectable parameter reversion after 2029 (C8), zero prepayment inside the horizon (C15) and trough reading of LGD (C16) are the only departures, and only when selected.
+- One Z per segment, model, country, year and scenario: the PD model's drives the PD matrix, the LGD model's the LGD and the prepayment model's prepayment. Each value is stressed once, by its own model's Z. The selectable parameter reversion after 2029 (C8), zero prepayment inside the horizon (C15) and trough reading of LGD (C16) are the only departures, and only when selected.
 - Missing is never zero. Every input value carries a status, and a missing value blocks the calculation that needs it.
 - Amounts are in EUR, and rates and probabilities are decimal fractions, held as float64 and unrounded until R10.
 - A run folder is write-once, and a rerun is a new folder. Baseline and adverse are never blended.
@@ -93,7 +97,8 @@ v1 is complete. These items wait on the owner, and until they are settled the en
 6. **Fail-closed hooks:** the terminal `claude` CLI is 2.1.263. After updating it to 2.1.295 or later, add `"onFailure": "block"` to both hooks so they fail closed (C7). A person then runs the protection check in [runbook.md](runbook.md), and every attempt must be blocked.
 7. **Owner sign-offs of the v1 build.** Claude Code's reviewer approved each of these, but the owner has not yet:
    - the transcribed spec in `docs/spec/` (GOV-03);
-   - the input set `inputs/d62d0386f2c5256e/`, which since 18 October 2026 carries the qualitative SICR triggers (A30) and replaces `inputs/514ed0e86e3dc760/`;
+   - the input set `inputs/57bf340df85d5a54/`, which since 6 November 2026 names each segment's models and holds one matrix file per segment (A42), with the data of `inputs/d62d0386f2c5256e/` (the qualitative SICR triggers, A30) unchanged;
+   - each segment's LGD and prepayment model (A42), which start from the PD model's drivers until they are calibrated;
    - the results of the full core run. The first-year charge that came from O4 is gone since the divisor was dropped; see "Results that need the owner's eye" in [assumptions.md](assumptions.md).
 8. **Draft preparation to production:** reconcile the final 2027 package when released, validate the selected terminal convention, supply approved model/benchmark and capital inputs, extend sovereign fallback where needed, establish the complete climate perimeter and approve official template mappings. The user authorised draft-based synthetic examples on 30 October 2026; this does not close model validation or owner numerical sign-offs. See the [implementation register](implementation-status.md).
 9. **Readings of the draft (C13–C16):** decide S2 repricing or held, run-off inside the horizon, and the LGD path. The defaults stay the design's, and the other readings are selectable. Together they add €99.3m adverse and €31.1m baseline. A default run does not meet ECL-06: only the held reading does. Whichever stands, record it in the design, and amend ECL-11 (C13) through O1.

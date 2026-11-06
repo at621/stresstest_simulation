@@ -303,7 +303,7 @@ html { scroll-behavior: smooth; }
   <header class="masthead">
     <p class="eyebrow">Proposal for agreement · 17 October 2026 · built from the requirements</p>
     <h1>Stress engine code flow</h1>
-    <p class="lede">The engine projects stage migration, PD, LGD, EAD and provisions for the synthetic €11bn EUR, amortised-cost book over 2027–2029, baseline and adverse. The code has two separate parts that share no code. One-off steps build the synthetic starting point and the test material once. The run pipeline is the engine. It ingests an input set and builds each facility's contractual cash flows from balance, interest rate and maturity. One Z-score per segment and year moves the TTC rating matrix, the TTC LGD and the prepayment rate with the economy. EAD per default date is the contractual balance after prepayment. Rating grades then decide stages, and the run projects and reports provisions.</p>
+    <p class="lede">The engine projects stage migration, PD, LGD, EAD and provisions for the synthetic €11bn EUR, amortised-cost book over 2027–2029, baseline and adverse. The code has two separate parts that share no code. One-off steps build the synthetic starting point and the test material once. The run pipeline is the engine. It ingests an input set and builds each facility's contractual cash flows from balance, interest rate and maturity. Each segment has its own PD, LGD and prepayment model, and each model's Z-score per year moves its parameter with the economy: the TTC rating matrix, the TTC LGD and the prepayment rate. EAD per default date is the contractual balance after prepayment. Rating grades then decide stages, and the run projects and reports provisions.</p>
     <ul class="legend">
       <li><span class="sw sw-once"></span>One-off · S2 grades</li>
       <li><span class="sw sw-run"></span>Every run</li>
@@ -593,12 +593,12 @@ html { scroll-behavior: smooth; }
         <div class="step-id">R4</div>
         <div class="step-body">
           <h3>Scenarios and Z-score <code>scenario/</code></h3>
-          <p>Compound property price changes into indices (adverse residential 88.00 → 79.20 → 76.824). Standardise the macro drivers and combine them into one Z-score per segment, country, year and scenario. A positive Z means a better economy than average. The same Z drives the PD matrix, LGD and prepayment. Extend Z past 2029 with the terminal rule (D5).</p>
+          <p>Compound property price changes into indices (adverse residential 88.00 → 79.20 → 76.824). Score each segment's three models, its PD, LGD and prepayment model, into one Z-score per segment, model, country, year and scenario. A model is a documented function in <code>src/stress/models/</code>, in the module of its portfolio, with its coefficients inside it; the parameter set names it, for example <code>p01.pd</code>. A positive Z means a better economy than average. The PD model's Z drives the PD matrix, the LGD model's the LGD and the prepayment model's the prepayment rate. Extend each Z past 2029 with the terminal rule (D5).</p>
         </div>
         <dl class="step-meta">
           <dt>Requirements</dt><dd><span class="chip">SCN-01–05</span><span class="chip">SCN-08</span><span class="chip">ECL-10</span><span class="chip">REG-07</span><span class="chip">PD-04</span><span class="chip">LGD-10</span></dd>
           <dt>Proven by</dt><dd><span class="chip at">AT-16</span><span class="chip at">AT-52</span></dd>
-          <dt>Blocks on</dt><dd class="blocks">Missing scenario value for a year or country · missing Z coefficient for a segment</dd>
+          <dt>Blocks on</dt><dd class="blocks">Missing scenario value for a year or country · missing Z coefficient in a model · a model the registry does not offer for the segment's portfolio and role</dd>
         </dl>
       </article>
       <article class="step cf" id="r5">
@@ -704,9 +704,9 @@ html { scroll-behavior: smooth; }
           <tr class="grp"><td colspan="4">starting provisions</td></tr>
           <tr><td class="file">opening_provisions</td><td>On-balance allowance, off-balance provision and overlays with owner and reason, frozen at end-2026</td><td class="key">facility_id</td><td class="refs"><span class="chip">§5.2</span> <span class="chip">ACC-04</span> <span class="chip">DAT-03</span></td></tr>
           <tr class="grp"><td colspan="4">rating matrices, scenarios and parameters</td></tr>
-          <tr><td class="file">ttc_pd_matrix</td><td><mark class="pd">One-year probability of moving from each performing grade to each grade or to default</mark>, one matrix per reference segment, with the master-scale grade definitions</td><td class="key">segment + from + to</td><td class="refs"><span class="chip">MIG-01</span> <span class="chip">PD-04</span> <span class="chip">PD-05</span></td></tr>
+          <tr><td class="file">matrices/&lt;segment&gt;</td><td><mark class="pd">One-year probability of moving from each performing grade to each grade or to default</mark>, one file per reference segment under <code>matrices/</code>, at the path the segment's <code>ttc_matrix</code> names, with the master-scale grade definitions</td><td class="key">from + to, per file</td><td class="refs"><span class="chip">MIG-01</span> <span class="chip">PD-04</span> <span class="chip">PD-05</span></td></tr>
           <tr><td class="file">scenarios</td><td>Variable, unit, value type (level, growth, index), year, country, scenario, source, release, completeness and status</td><td class="key">scenario + variable + year</td><td class="refs"><span class="chip">SCN-01–04</span></td></tr>
-          <tr><td class="file">parameter_set</td><td>Z-score weights with driver means and standard deviations, <mark class="pd">matrix correlation ρ per segment</mark>, LGD sensitivity w per segment, <mark class="pd">SICR threshold k per segment, the qualitative SICR triggers with their source definitions</mark>, prepayment rate CPR_TTC and its Z sensitivity v per segment, CCFs, terminal rule</td><td class="key">parameter_set_id</td><td class="refs"><span class="chip">MIG-05</span> <span class="chip">SYN-PAR-04</span> <span class="chip">MOD-06</span></td></tr>
+          <tr><td class="file">parameter_set</td><td>Portfolios and their segments. Each segment names its PD, LGD and prepayment model (functions in <code>src/stress/models/</code> that hold the Z-score weights, driver means and standard deviations, and the sensitivities w and v) and its TTC matrix file, and states its <mark class="pd">asset correlation ρ</mark>, <mark class="pd">SICR threshold k</mark>, prepayment rate CPR_TTC and CCF. Also <mark class="pd">the qualitative SICR triggers with their source definitions</mark> and the terminal rule</td><td class="key">parameter_set_id</td><td class="refs"><span class="chip">MIG-05</span> <span class="chip">SYN-PAR-04</span> <span class="chip">MOD-06</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -898,9 +898,9 @@ html { scroll-behavior: smooth; }
     <div class="formulas c3">
       <div class="fcard">
         <span class="tag">R6 · prepayment rate</span>
-        <h3>Moves with Z, like PD and LGD</h3>
+        <h3>Moves with its own model's Z, like PD and LGD</h3>
         <div class="eq">CPR[t] = Φ( Φ⁻¹(CPR_TTC) + v × Z[t] )<br>SP[k] = (1 − CPR[1]) × … × (1 − CPR[k−1])</div>
-        <p>SP[k] is the share of the drawn balance not yet prepaid at default date k, and SP[1] = 1. With v &gt; 0, prepayment falls when the economy worsens; v = 0 keeps the TTC rate. CPR_TTC and v are set per segment (D14).</p>
+        <p>SP[k] is the share of the drawn balance not yet prepaid at default date k, and SP[1] = 1. With v &gt; 0, prepayment falls when the economy worsens; v = 0 keeps the TTC rate. Z is the segment's prepayment model's; CPR_TTC is set per segment in the parameter set and v in the model (D14).</p>
       </div>
       <div class="fcard">
         <span class="tag">R6 · EAD per default date</span>
@@ -1058,9 +1058,9 @@ html { scroll-behavior: smooth; }
     <div class="formulas">
       <div class="fcard">
         <span class="tag">R4 · economy → Z</span>
-        <h3>One Z per segment, country, year</h3>
+        <h3>One Z per segment, model, country, year</h3>
         <div class="eq">Z = Σ β_i × (x_i − μ_i) ÷ σ_i</div>
-        <p>The x values are the scenario drivers for that segment, such as GDP growth, unemployment and property price change. A positive Z means a better economy than average. The same Z shifts the PD matrix, the LGD and the prepayment rate. After 2029, Z follows the terminal rule (D5).</p>
+        <p>This is the linear form most models take; a model may also be nonlinear or lagged, or take its score as given, as its docstring says. The x values are the scenario drivers that model reads, such as GDP growth, unemployment and property price change. A positive Z means a better economy than average. Each segment's PD, LGD and prepayment model has its own Z: the PD model's shifts the PD matrix, the LGD model's moves the LGD and the prepayment model's moves the prepayment rate. After 2029, each Z follows the terminal rule (D5).</p>
       </div>
       <div class="fcard">
         <span class="tag">R6 · TTC matrix → PiT matrix M(y)</span>
@@ -1087,14 +1087,14 @@ html { scroll-behavior: smooth; }
   <section id="lgd">
     <h2><span class="kicker k-run">Inside R6 and R8</span>LGD from TTC and the Z-score</h2>
     <div class="prose">
-      <p>Each exposure carries a through-the-cycle LGD. The same Z that shifts the PD matrix moves it with the economy. No collateral, guarantee or recovery data is needed.</p>
+      <p>Each exposure carries a through-the-cycle LGD. The Z of its segment's LGD model moves it with the economy. No collateral, guarantee or recovery data is needed.</p>
     </div>
     <div class="formulas">
       <div class="fcard">
         <span class="tag">R6 · TTC → LGD of the year</span>
         <h3>Shift the TTC LGD with Z</h3>
         <div class="eq">LGD[k] = Φ( Φ⁻¹(LGD_TTC) − w × Z[k] )</div>
-        <p>Z = 0 gives back LGD_TTC. A worse economy (Z &lt; 0) raises LGD, and the result always stays between 0 and 1 without a cap. An LGD_TTC of exactly 0 or 1 passes through unchanged. Each segment has its own w ≥ 0.</p>
+        <p>Z = 0 gives back LGD_TTC. A worse economy (Z &lt; 0) raises LGD, and the result always stays between 0 and 1 without a cap. An LGD_TTC of exactly 0 or 1 passes through unchanged. Z is the LGD model's, and w ≥ 0 is set in that model.</p>
       </div>
       <div class="fcard">
         <span class="tag">R8 · where it is used</span>
@@ -1333,14 +1333,16 @@ html { scroll-behavior: smooth; }
 │   ├── transcribe/        <span class="tg-once">O1</span>
 │   ├── matrices/          <span class="tg-once">O2</span> <span class="c">synthetic TTC PD matrices</span>
 │   └── synth/             <span class="tg-once">O3–O4</span> <span class="c">generator, opening allowances</span>
-├── inputs/&lt;hash&gt;/         <span class="tg-lock">input set</span> <span class="c">7 datasets</span>
+├── inputs/&lt;hash&gt;/         <span class="tg-lock">input set</span> <span class="c">6 datasets + matrices/, one per segment</span>
 ├── runs/&lt;run_id&gt;/         <span class="c">config, data, results + manifest.json</span>
 ├── src/stress/            <span class="tg-run">PART 2</span> <span class="c">the engine</span>
 │   ├── cli.py             <span class="c">stress run · stress report</span>
 │   ├── contracts/         <span class="c">input schema, keys, value status</span>
+│   ├── models/            <span class="c">each segment's PD, LGD and prepayment models,</span>
+│   │                      <span class="c">one module per portfolio, closed registry</span>
 │   ├── ingest/            <span class="c">load inputs, hash checks</span>
 │   ├── validate/          <span class="c">scope, matrix and grade checks, routing</span>
-│   ├── scenario/          <span class="c">indices, Z-score</span>
+│   ├── scenario/          <span class="c">indices, each model's Z-score</span>
 │   ├── cashflows/         <span class="c">contractual schedule</span>
 │   ├── params/            <span class="c">matrix (TTC → PiT), pd, lgd,</span>
 │   │                      <span class="c">prepay, ead, terminal, store</span>
@@ -1483,7 +1485,7 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D11</span>
         <div class="d-body">
           <h3>Does Z also drive PD?</h3>
-          <p class="rec">Yes, through the matrix (D13). One Z per segment, country and year shifts both the TTC matrix and the TTC LGD, so PD and LGD move together.</p>
+          <p class="rec">Yes, through the matrix (D13). Each segment's PD model gives the Z that shifts its TTC matrix. Since 6 November 2026 its LGD and prepayment have models of their own (owner decision), each starting from the PD model's drivers, so PD and LGD move together until the models are calibrated apart.</p>
           <p class="why">A TTC matrix needs a PiT conversion. Reusing the LGD's Z keeps one economic driver for the whole engine.</p>
         </div>
         <div class="d-tags"><span class="chip st">R4</span><span class="chip st">R6</span></div>
@@ -1501,7 +1503,7 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D13</span>
         <div class="d-body">
           <h3>TTC matrix: shape and Z shift</h3>
-          <p class="rec decided">One TTC matrix per reference segment (7) on a shared master scale of N performing grades plus D, built once in O2. Each row shifts with C_PiT = Φ(Φ⁻¹(C_TTC) − √ρ × Z), with ρ per segment in the parameter set. The shift is decided; N and ρ are still proposals for you to set (A2).</p>
+          <p class="rec decided">One TTC matrix per reference segment (7) on a shared master scale of N performing grades plus D, built once in O2. Each row shifts with C_PiT = Φ(Φ⁻¹(C_TTC) − √ρ × Z), with ρ per segment in the parameter set and Z the segment's PD model's. Each matrix is a file of its own under <code>matrices/</code> that the segment names. The shift is decided; N and ρ are still proposals for you to set (A2).</p>
           <p class="why">This is the one-factor shift without the √(1 − ρ) divisor: every shifted row is still a valid distribution, default moves together with rating migration, and Z = 0 gives back the TTC matrix exactly, as the LGD rule does. <strong>Decided by the owner on 18 October 2026.</strong> The first build kept the divisor, which made Z = 0 the median year, well below the TTC average: a 0.80% TTC PD with ρ = 0.15 became 0.45%. The opening allowances (O4, at TTC) and the engine then disagreed, and baseline 2027 released €5m. What the change gives up: with the divisor, the PiT PD averaged over Z ~ N(0, 1) gave back the TTC PD exactly. Without it, the cycle average lies above the TTC PD, at Φ(Φ⁻¹(PD_TTC) ÷ √(1 + ρ)): a 0.80% TTC PD with ρ = 0.15 averages 1.23%, and across the master scale the ratio is 1.04–1.46 at ρ = 0.06 and 1.12–3.08 at ρ = 0.20, highest for G1. "TTC" therefore now means the matrix of an average year (Z = 0), as LGD_TTC and CPR_TTC already do, not the average over the cycle.</p>
         </div>
         <div class="d-tags"><span class="chip decided">decided 18 Oct 2026</span><span class="chip so">O2</span><span class="chip st">R6</span></div>
@@ -1510,7 +1512,7 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D14</span>
         <div class="d-body">
           <h3>Prepayment</h3>
-          <p class="rec">An annual prepayment rate per segment, CPR[t] = Φ(Φ⁻¹(CPR_TTC) + v × Z[t]), with CPR_TTC and v ≥ 0 in the parameter set; you supply them. It reduces only the drawn balance: EAD_drawn[k] = B[k] × SP[k]. Prepayment during a year lowers EAD from the next year's bucket on, so SP[1] = 1, which is the conservative choice. It is applied once, in EAD, and never also in the default survival. Acceptance cases use zero prepayment.</p>
+          <p class="rec">An annual prepayment rate per segment, CPR[t] = Φ(Φ⁻¹(CPR_TTC) + v × Z[t]), with CPR_TTC in the parameter set and Z and v ≥ 0 from the segment's own prepayment model (6 November 2026); you supply them. It reduces only the drawn balance: EAD_drawn[k] = B[k] × SP[k]. Prepayment during a year lowers EAD from the next year's bucket on, so SP[1] = 1, which is the conservative choice. It is applied once, in EAD, and never also in the default survival. Acceptance cases use zero prepayment.</p>
           <p class="why">Applying prepayment in both EAD and survival would count it twice, the same trap ECL-01 names for survival.</p>
         </div>
         <div class="d-tags"><span class="chip st">R6</span><span class="chip">parameter_set</span></div>
@@ -1572,9 +1574,13 @@ html { scroll-behavior: smooth; }
     R2 resolves settings before R1, then seals the same bytes and applies scenario paths,
     segment assignments and reporting classifications in memory. Raw base inputs remain intact.</p>
     <ul>
-      <li>R4 can choose linear, polynomial/lagged or externally supplied macro scores per segment.
-      Sector populations use explicit NACE-based assignments and supplied sector paths. One Z
-      per segment/country/scenario/year still feeds R6. Terminal policies may differ by scenario.</li>
+      <li>A run specification can point a segment's PD, LGD or prepayment model at another
+      function of the same portfolio in <code>src/stress/models/</code>, such as a nonlinear or
+      lagged score or scores taken as given. It names models, never code or coefficients.
+      Sector populations use explicit NACE-based assignments and supplied sector paths; a new
+      segment inherits its parent's models and keeps to its parent's portfolio's models, even
+      when it reports under another portfolio. Each model's Z per segment/country/scenario/year
+      feeds its own parameter in R6. Terminal policies may differ by scenario.</li>
       <li>Optional dynamic volumes scale performing drawn and undrawn exposure before R7.
       R5 retains the common reference schedule; R8 scales EAD to each current slice. R9 compares
       against actual prior provisions. S3 cohorts and floors remain; volume changes have their own bridge.</li>

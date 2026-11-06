@@ -58,7 +58,7 @@ def test_a_flag_holds_the_facility_in_s2_until_default(core_run, full_tables):
     # The flag, not the grade, sets the stage: some flagged slices sit above the SICR line.
     matrices, grades = ttc_arrays(full_tables["ttc_pd_matrix"])
     rank = {g: i for i, g in enumerate(grades)}
-    k = {s: p["sicr_k"] for s, p in full_tables["parameter_set"]["segments"].items()}
+    k = {s: p["sicr_k"] for s, p in builders.segments(full_tables).items()}
     life = TtcLifetime(matrices)
     facts = fac.set_index("facility_id")
     above = 0

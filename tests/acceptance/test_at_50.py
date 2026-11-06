@@ -22,8 +22,8 @@ def test_prepayment_in_ead_only(core_run, mini_tables, tmp_path):
                                           rtol=1e-12, atol=0), "the undrawn amount is not prepaid"
     # The same book with zero prepayment: EAD_drawn = B and the PD curves are identical.
     no_prepay = builders.copy_tables(mini_tables)
-    for seg in no_prepay["parameter_set"]["segments"].values():
-        seg["cpr_ttc"] = 0.0
+    for seg in builders.segments(no_prepay):
+        builders.settings(no_prepay, seg)["cpr_ttc"] = 0.0
     with_prepay, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"),
                                   tmp_path / "ra")
     without, _ = builders.run(builders.write(no_prepay, tmp_path / "b"), tmp_path / "rb")

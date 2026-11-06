@@ -9,9 +9,10 @@ import pytest
 import yaml
 
 from stress.contracts.errors import BlockingError
+from stress.contracts.inputs import segments_of
 from stress.ecl import _dense
-from stress.ingest import _cast
-from stress.scenario.kernels import z_score
+from stress.ingest import _cast, attach_models
+from stress.models.forms import z_score
 from stress.validate import _check_parameters
 
 
@@ -46,8 +47,12 @@ def test_invalid_typed_values_block(kind, value):
 @pytest.mark.parametrize("name,value", [("cpr_ttc", 1.2), ("cpr_v", -1),
                                         ("lgd_w", -1), ("sicr_k", np.nan), ("rho", np.inf)])
 def test_parameter_domain_rejected_before_projection(name, value):
-    path = Path(__file__).parents[2] / "inputs/d62d0386f2c5256e/parameter_set.yaml"
+    path = Path(__file__).parents[2] / "foundation/parameter_set.yaml"
     ps = copy.deepcopy(yaml.safe_load(path.read_text(encoding="utf-8")))
+    ps["segments"] = segments_of(ps)
+    for settings in ps["segments"].values():
+        settings.update(ttc_matrix="matrices/x.parquet", ccf=None)
+    attach_models(ps)
     ps["segments"][next(iter(ps["segments"]))][name] = value
     with pytest.raises(BlockingError):
         _check_parameters(ps, set(ps["segments"]), "core")

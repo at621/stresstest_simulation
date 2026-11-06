@@ -16,7 +16,7 @@ In VS Code, open the `.ipynb` and pick the kernel `.venv\Scripts\python.exe` (Py
 | Notebook | What it shows |
 |---|---|
 | [01_full_run_walkthrough.ipynb](01_full_run_walkthrough.ipynb) | Runs R1–R11 on one input set and shows each step's tables, with the identities behind them. It follows one facility from its cash flows to its charge. |
-| [02_annual_pd_calculation.ipynb](02_annual_pd_calculation.ipynb) | Rebuilds every annual PD by hand from the input set (Z-score, PiT matrices, PD curves, portfolio PD) and checks each value against a sealed run. |
+| [02_annual_pd_calculation.ipynb](02_annual_pd_calculation.ipynb) | Rebuilds every annual PD by hand from the input set (the PD models' Z-scores, PiT matrices, PD curves, portfolio PD) and checks each value against a sealed run. A PD model's coefficients live in its function in `src/stress/models/`, so the notebook takes them as the run recorded them in `driver_contributions`. |
 | [03_input_data_overview.ipynb](03_input_data_overview.ipynb) | What the engine starts from: the input set, its portfolios, loans, interest rates and SICR triggers. It reads files only and starts no run. |
 | [04_loan_term_structure.ipynb](04_loan_term_structure.ipynb) | Two tables per loan from a sealed run: a loan summary (stage, 12-month and lifetime ECL, PD, LGD, maturity, rate, booked provision) and a term structure (PD, LGD, EAD, DF and ECL share per default bucket). Controls recompute the booked S1 and S2 provisions and R8's `ecl_buckets` for every scenario and valuation date; end-2029 S1 is recomputed from the loss-rate blend it is booked from (ECL-10, AT-06) and shown against the curve. Exports to `output/<run_id>/`. |
 
@@ -27,7 +27,8 @@ In VS Code, open the `.ipynb` and pick the kernel `.venv\Scripts\python.exe` (Py
 | `nb.run_engine(inputs, scenarios, variant)` | Runs R1–R11 and returns the sealed `Run`. It raises with the reason if the run is BLOCKED. |
 | `nb.open_run("latest")` or `nb.open_run(run_id)` | A sealed `Run` |
 | `nb.list_runs()`, `nb.input_sets()` | What is in `runs/` and `inputs/` |
-| `run.table("slices")`, `run.data("facilities")`, `run.report("impairment")` | `results/*.parquet`, the input copy in `data/`, `results/reports/*.csv` |
+| `run.table("slices")`, `run.data("facilities")`, `run.report("impairment")` | `results/*.parquet`, the input copy in `data/`, `results/reports/*.csv`. `run.data("ttc_pd_matrix")` reads every segment's matrix file under `data/matrices/` into one table with a segment column. |
+| `nb.segments(parameter_set)`, `nb.matrices(folder)` | Each segment's settings as the engine reads them, with its three models and their sensitivities; an input folder's TTC matrices as one table |
 | `run.overview()`, `run.outputs()`, `nb.reproduction(run)` | Versions, hashed outputs, and the comparison with other runs of the same config |
 | `nb.millions(df)`, `nb.grade_order(...)`, `nb.slice_order(...)` | Display helpers |
 

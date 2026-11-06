@@ -36,7 +36,7 @@ The design leads. If another document disagrees with it, follow the design and t
 ## Layout
 
 - `foundation/`: the one-off steps O1–O4. They build the spec data and the synthetic input set once, and their only products are files.
-- `src/stress/`: the engine. One package per run step R1–R11, plus `contracts/` for the tables the steps share and `cli.py`, which wires the steps.
+- `src/stress/`: the engine. One package per run step R1–R11, plus `contracts/` for the tables the steps share, `models/` for each segment's PD, LGD and prepayment models (one module per portfolio, coefficients inside each function), and `cli.py`, which wires the steps.
 - `tests/`: `unit/`, `acceptance/` (one test per AT) and `controls/`.
 - `notebooks/`: Jupyter notebooks that start runs through `stress.cli` and read sealed runs back; shared helpers in `nbtools.py`. See `notebooks/README.md`.
 - `control_room/`: the page that takes a run through four steps, with its own tests. It stays outside `src/`, because everything there changes the engine's code identity. See `control_room/README.md`.
@@ -59,6 +59,6 @@ After `uv sync`:
 - `uv run pytest`: all tests; add `-m at` for acceptance cases only
 - `uv run lint-imports --cache-dir tests/.import_linter_cache`: import rules; the option keeps its cache out of the root
 - `uv run ruff check`: lint
-- `uv run stress run --inputs inputs/<hash> --scenarios baseline,adverse --variant core`: a full run (current input set `d62d0386f2c5256e`); `stress report`, `stress rerun` and `stress compare` read sealed runs
+- `uv run stress run --inputs inputs/<hash> --scenarios baseline,adverse --variant core`: a full run (current input set `57bf340df85d5a54`); `stress report`, `stress rerun` and `stress compare` read sealed runs
 - `uv run python -m foundation.transcribe` (O1) and `uv run python -m foundation.synth` (O2–O4): rebuild the one-off material
 - `uv run python control_room/server.py`: the control room, on the small dataset unless given `--dataset large` or `DATASET=large`; `uv run pytest control_room`: its tests, which `uv run pytest` does not run

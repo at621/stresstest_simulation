@@ -82,10 +82,11 @@ source_modules = ["foundation"]
 forbidden_modules = ["stress"]
 
 [[tool.importlinter.contracts]]
-name = "Pipeline steps share only contracts; cli wires them"
+name = "Pipeline steps share only contracts and the segment models; cli wires them"
 type = "layers"
 layers = [
     "stress.cli",
     "stress.lineage | stress.ingest | stress.validate | stress.scenario | stress.cashflows | stress.params | stress.projection | stress.ecl | stress.accounting | stress.report | stress.capital",
+    "stress.models",
     "stress.contracts",
 ]

@@ -3,10 +3,10 @@ schema_version: 1
 status: SYNTHETIC
 source: "Workflow walkthrough, 31 October 2026. Illustrative values."
 version: walkthrough-v1
-input_set_hash: d62d0386f2c5256eb50fbc787678fdc420fc5bda42ab5f8100a147d097dc91ee
+input_set_hash: 57bf340df85d5a5425789efdfd6fe56ce4e532f3667b4672bed07c007cbf00c6
 
 run:
-  inputs: ../../inputs/d62d0386f2c5256e
+  inputs: ../../inputs/57bf340df85d5a54
   scenarios: [baseline, adverse, energy_crisis]
   variant: core
   balance_sheet: dynamic
@@ -32,93 +32,23 @@ additional_values:
   - {scenario: energy_crisis, country: '*', variable: energy_price_change, year: 2028, value: 0.25, unit: decimal, value_type: growth}
   - {scenario: energy_crisis, country: '*', variable: energy_price_change, year: 2029, value: 0.00, unit: decimal, value_type: growth}
 
-# The models. Each one must be attached to a segment below.
-models:
-  consumer_nonlinear:
-    kind: polynomial
-    source: "Illustrative coefficients"
-    version: walkthrough-v1
-    terms:
-      activity: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: 0.6}
-      activity_squared: {variable: gdp_growth, mean: 0.02, sd: 0.03, beta: -0.08, power: 2}
-      unemployment: {variable: unemployment, mean: 0.07, sd: 0.025, beta: -0.3}
-  energy_sector:
-    kind: linear
-    source: "Illustrative coefficients"
-    version: walkthrough-v1
-    drivers:
-      gdp_growth: {beta: 0.5, mean: 0.015, sd: 0.03}
-      energy_price_change: {beta: -0.5, mean: 0.03, sd: 0.15}
-  cre_external:
-    kind: supplied
-    source: "Illustrative scores standing in for an external CRE model"
-    version: walkthrough-v1
-    values:
-        - {scenario: baseline, country: DE, year: 2027, z: 0.00}
-        - {scenario: baseline, country: ES, year: 2027, z: 0.00}
-        - {scenario: baseline, country: FR, year: 2027, z: 0.00}
-        - {scenario: baseline, country: IT, year: 2027, z: 0.00}
-        - {scenario: baseline, country: NL, year: 2027, z: 0.00}
-        - {scenario: baseline, country: PL, year: 2027, z: 0.00}
-        - {scenario: baseline, country: DE, year: 2028, z: 0.07}
-        - {scenario: baseline, country: ES, year: 2028, z: 0.07}
-        - {scenario: baseline, country: FR, year: 2028, z: 0.07}
-        - {scenario: baseline, country: IT, year: 2028, z: 0.07}
-        - {scenario: baseline, country: NL, year: 2028, z: 0.07}
-        - {scenario: baseline, country: PL, year: 2028, z: 0.07}
-        - {scenario: baseline, country: DE, year: 2029, z: 0.12}
-        - {scenario: baseline, country: ES, year: 2029, z: 0.12}
-        - {scenario: baseline, country: FR, year: 2029, z: 0.12}
-        - {scenario: baseline, country: IT, year: 2029, z: 0.12}
-        - {scenario: baseline, country: NL, year: 2029, z: 0.12}
-        - {scenario: baseline, country: PL, year: 2029, z: 0.12}
-        - {scenario: adverse, country: DE, year: 2027, z: -1.80}
-        - {scenario: adverse, country: ES, year: 2027, z: -1.80}
-        - {scenario: adverse, country: FR, year: 2027, z: -1.80}
-        - {scenario: adverse, country: IT, year: 2027, z: -1.80}
-        - {scenario: adverse, country: NL, year: 2027, z: -1.80}
-        - {scenario: adverse, country: PL, year: 2027, z: -1.80}
-        - {scenario: adverse, country: DE, year: 2028, z: -1.50}
-        - {scenario: adverse, country: ES, year: 2028, z: -1.50}
-        - {scenario: adverse, country: FR, year: 2028, z: -1.50}
-        - {scenario: adverse, country: IT, year: 2028, z: -1.50}
-        - {scenario: adverse, country: NL, year: 2028, z: -1.50}
-        - {scenario: adverse, country: PL, year: 2028, z: -1.50}
-        - {scenario: adverse, country: DE, year: 2029, z: -0.70}
-        - {scenario: adverse, country: ES, year: 2029, z: -0.70}
-        - {scenario: adverse, country: FR, year: 2029, z: -0.70}
-        - {scenario: adverse, country: IT, year: 2029, z: -0.70}
-        - {scenario: adverse, country: NL, year: 2029, z: -0.70}
-        - {scenario: adverse, country: PL, year: 2029, z: -0.70}
-        - {scenario: energy_crisis, country: DE, year: 2027, z: -2.40}
-        - {scenario: energy_crisis, country: ES, year: 2027, z: -2.40}
-        - {scenario: energy_crisis, country: FR, year: 2027, z: -2.40}
-        - {scenario: energy_crisis, country: IT, year: 2027, z: -2.40}
-        - {scenario: energy_crisis, country: NL, year: 2027, z: -2.40}
-        - {scenario: energy_crisis, country: PL, year: 2027, z: -2.40}
-        - {scenario: energy_crisis, country: DE, year: 2028, z: -1.90}
-        - {scenario: energy_crisis, country: ES, year: 2028, z: -1.90}
-        - {scenario: energy_crisis, country: FR, year: 2028, z: -1.90}
-        - {scenario: energy_crisis, country: IT, year: 2028, z: -1.90}
-        - {scenario: energy_crisis, country: NL, year: 2028, z: -1.90}
-        - {scenario: energy_crisis, country: PL, year: 2028, z: -1.90}
-        - {scenario: energy_crisis, country: DE, year: 2029, z: -0.90}
-        - {scenario: energy_crisis, country: ES, year: 2029, z: -0.90}
-        - {scenario: energy_crisis, country: FR, year: 2029, z: -0.90}
-        - {scenario: energy_crisis, country: IT, year: 2029, z: -0.90}
-        - {scenario: energy_crisis, country: NL, year: 2029, z: -0.90}
-        - {scenario: energy_crisis, country: PL, year: 2029, z: -0.90}
-
-# The links: segment -> model. Segments not listed keep their base z_drivers.
+# The links: each segment named here points its models at other functions of its portfolio in
+# src/stress/models/. Segments not listed keep the models the parameter set names.
 segments:
   P02:
-    macro_model: consumer_nonlinear
+    pd_model: p02.pd_nonlinear
+    lgd_model: p02.lgd_nonlinear
+    prepayment_model: p02.prepayment_nonlinear
   P04:
-    macro_model: cre_external
+    pd_model: p04.pd_external
+    lgd_model: p04.lgd_external
+    prepayment_model: p04.prepayment_external
   P05_ENERGY:
     inherits: P05
     portfolio: P07
-    macro_model: energy_sector
+    pd_model: p05.pd_energy
+    lgd_model: p05.lgd_energy
+    prepayment_model: p05.prepayment_energy
     template_class: "Loans and advances - NFC - Energy sector (walkthrough label)"
 
 # Move NACE D out of P05 into the new segment and a new reporting portfolio.

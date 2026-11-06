@@ -21,7 +21,7 @@ def test_stage_follows_the_sicr_line(core_run, full_tables):
     assert case["status"] == "PARTLY_OPEN"
     ctx, _ = core_run
     fac = full_tables["facilities"].set_index("facility_id")
-    k = {s: p["sicr_k"] for s, p in full_tables["parameter_set"]["segments"].items()}
+    k = {s: p["sicr_k"] for s, p in builders.segments(full_tables).items()}
     matrices, grades = ttc_arrays(full_tables["ttc_pd_matrix"])
     rank = {g: i for i, g in enumerate(grades)}
     life = TtcLifetime(matrices)

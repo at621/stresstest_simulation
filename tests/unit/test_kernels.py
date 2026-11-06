@@ -13,13 +13,14 @@ from stress.cashflows import PROFILE_CODES, remaining, schedules
 from stress.cashflows.kernels import contractual_schedule, remaining_maturity
 from stress.contracts.errors import Block, BlockingError
 from stress.ecl.kernels import ecl, floor_per_exposure
+from stress.models.forms import z_score
 from stress.params.ead import check_ccf, ead
 from stress.params.lgd import lgd_from_z
 from stress.params.matrix import cumulative, matrix_problems, pd_rises_with_grade, pit_matrix
 from stress.params.pd import cumulative_pd, curve_from_conditional, curve_problems, stub_pd
 from stress.params.prepay import not_prepaid_share, prepayment_rate
 from stress.projection.kernels import stage_flows, stage_of_rank
-from stress.scenario.kernels import adverse_weight, compound_index, reverted_z, z_score
+from stress.scenario.kernels import adverse_weight, compound_index, reverted_z
 
 TOL = 1e-10
 prob = st.floats(min_value=0.0, max_value=1.0, allow_nan=False)

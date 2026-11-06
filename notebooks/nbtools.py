@@ -6,10 +6,12 @@ read back from that folder: the notebooks show what the engine wrote and sealed,
 recompute or edit it.
 
     import nbtools as nb
-    run = nb.run_engine("inputs/d62d0386f2c5256e")    # or nb.open_run("latest")
+    run = nb.run_engine("inputs/57bf340df85d5a54")    # or nb.open_run("latest")
     run.table("drivers")                              # results/drivers.parquet
     run.data("facilities")                            # data/facilities.parquet
+    run.data("ttc_pd_matrix")                         # data/matrices/*.parquet, with a segment column
     run.report("stage_migration")                     # results/reports/stage_migration.csv
+    nb.segments(run.data("parameter_set"))            # each segment's settings as the engine reads them
 """
 
 import dataclasses
@@ -26,6 +28,7 @@ import pyarrow.parquet as pq
 import yaml
 
 from stress import cli
+from stress.contracts.inputs import segments_of
 from stress.contracts.run import (
     COMPARISONS_DIR,
     DATA_DIR,
@@ -39,6 +42,7 @@ from stress.contracts.run import (
     RunConfig,
 )
 from stress.contracts.tables import SLICE_S3_ORIGINAL
+from stress.ingest import attach_models
 from stress.lineage import compare_outputs, read_manifest
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
@@ -134,6 +138,28 @@ def run_engine(inputs: str, scenarios=("baseline", "adverse"), variant: str = "c
     return run
 
 
+# --- reading input sets --------------------------------------------------------------------------
+
+def segments(parameter_set: dict) -> dict[str, dict]:
+    """Each segment's settings as the engine reads them (R2): by segment, with its portfolio, rho, the
+    names of its three models, and the LGD and prepayment sensitivities those models carry."""
+    view = {"segments": segments_of(parameter_set)}
+    attach_models(view)
+    return view["segments"]
+
+
+def matrices(folder, parameter_set: dict | None = None) -> pd.DataFrame:
+    """The TTC matrices of an input folder as one table with a segment column, read from the file
+    each segment's ``ttc_matrix`` names."""
+    folder = Path(folder)
+    if parameter_set is None:
+        parameter_set = yaml.safe_load((folder / "parameter_set.yaml").read_text(encoding="utf-8"))
+    frames = [pd.read_parquet(folder / s["ttc_matrix"]).assign(segment=name)
+              for name, s in segments_of(parameter_set).items()]
+    table = pd.concat(frames, ignore_index=True)
+    return table[["segment", *[c for c in table.columns if c != "segment"]]]
+
+
 # --- reading runs --------------------------------------------------------------------------------
 
 class Run:
@@ -178,8 +204,11 @@ class Run:
         return self._read(f"results/{name}", lambda: pd.read_parquet(path))
 
     def data(self, name: str):
-        """A dataset of the input-set copy: a DataFrame for Parquet, a dict for YAML or JSON."""
+        """A dataset of the input-set copy: a DataFrame for Parquet, a dict for YAML or JSON.
+        ``data("ttc_pd_matrix")`` is every segment's matrix file in one table with a segment column."""
         base = self.path / DATA_DIR
+        if name == "ttc_pd_matrix":
+            return self._read("data/ttc_pd_matrix", lambda: matrices(base, self.data("parameter_set")))
         for suffix, loader in ((".parquet", pd.read_parquet),
                                (".yaml", lambda p: yaml.safe_load(p.read_text(encoding="utf-8"))),
                                (".json", lambda p: json.loads(p.read_text(encoding="utf-8")))):

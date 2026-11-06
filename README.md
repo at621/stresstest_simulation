@@ -7,7 +7,7 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 1. **EBA 2027:** meet the exercise's requirements for projecting credit losses and provisions.
 2. **Dynamic assumptions:** enable projections in which the balance sheet changes under the scenario, as an alternative to the static EBA approach.
 3. **Multiple portfolios:** enable new portfolios to be added without new calculation logic.
-4. **Portfolio-specific macro models:** enable the use of a different macro model for each portfolio, as an option.
+4. **Portfolio-specific models:** give every segment its own PD, LGD and prepayment model, kept with its portfolio, and let a run switch a segment to another model of that portfolio.
 5. **Clear inputs and configuration:** define every input and setting in one specification.
 6. **Ad hoc crisis scenarios:** enable new crisis scenarios to be defined and run without changing the solution.
 
@@ -24,7 +24,7 @@ Deterministic credit stress-test engine for EBA 2027 preparation. It projects st
 | **Traceability matrix** | [docs/traceability/traceability-matrix.md](docs/traceability/traceability-matrix.md), regenerated with `uv run python -m tests.traceability` |
 
 The engine supports optional dynamic performing volumes, named crisis scenarios,
-per-segment linear/nonlinear/external-score macro models, and portfolio reporting mappings.
+a choice of linear, nonlinear or external-score models per segment, and portfolio reporting mappings.
 Use the [input and run specification](docs/eba-2027-review/input-and-run-specification.md) as
 the operational reference. Static exposure is the default.
 
@@ -37,6 +37,35 @@ The example supplies illustrative assumptions, not forecasts or approved models.
 scales existing facility prototypes; fresh origination vintages, sales, write-offs and cures are
 not implemented. Packaging preserves supplied datasets and records pending owner approval.
 
+### Segment models and where they live
+
+Every segment has three models: PD, LGD and prepayment. Each one is a Python function in
+`src/stress/models/<portfolio>.py` (`p01.py` to `p06.py`), with its coefficients inside it. Its
+docstring is its description, and the control room shows it as written. The parameter set only
+points to the models and to the segment's TTC matrix file:
+
+```yaml
+portfolios:
+  P06:
+    segments:
+      P06_GG:
+        pd_model: p06.gg_pd
+        lgd_model: p06.gg_lgd
+        prepayment_model: p06.gg_prepayment
+        ttc_matrix: matrices/P06_GG.parquet
+        asset_correlation: 0.2
+        sicr_k: 3.0
+        cpr_ttc: 0.0
+        ccf: null
+```
+
+A segment may only use models of its own portfolio. A name the engine does not hold, a model of
+another role or another portfolio, or a coefficient written into the parameter set stops the run
+at R2. A run specification switches a model the same way, for example
+`segments: {P02: {pd_model: p02.pd_nonlinear}}`. Each model has its own Z-score, in
+`drivers.parquet` and `z_scores.csv` with a `model` column, and `segment_models.csv` lists the
+models each segment ran with. See A42 in [docs/assumptions.md](docs/assumptions.md).
+
 ## How the engine works
 
 The code has two parts that share no code:
@@ -44,7 +73,7 @@ The code has two parts that share no code:
 - **The run pipeline** is the engine:
   1. It reads one input set.
   2. It builds each facility's contractual cash flows from balance, interest rate and maturity.
-  3. One Z-score per segment and year moves the TTC rating matrix, the TTC LGD and the prepayment rate with the economy.
+  3. Each segment's PD, LGD and prepayment model gives a Z-score per year. Each Z moves its own parameter with the economy: the TTC rating matrix, the TTC LGD or the prepayment rate.
   4. EAD at each default date is the contractual balance after prepayment.
   5. Rating grades decide stages, and the run projects and reports provisions.
 
@@ -134,7 +163,7 @@ instead of the design's default (see [conflicts C14 to C16](docs/assumptions.md)
 These features do not enable regulatory submissions; the readiness report records the open gates.
 
 ```
-uv run stress run --inputs inputs/d62d0386f2c5256e --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core
 uv run stress report --run runs/<run_id>      # print results/reports/summary.md
 uv run stress rerun --run runs/<run_id>       # rerun from the manifest; output hashes must match
 uv run stress compare --base runs/<a> --new runs/<b>
@@ -144,7 +173,7 @@ uv run stress compare --base runs/<a> --new runs/<b>
 the saved `data/` files and checks source-content and runtime identity. CI runs the locked
 environment, regression suite, import boundaries, lint and generated-spec drift check.
 
-Input sets must include `credit_status_date`. Runs and replays using input sets without this field block at R2; see the [runbook](docs/runbook.md) for input-set compatibility.
+Input sets must include `credit_status_date`, and their parameter set must name each segment's models and matrix file (`portfolios`). Runs and replays using older input sets block at R2; see the [runbook](docs/runbook.md) for input-set compatibility.
 
 To run it from Jupyter and see each step's intermediate results, open [notebooks/01_full_run_walkthrough.ipynb](notebooks/01_full_run_walkthrough.ipynb) with the `.venv` kernel, or start `uv run jupyter lab` (see [notebooks/README.md](notebooks/README.md)).
 
@@ -169,8 +198,8 @@ The page opens on one of two datasets, and the setting is `small`:
 
 | Setting | Input set | Holds | A run needs | Use it for |
 |---|---|---|---:|---|
-| `small` (default) | `inputs/70a9337b7d75f668` | 1,002 facilities, about €1.2bn of GCA | about 0.55 GB | Trying the page. Its results cannot stand in for the full book's. |
-| `large` | `inputs/d62d0386f2c5256e` | 10,000 facilities, €11bn of GCA | about 1.7 GB | The full book the requirements describe. |
+| `small` (default) | `inputs/ffd95cf12192d960` | 1,002 facilities, about €1.2bn of GCA | about 0.55 GB | Trying the page. Its results cannot stand in for the full book's. |
+| `large` | `inputs/57bf340df85d5a54` | 10,000 facilities, €11bn of GCA | about 1.7 GB | The full book the requirements describe. |
 
 To change it, pass `--dataset`, or set the `DATASET` environment variable, which `--dataset` overrides:
 

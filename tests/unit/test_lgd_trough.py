@@ -33,7 +33,7 @@ def test_the_trough_joins_the_linear_reversion_of_the_parameters(mini_tables, tm
     ctx, manifest = cli.execute(config, tmp_path / "runs")
     assert manifest["status"] == "SYNTHETIC", manifest.get("blocked")
     z = builders.result(ctx, "drivers.parquet")
-    z = z[(z["segment"] == "P04")]
+    z = z[(z["segment"] == "P04") & (z["model"] == "lgd")]
     tables = builders.load(inputs)
     facts = tables["facilities"].merge(tables["obligors"][["obligor_id", "country"]], on="obligor_id")
     fac = facts[facts["segment"] == "P04"].iloc[0]
@@ -42,7 +42,7 @@ def test_the_trough_joins_the_linear_reversion_of_the_parameters(mini_tables, tm
     first = tables["parameter_set"]["horizon"]["projection_years"][0]
     path = z[(z["country"] == fac["country"]) & (z["scenario"] == "adverse") & z["year"].between(first, last)]
     end = z[(z["country"] == fac["country"]) & (z["scenario"] == "baseline") & (z["year"] == last)]["z"].iloc[0]
-    w = tables["parameter_set"]["segments"]["P04"]["lgd_w"]
+    w = builders.segments(tables)["P04"]["lgd_w"]
     params = builders.result(ctx, "parameters.parquet")
     rows = params[(params["facility_id"] == fac["facility_id"]) & (params["scenario"] == "adverse")
                   & (params["bucket_year"] > last)]

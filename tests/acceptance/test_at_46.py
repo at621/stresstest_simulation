@@ -14,7 +14,7 @@ def test_pit_rows_sum_to_one_and_pd_rises(full_tables, core_run):
     case = oracle("AT-46")
     tol = case["expected"]["row_sum_tolerance"]
     matrices, _ = ttc_arrays(full_tables["ttc_pd_matrix"])
-    segments = full_tables["parameter_set"]["segments"]
+    segments = builders.segments(full_tables)
     ctx, _ = core_run
     run_z = builders.result(ctx, "drivers.parquet")["z"].unique()
     grid = np.concatenate([np.linspace(-4, 4, 17), run_z])

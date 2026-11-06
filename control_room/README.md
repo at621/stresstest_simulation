@@ -25,8 +25,8 @@ The bar at the top stays in view. It shows the four steps, each as Passed or Not
 
 | Step | What you do there |
 |---|---|
-| **1 Files and settings** | The files the run needs, one row each: what the file holds, the file in use, its rows and size, and whether it fits. Add or replace any file with your computer's file dialog, or by dropping files on the card. "What this step expects" opens the guide: the rules every file follows, what happens to a file, and for each file its columns or sections, and which problems stop the run, stop it partway or leave a record out. Everything that changes a run is here: choose the scenarios, add your own and type their values, set each scenario's path after 2029, the balance sheet with its yearly volumes, the method choices, and each segment's parameters and Z drivers. The sanity checks then run without calculating, and the next step opens only when nothing stops them. |
-| **2 Review the files** | View only. Each table with its summary and a searchable row preview, every rating transition matrix, the scenario paths, the parameters, and the Z of each segment, scenario and year. If something is wrong, go back to step 1. |
+| **1 Files and settings** | The files the run needs, one row each: what the file holds, the file in use, its rows and size, and whether it fits. Add or replace any file with your computer's file dialog, or by dropping files on the card. "What this step expects" opens the guide: the rules every file follows, what happens to a file, and for each file its columns or sections, and which problems stop the run, stop it partway or leave a record out. Everything that changes a run is here: choose the scenarios, add your own and type their values, set each scenario's path after 2029, the balance sheet with its yearly volumes, the method choices, and each segment's settings and models: its asset correlation, Stage 2 multiple and prepayment rate, and for its PD, LGD and prepayment the model, chosen from those of its own portfolio. A model's coefficients are not edited here: they live in its function in `src/stress/models/`. The sanity checks then run without calculating, and the next step opens only when nothing stops them. |
+| **2 Review the files** | View only. Each table with its summary and a searchable row preview, the scenario paths, and one card per portfolio. For each segment the card shows its settings, its three models, each with its name, where its function lives, its sensitivity and its description as the function's docstring states it, and its rating transition matrix file. Then the Z of each segment, model, scenario and year. If something is wrong, go back to step 1. |
 | **3 Run** | What will run, in one list. Start, then the engine's progress and its log. The exact command is folded below the list. |
 | **4 Outcomes** | The run's figures, charts and workbook, a check that it reproduces, a comparison with another run, and every earlier run. "Run again with changes" loads the setup back into step 1. |
 
@@ -50,7 +50,7 @@ A sign-off records that the owner of the files accepts them, with `foundation.sy
 
 ## How it maps to the engine
 
-A plain setup runs as `stress run` with its options, on the `core` variant. Anything else (an added scenario, a segment parameter, a path after 2029, dynamic volumes) is written as a specification YAML under `control_room/specifications/<name>.yaml` and runs with `--specification`. The sealed run keeps its own copy, so a run reproduces even if the file goes. "Load its setup" brings an earlier run's setup back, including any variant or analysis package it used. Other variants and analysis packages are not offered on the page. They stay available through `stress run` in a terminal.
+A plain setup runs as `stress run` with its options, on the `core` variant. Anything else (an added scenario, a segment setting or model, a path after 2029, dynamic volumes) is written as a specification YAML under `control_room/specifications/<name>.yaml` and runs with `--specification`. The sealed run keeps its own copy, so a run reproduces even if the file goes. "Load its setup" brings an earlier run's setup back, including any variant or analysis package it used. Other variants and analysis packages are not offered on the page. They stay available through `stress run` in a terminal.
 
 The method choices are the readings of the draft recorded in `docs/assumptions.md` as C14 to C16, plus `--terminal-treatment`. Standard is the design's default.
 
@@ -89,7 +89,7 @@ The steps and limits are in [Hosting on Heroku](../docs/runbook.md#hosting-on-he
 | File | What it does |
 |---|---|
 | `server.py` | Holds added files, has the engine judge a setup, writes it as a specification, starts the engine and the one-off steps, reads sealed runs, serves the page. |
-| `preflight.py` | The seven files in words and each file's check, what a saved set holds, the dry run, the comparison with the requirements, and the setup as YAML and back. |
+| `preflight.py` | The files in words and each file's check, what a saved set holds, the dry run, the comparison with the requirements, and the setup as YAML and back. |
 | `guide.py` | The guide to step 1. Columns, allowed values and required sections come from the engine's contract, and each rule names the engine's reasons or block codes. A test fails if a new column, section, reason or block code has no place in it. The plain words still have to be read against the engine. |
 | `index.html` | The page: the bar and the four steps. Chart colours match `nbtools.py`. |
 | `small_set.py` | Cuts the large dataset to a tenth to make the small one, and has `foundation.synth package` freeze it. |

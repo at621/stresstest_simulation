@@ -30,6 +30,7 @@ from stress.contracts.inputs import (
     SEGMENT_PARAMETERS,
     TABLE_DATASETS,
     TERM_PRODUCTS,
+    TTC_MATRIX,
 )
 from stress.contracts.preparation import COLLATERAL_INDEX
 from stress.contracts.status import ALL_STATUSES
@@ -45,11 +46,12 @@ NOT_ABOUT_THE_FILES = {
     Block.RECONCILIATION}
 
 
-def test_it_covers_the_seven_files_in_the_order_of_the_page():
-    assert list(FILES) == [spec.name for spec in DATASETS]
+def test_it_covers_every_kind_of_file_in_the_order_of_the_page():
+    assert list(FILES) == [spec.name for spec in guide.GUIDED]
+    assert {spec.name for spec in DATASETS} | {TTC_MATRIX.name} == set(FILES)
 
 
-@pytest.mark.parametrize("spec", TABLE_DATASETS, ids=lambda spec: spec.name)
+@pytest.mark.parametrize("spec", (*TABLE_DATASETS, TTC_MATRIX), ids=lambda spec: spec.name)
 def test_a_table_lists_the_contracts_columns_each_with_a_meaning(spec):
     shown = FILES[spec.name]["columns"]
     assert [column["name"] for column in shown] == list(spec.column_names)
@@ -57,8 +59,8 @@ def test_a_table_lists_the_contracts_columns_each_with_a_meaning(spec):
 
 
 def test_no_meaning_is_left_for_a_column_that_has_gone():
-    assert set(guide.MEANINGS) == {spec.name for spec in TABLE_DATASETS}
-    for spec in TABLE_DATASETS:
+    assert set(guide.MEANINGS) == {spec.name for spec in (*TABLE_DATASETS, TTC_MATRIX)}
+    for spec in (*TABLE_DATASETS, TTC_MATRIX):
         assert set(guide.MEANINGS[spec.name]) == set(spec.column_names)
 
 
@@ -77,7 +79,7 @@ def test_nested_fields_come_from_the_contract():
     scenarios = {section["name"]: section["holds"] for section in FILES["scenarios"]["sections"]}
     assert all(field in scenarios["values"] for field in SCENARIO_VALUE_FIELDS)
     parameters = {section["name"]: section["holds"] for section in FILES["parameter_set"]["sections"]}
-    assert all(field in parameters["segments"] for field in SEGMENT_PARAMETERS)
+    assert all(field in parameters["portfolios"] for field in SEGMENT_PARAMETERS)
 
 
 def test_every_reason_the_engine_can_reject_a_record_is_explained():

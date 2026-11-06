@@ -27,17 +27,19 @@ import small_set
 from stress.contracts.inputs import (
     COMMITMENTS,
     FACILITIES,
+    MATRIX_DIR,
     OBLIGORS,
     OPENING_PROVISIONS,
     PARAMETER_SET,
     SCENARIOS,
-    TTC_PD_MATRIX,
 )
 
 ROOT = server.ROOT
 FULL = small_set.FULL
 CHOSEN, OTHER = "a" * 16, "b" * 16
-RETIRED: set[str] = set()  # sets a rebuild replaced; they stay committed, and the page no longer opens on them
+# Sets a rebuild replaced; they stay committed, and the page no longer opens on them. These two hold the
+# parameter set from before each segment named its own models (6 November 2026).
+RETIRED: set[str] = {"d62d0386f2c5256e", "70a9337b7d75f668"}
 
 
 def committed_sets() -> list[Path]:
@@ -106,7 +108,10 @@ def test_the_committed_set_is_what_the_script_chooses(small):
 
 
 def test_matrices_scenarios_and_parameters_are_the_full_books(small):
-    pd.testing.assert_frame_equal(table(small, TTC_PD_MATRIX), table(FULL, TTC_PD_MATRIX))
+    files = sorted(path.name for path in (FULL / MATRIX_DIR).iterdir())
+    assert files == sorted(path.name for path in (small / MATRIX_DIR).iterdir())
+    for name in files:
+        assert (small / MATRIX_DIR / name).read_bytes() == (FULL / MATRIX_DIR / name).read_bytes(), name
     for spec in (SCENARIOS, PARAMETER_SET):
         assert document(small, spec) == document(FULL, spec)
 

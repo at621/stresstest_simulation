@@ -33,7 +33,7 @@ from stress.contracts.inputs import (
     SYNTHETIC,
     TABLE_DATASETS,
     TERM_PRODUCTS,
-    TTC_PD_MATRIX,
+    TTC_MATRIX,
     Column,
     DatasetSpec,
 )
@@ -55,13 +55,16 @@ def _labels(specs) -> str:
 
 
 KINDS = {"str": "Text", "float": "Number", "int": "Whole number", "bool": "True or false", "date": "Date"}
+# The kinds of file in the guide's order: the four tables, the matrix files, then the two YAML files.
+GUIDED = (*TABLE_DATASETS, TTC_MATRIX, *(spec for spec in DATASETS if spec not in TABLE_DATASETS))
 
 EVERY_FILE = (
-    ("A run needs all seven files, one in each row. Each row starts with the saved file, so add only the "
-    "ones you want to change. A new file must fit the others: the same IDs, segments and snapshot date."),
+    ("A run needs the six files in the rows below, plus one Rating transitions file per segment, which comes "
+    "from the saved set. Each row starts with the saved file, so add only the ones you want to change. A new "
+    "file must fit the others: the same IDs, segments and snapshot date."),
     ("The row you add a file to decides what it is, so the file can have any name. Files dropped on this "
     "card go to the row their name matches."),
-    (f"{_labels(TABLE_DATASETS)} are Parquet tables. {_labels((SCENARIOS, PARAMETER_SET))} are YAML files. "
+    (f"{_labels((*TABLE_DATASETS, TTC_MATRIX))} are Parquet tables. {_labels((SCENARIOS, PARAMETER_SET))} are YAML files. "
     "The engine reads no other format, so convert a file first."),
     ("A table holds every column listed for it and no others. A column can also have a companion column, "
     f"<name>__status, that says {_words(sorted(str(status) for status in ALL_STATUSES), 'or')}."),
@@ -77,7 +80,8 @@ EVERY_FILE = (
 AFTER_YOU_ADD = (
     ("The page checks a file as soon as you add it: that it can be read and has the right columns or "
     "sections. If not, its row says what is wrong."),
-    "Use these files saves all seven as a new frozen copy. Your own files and the saved files stay as they are.",
+    ("Use these files saves them, with the saved set's Rating transitions files, as a new frozen copy. Your "
+     "own files and the saved files stay as they are."),
     "The sanity checks then read every value, without calculating anything.",
     "A problem they find shows at the top of the page, and the next step stays closed until you fix it.",
     ("They stop before the calculation, so a few problems show only when the run stops partway. The rules "
@@ -172,8 +176,7 @@ MEANINGS = {
         "frozen": "Whether the provision is frozen as starting data.",
         "snapshot_date": "The reporting date.",
     },
-    TTC_PD_MATRIX.name: {
-        "segment": "The risk segment the row belongs to.",
+    TTC_MATRIX.name: {
         "from_grade": "The grade at the start of the year.",
         "to_grade": "The grade at the end of the year.",
         "probability": "The one-year probability of that move, from 0 to 1.",
@@ -211,8 +214,10 @@ SECTIONS = {  # the required sections first, in the contract's order; the rest t
         "status": "Its status.",
         "horizon": "The dates: snapshot_date, snapshot_year, projection_years and last_bucket_year.",
         "master_scale": "The rating scale: grades, default_grade and each grade's ttc_pd.",
-        "segments": f"For each segment, its portfolio, {_words(SEGMENT_PARAMETERS)}. A segment you add also "
-                    "needs template_class.",
+        "portfolios": (f"Each portfolio's segments, and for each segment {_words(SEGMENT_PARAMETERS)}. The "
+                       "three models are named as <portfolio>.<function>, functions in the engine's "
+                       "src/stress/models/ that hold their own coefficients; ttc_matrix names the segment's "
+                       "Rating transitions file, such as matrices/P01.parquet."),
         "terminal_rule": "What happens after the last scenario year: method, baseline, last_scenario_year, "
                          "reversion_years and s1_end_of_horizon.",
         "conventions": "The calculation conventions on record.",
@@ -299,8 +304,8 @@ FILE_RULES = {
     OPENING_PROVISIONS.name: (
         ("facility_id is filled in.", (Block.MISSING_KEY,)),
     ),
-    TTC_PD_MATRIX.name: (
-        ("Each segment has every move from grade to grade once, and no probability is blank.",
+    TTC_MATRIX.name: (
+        ("Each file has every move from grade to grade once, and no probability is blank.",
          (Block.INVALID_MATRIX,)),
         ("All segments use the same grades, and they match the master scale in the Parameters file.",
          (Block.INVALID_MATRIX,)),
@@ -319,16 +324,17 @@ FILE_RULES = {
         (f"Each value has a unit, which is {_words(SCENARIO_UNITS, 'or')}.", (Block.SCENARIO_WITHOUT_UNIT,)),
         (f"value_type is {_words(SCENARIO_VALUE_TYPES, 'or')}.", (Block.BAD_VALUE_TYPE,)),
         ("No scenario, variable, country and year appears twice.", (Block.DUPLICATE_KEY,)),
-        (("Each variable the Z drivers use has a value for every country in the file, every projection year "
+        (("Each variable a segment's models read has a value for every country in the file, every projection year "
          "and every scenario in the run."), (Block.MISSING_SCENARIO_VALUE,)),
         ("Each yearly price change has a starting level in starting_values.", (Block.MISSING_SCENARIO_VALUE,)),
     ),
     PARAMETER_SET.name: (
-        ("Each segment in Rating transitions has its parameters here, with at least one Z driver.",
-         (Block.MISSING_PARAMETER,)),
-        ("rho is from 0 to below 1, sicr_k is above 0, lgd_w and cpr_v are 0 or more, and cpr_ttc is from 0 to 1.",
-         (Block.MISSING_PARAMETER,)),
-        ("Each Z driver has a beta, a mean and a standard deviation above 0.", (Block.MISSING_PARAMETER,)),
+        (f"Each segment states {_words(SEGMENT_PARAMETERS)}, and nothing else.", (Block.MISSING_PARAMETER,)),
+        ("Each model it names is a model of its own portfolio in src/stress/models/, in the right role.",
+         (Block.UNKNOWN_MODEL,)),
+        ("Its ttc_matrix is a Rating transitions file of this set, under matrices/.", (Block.UNREADABLE_FILE,)),
+        (("asset_correlation is from 0 to below 1, sicr_k is above 0, the LGD and prepayment models' "
+          "sensitivities are 0 or more, and cpr_ttc is from 0 to 1."), (Block.MISSING_PARAMETER,)),
         (("The snapshot date in horizon equals snapshot_date in "
          f"{_labels((FACILITIES, OBLIGORS, COMMITMENTS, OPENING_PROVISIONS))}."), (Block.HORIZON_MISMATCH,)),
         ("The last projection year equals last_scenario_year in terminal_rule.", (Block.HORIZON_MISMATCH,)),
@@ -385,9 +391,9 @@ def _rules(name: str) -> list[dict]:
 def step_one() -> dict:
     """The guide: what every file follows, what happens to a file, and each file in the page's order."""
     files = []
-    for spec in DATASETS:
+    for spec in GUIDED:
         label, holds = FILE_GUIDE[spec.name]
-        table = spec in TABLE_DATASETS
+        table = spec is TTC_MATRIX or spec in TABLE_DATASETS
         files.append({"name": spec.name, "label": label, "format": "Parquet table" if table else "YAML file",
                       "holds": holds, "warning": WARNINGS.get(spec.name),
                       "columns": [_column(spec, column) for column in spec.columns] if table else None,

@@ -190,7 +190,8 @@ def test_rerun_reproduces_every_output(mini_tables, tmp_path, capsys):
 @pytest.mark.control("Version change")
 def test_version_change_difference_report(mini, mini_tables, tmp_path):
     base_ctx, base = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "ra")
-    mini["parameter_set"]["segments"]["P05"]["lgd_w"] *= 2
+    builders.neutral(mini, "P05", lgd_w=2 * builders.segments(mini)["P05"]["lgd_w"],
+                     cpr_v=builders.segments(mini)["P05"]["cpr_v"])
     new_ctx, new = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "rb")
     assert base["input_set_hash"] != new["input_set_hash"]
     diff = compare_runs(base_ctx.run_dir, new_ctx.run_dir)
@@ -202,7 +203,8 @@ def test_version_change_difference_report(mini, mini_tables, tmp_path):
 @pytest.mark.control("Version change")
 def test_difference_report_is_retained_beside_the_runs(mini, mini_tables, tmp_path, capsys):
     base_ctx, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
-    mini["parameter_set"]["segments"]["P05"]["lgd_w"] *= 2
+    builders.neutral(mini, "P05", lgd_w=2 * builders.segments(mini)["P05"]["lgd_w"],
+                     cpr_v=builders.segments(mini)["P05"]["cpr_v"])
     new_ctx, _ = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "runs")
     args = ["compare", "--base", base_ctx.run_dir.as_posix(), "--new", new_ctx.run_dir.as_posix()]
     assert main(args) == 0
@@ -267,7 +269,7 @@ def test_the_stage_table_shows_a_gap_rather_than_a_smaller_stock():
 @pytest.mark.control("Version change")
 def test_a_blocked_run_cannot_be_compared(mini, mini_tables, tmp_path):
     good, _ = builders.run(builders.write(builders.copy_tables(mini_tables), tmp_path / "a"), tmp_path / "runs")
-    mini["parameter_set"]["segments"]["P01"]["cpr_ttc"] = None  # blocks at R3, before any report
+    builders.settings(mini, "P01")["cpr_ttc"] = None  # blocks at R3, before any report
     bad, manifest = builders.run(builders.write(mini, tmp_path / "b"), tmp_path / "runs")
     assert manifest["status"] == "BLOCKED"
     assert main(["compare", "--base", good.run_dir.as_posix(), "--new", bad.run_dir.as_posix()]) == EXIT_BLOCKED
@@ -312,9 +314,10 @@ def test_the_run_prepays_on_the_z_of_each_bucket_year(core_run, full_tables):
     obligors = full_tables["obligors"][["obligor_id", "country"]]
     facts = full_tables["facilities"][["facility_id", "obligor_id", "segment"]].merge(obligors, on="obligor_id")
     z = builders.result(ctx, "drivers.parquet").rename(columns={"year": "bucket_year"})
+    z = z[z["model"] == "prepayment"]  # each segment's prepayment model
     rows = params.merge(facts, on="facility_id").merge(z, on=["segment", "country", "scenario", "bucket_year"])
     assert len(rows) == len(params) and set(rows["scenario"]) == {"baseline", "adverse"}
-    segments = full_tables["parameter_set"]["segments"]
+    segments = builders.segments(full_tables)
     expected = prepayment_rate(rows["segment"].map(lambda s: segments[s]["cpr_ttc"]).astype(float).to_numpy(),
                                rows["segment"].map(lambda s: segments[s]["cpr_v"]).astype(float).to_numpy(),
                                rows["z"].to_numpy())
@@ -324,6 +327,6 @@ def test_the_run_prepays_on_the_z_of_each_bucket_year(core_run, full_tables):
 
 @pytest.mark.control("Z-score and prepayment")
 def test_missing_prepayment_rate_blocks(mini, tmp_path):
-    mini["parameter_set"]["segments"]["P01"]["cpr_ttc"] = None
+    builders.settings(mini, "P01")["cpr_ttc"] = None
     b = blocked(mini, tmp_path)
     assert b["code"] == Block.MISSING_PARAMETER and "cpr_ttc" in b["message"]
