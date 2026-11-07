@@ -59,6 +59,6 @@ After `uv sync`:
 - `uv run pytest`: all tests; add `-m at` for acceptance cases only
 - `uv run lint-imports --cache-dir tests/.import_linter_cache`: import rules; the option keeps its cache out of the root
 - `uv run ruff check`: lint
-- `uv run stress run --inputs inputs/<hash> --scenarios baseline,adverse --variant core`: a full run (current input set `57bf340df85d5a54`); `stress report`, `stress rerun` and `stress compare` read sealed runs
+- `uv run stress run --inputs inputs/<hash> --scenarios baseline,adverse --variant core`: a full run (current input set `5a296ffe0e198705`); `stress report`, `stress rerun` and `stress compare` read sealed runs
 - `uv run python -m foundation.transcribe` (O1) and `uv run python -m foundation.synth` (O2–O4): rebuild the one-off material
 - `uv run python control_room/server.py`: the control room, on the small dataset unless given `--dataset large` or `DATASET=large`; `uv run pytest control_room`: its tests, which `uv run pytest` does not run

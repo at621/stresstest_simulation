@@ -3,10 +3,10 @@ schema_version: 1
 status: SYNTHETIC
 source: "Workflow walkthrough, 31 October 2026. Illustrative values."
 version: walkthrough-v1
-input_set_hash: 57bf340df85d5a5425789efdfd6fe56ce4e532f3667b4672bed07c007cbf00c6
+input_set_hash: 5a296ffe0e198705025bdc7648741cbd8861977441c08300467a264670b6b7e9
 
 run:
-  inputs: ../../inputs/57bf340df85d5a54
+  inputs: ../../inputs/5a296ffe0e198705
   scenarios: [baseline, adverse, energy_crisis]
   variant: core
   balance_sheet: dynamic

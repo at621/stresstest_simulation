@@ -6,7 +6,7 @@ read back from that folder: the notebooks show what the engine wrote and sealed,
 recompute or edit it.
 
     import nbtools as nb
-    run = nb.run_engine("inputs/57bf340df85d5a54")    # or nb.open_run("latest")
+    run = nb.run_engine("inputs/5a296ffe0e198705")    # or nb.open_run("latest")
     run.table("drivers")                              # results/drivers.parquet
     run.data("facilities")                            # data/facilities.parquet
     run.data("ttc_pd_matrix")                         # data/matrices/*.parquet, with a segment column
@@ -52,8 +52,20 @@ INPUT_SET_NAME = re.compile(r"[0-9a-f]{16}")  # inputs/<hash>/; any other folder
 MILLION = 1_000_000.0
 
 # Chart colours from the reference data-viz palette. Each scenario keeps its colour in every
-# chart; stages use an ordinal ramp of one hue, light S1 to dark S3.
-SCENARIO_COLOURS = {"baseline": "#2a78d6", "adverse": "#eb6834"}
+# chart, in the control room's order and grey after eight; stages use an ordinal ramp of one hue,
+# light S1 to dark S3.
+SERIES = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948")
+
+
+class ScenarioColours(dict):
+    """A colour per scenario, in the order the scenarios are first drawn; grey after eight."""
+
+    def __missing__(self, scenario: str) -> str:
+        self[scenario] = SERIES[len(self)] if len(self) < len(SERIES) else "#898781"
+        return self[scenario]
+
+
+SCENARIO_COLOURS = ScenarioColours(baseline=SERIES[0], adverse=SERIES[1])
 STAGE_COLOURS = {1: "#86b6ef", 2: "#2a78d6", 3: "#104281"}
 INK, INK_SECONDARY, MUTED, GRID, AXIS, SURFACE = (
     "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb")

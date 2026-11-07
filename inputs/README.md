@@ -9,7 +9,7 @@ Input sets for the run. Each input set is a folder named by its content hash, `i
 | `commitments` | Parquet | Nominal undrawn, accounting CCF and its source, linked facility, asset category "not applicable" | commitment_id |
 | `opening_provisions` | Parquet | On-balance allowance, off-balance provision, overlays with owner and reason, frozen at end-2026 | facility_id |
 | `ttc_pd_matrix` | Parquet | One-year probability of moving from each performing grade to each grade or to default, one matrix per reference segment, with the master-scale grade definitions | segment, from, to |
-| `scenarios` | YAML | Variable, unit, value type (level, growth, index), year, country, scenario, source, release, completeness and status | scenario, variable, year |
+| `scenarios` | YAML | Variable, unit, value type (level, growth, index), year, country, scenario, source, release, completeness and status; each scenario's label and description. The section 6.2 paths, plus the synthetic scenarios of `foundation/scenarios.yaml` | scenario, variable, year |
 | `parameter_set` | YAML | Z-score weights with driver means and standard deviations, ρ, w, k, CPR_TTC and v per segment, CCFs, terminal rule, qualitative SICR triggers (`sicr_triggers`) | parameter_set_id |
 
 Synthetic input sets are committed to git. Real data is not part of v1.

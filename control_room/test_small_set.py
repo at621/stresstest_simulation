@@ -39,7 +39,7 @@ FULL = small_set.FULL
 CHOSEN, OTHER = "a" * 16, "b" * 16
 # Sets a rebuild replaced; they stay committed, and the page no longer opens on them. These two hold the
 # parameter set from before each segment named its own models (6 November 2026).
-RETIRED: set[str] = {"d62d0386f2c5256e", "70a9337b7d75f668"}
+RETIRED: set[str] = {"d62d0386f2c5256e", "70a9337b7d75f668", "57bf340df85d5a54", "ffd95cf12192d960"}
 
 
 def committed_sets() -> list[Path]:

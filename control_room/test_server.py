@@ -31,7 +31,7 @@ import server
 from stress.lineage import CODE_PATHS
 
 nb = server.nb
-INPUTS = "inputs/57bf340df85d5a54"
+INPUTS = f"inputs/{server.BOOKS['large']}"
 WALKTHROUGH = "docs/run-workflow/walkthrough.yaml"
 RUN = {"inputs": INPUTS, "scenarios": ["baseline", "adverse"], "variant": "core", "balance_sheet": "static",
        "terminal_treatment": "z", "s2_treatment": "repriced", "horizon_runoff": "contractual", "lgd_path": "annual"}
@@ -556,6 +556,14 @@ def test_the_results_use_the_ebas_labels():
                                                "'S3'", "S3 gross carrying amount"))
 
 
+def test_a_scenario_is_listed_with_its_description_and_the_paths_side_by_side():
+    page = server.PAGE.read_text(encoding="utf-8")
+    listed = page[page.index("function scenarioRow"):page.index("const paramsNote")]
+    assert "['In run', 'Scenario', 'Description', '']" in listed and "macroPaths(true)" in listed
+    assert "'Comes from'" not in page and "terminalControl" not in page and "scenarioCard" not in page
+    assert "'Drives'" in page and "macroPaths(false)" in page
+
+
 def test_the_steps_carry_only_the_standard_labels():
     page = server.PAGE.read_text(encoding="utf-8")
     start = page.index("function stepNote")
@@ -606,7 +614,7 @@ def test_a_refused_setup_starts_nothing(site):
 @pytest.mark.parametrize("path", [
     "/docs/run-workflow/stress-run-workflow.html", "/api/runs/..%2F..%2Fpyproject.toml", "/api/runs/comparisons",
     "/api/runs/20261031T2029Z-core-3e7f2cd1", "/api/inputs/bank", "/api/inputs/..%2F..", "/api/inputs/0000000000000000",
-    "/api/inputs/57bf340df85d5a54/preview?table=nothing", "/api/inputs/57bf340df85d5a54/matrix?segment=nothing", "/nothing",
+    f"/api/{INPUTS}/preview?table=nothing", f"/api/{INPUTS}/matrix?segment=nothing", "/nothing",
     "/api/browse?path=docs", "/api/text?path=pyproject.toml",
 ])
 def test_nothing_outside_the_offer_is_served(site, path):
@@ -623,13 +631,13 @@ def test_the_routes_of_the_steps_answer(site):
     answer = json.loads(payload)
     assert response.status == 200 and answer["verdict"] == "ready" and answer["shown"].startswith("uv run stress run")
     assert not answer["needs_specification"] and answer["yaml"].startswith("schema_version: 1")
-    response, payload = call(site, "GET", "/api/inputs/57bf340df85d5a54")
+    response, payload = call(site, "GET", f"/api/{INPUTS}")
     view = json.loads(payload)
     assert response.status == 200 and "P01" in view["base"]["segments"] and view["summary"]["facilities"]["rows"] == 10_000
     assert [f["file"] for f in view["files"]][:2] == ["facilities.parquet", "obligors.parquet"]
-    response, payload = call(site, "GET", "/api/inputs/57bf340df85d5a54/preview?table=facilities&q=F07001")
+    response, payload = call(site, "GET", f"/api/{INPUTS}/preview?table=facilities&q=F07001")
     assert response.status == 200 and json.loads(payload)["total"] == 1
-    response, payload = call(site, "GET", "/api/inputs/57bf340df85d5a54/matrix?segment=P01")
+    response, payload = call(site, "GET", f"/api/{INPUTS}/matrix?segment=P01")
     assert response.status == 200 and len(json.loads(payload)["grid"]) == 11
     text = (server.ROOT / WALKTHROUGH).read_text(encoding="utf-8")
     response, payload = post(site, "/api/yaml", {"yaml": text})
