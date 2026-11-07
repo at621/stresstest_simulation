@@ -78,7 +78,7 @@ role or portfolio. It blocks with `MISSING_PARAMETER` on a coefficient written i
 ### A full run
 
 ```
-uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/5a296ffe0e198705 --scenarios baseline,adverse --variant core
 ```
 
 Runs need input set `57bf340df85d5a54` or later. Since 6 November 2026 the parameter set names each segment's models and matrix file (A42), and since 18 October 2026 the input contract carries `credit_status_date`. The engine blocks at R2 on older sets, and `stress rerun` of a run made on them blocks for the same reason. `57bf340df85d5a54` holds the data of `d62d0386f2c5256e` unchanged, and a run on it gives the same results.
@@ -91,10 +91,14 @@ Runs need input set `57bf340df85d5a54` or later. Since 6 November 2026 the param
 ### After changing the requirements or the parameter set
 
 1. Requirements changed: run `uv run python -m foundation.transcribe`. Check the diff of `docs/spec/`, then have the `change-reviewer` agent and the owner approve it (GOV-03).
-2. Parameter set or generator changed: run `uv run python -m foundation.synth` on the machine that built the current input set. The hash depends on the operating system and the CPU's BLAS kernel, and a rebuild elsewhere can give a different book, not only different bytes (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
+2. Parameter set, scenario library (`foundation/scenarios.yaml`) or generator changed: run `uv run python -m foundation.synth` on the machine that built the current input set. The hash depends on the operating system and the CPU's BLAS kernel, and a rebuild elsewhere can give a different book, not only different bytes (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
 3. Run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces` fails until the new input set is in `inputs/`. It runs on Windows only and passes only under the kernel that built the set, so CI cannot catch a missing rebuild.
 4. Compare the old and new results with `uv run stress compare --base runs/<old> --new runs/<new>` (version-change control). It prints the impairment differences and keeps the full report in `runs/comparisons/<old>__<new>/`: `summary.md`, the differences in impairment, stage stocks and coverage, PD and LGD, and `comparison.json`, which ties them to both runs. Sealed runs are write-once, so the report sits beside them; `--out` chooses another folder outside them.
 5. A new full input set needs a new small dataset too. Put its hash in `BOOKS["large"]` in `control_room/server.py`, run `uv run python control_room/small_set.py`, and put the hash that prints in `BOOKS["small"]`. Add the two replaced hashes to `RETIRED` in `control_room/test_small_set.py`, because old sets stay committed. Update both hashes and the sample's figures in A41 of [the assumptions](assumptions.md), the sample's hash in [Hosting on Heroku](#hosting-on-heroku), and both hashes and the figures in `README.md`. If a new run changes the memory peaks, update them in [Hosting on Heroku](#hosting-on-heroku) too. Then stage the new sets and run `uv run pytest control_room`: it fails until `BOOKS` and those documents name the new sets. The gate does not run it.
+
+### Adding a scenario to the input set
+
+A scenario that every run should be able to choose goes in `foundation/scenarios.yaml`: a lower-case identifier, a `label`, a `description`, and under `paths` every section 6.2 variable with every year, in that variable's units. `by_country` gives one country its own path for a variable. The generator (O4) refuses an entry that misses a variable, a year, a label or a description, or that gives a value that is not a finite number. Then rebuild as above, steps 2 to 5. The section 6.2 scenarios take only their label and description from that file. A scenario for one experiment needs no new input set: add it on the control room's page, or under `scenarios:` in a run specification, where it starts from an existing scenario (`inherits`) and changes only the values it names.
 
 ### Gates
 
@@ -151,11 +155,11 @@ Heroku hosts the control room as a web app. `Procfile` starts it. `.python-versi
    git push heroku <branch>:main
    ```
 
-3. Open `https://<app-name>.herokuapp.com`. Start a run, and check that its headline matches a local run of `inputs/ffd95cf12192d960`.
+3. Open `https://<app-name>.herokuapp.com`. Start a run, and check that its headline matches a local run of `inputs/d86a3b43d8c3bda3`.
 
 **No sign-in.** Anyone with the address can use the page: start runs, add files, approve input sets and read results.
 
-**The hosted dataset.** Heroku deploys every committed input set, and the same setting as on this machine chooses the book, so the app starts on `small`, `inputs/ffd95cf12192d960`. It stays there unless the app has a `DATASET` config var. To change it, resize the dyno first if you are going to `large`, then set the var:
+**The hosted dataset.** Heroku deploys every committed input set, and the same setting as on this machine chooses the book, so the app starts on `small`, `inputs/d86a3b43d8c3bda3`. It stays there unless the app has a `DATASET` config var. To change it, resize the dyno first if you are going to `large`, then set the var:
 
 ```
 heroku ps:type performance-m
@@ -166,13 +170,13 @@ Setting or removing the var restarts the app, which clears its files. `heroku co
 
 The small dataset holds a tenth of the facilities in each portfolio and opening stage of the full book. `uv run python control_room/small_set.py` rebuilds it, and A41 in [the assumptions](assumptions.md) records how close it comes. It cannot meet the requirements' exact targets.
 
-**Dyno size.** Measured on Linux on 1 November 2026, the page and the engine together peak at about 0.55 GB on `small` and 1.7 GB on `large`, in a run with two scenarios. More scenarios need more. Going over quota logs an R14 warning and may slow the run. Heroku stops the dyno only at the limit in the third column.
+**Dyno size.** Measured on Linux on 1 November 2026, the page and the engine together peak at about 0.55 GB on `small` and 1.7 GB on `large`, in a run with two scenarios. More scenarios need more, and the page starts every scenario of the Scenarios file in the run, five today. The engine alone peaks at 271 MB with two and 482 MB with five on `small`, and at 1,189 MB and 2,623 MB on `large` (Windows, 7 November 2026). Adding that increase to the Linux figures gives about 0.75 GB and 3.1 GB for five scenarios; these are estimates, not measured on Heroku. Going over quota logs an R14 warning and may slow the run. Heroku stops the dyno only at the limit in the third column.
 
 | Dyno | Memory quota | Stopped at | `small` | `large` |
 |---|---:|---:|---|---|
-| eco, basic, standard-1x | 0.5 GB | 1 GB | Fits, slightly over quota | Is stopped partway |
-| standard-2x | 1 GB | 2 GB | Fits | Is over quota and close to being stopped |
-| performance-m | 2.5 GB | 5 GB | Fits | Fits |
+| eco, basic, standard-1x | 0.5 GB | 1 GB | Fits, over quota; with five scenarios further over, near 0.75 GB | Is stopped partway |
+| standard-2x | 1 GB | 2 GB | Fits | Is over quota and close to being stopped; with five scenarios, is stopped partway |
+| performance-m | 2.5 GB | 5 GB | Fits | Fits; with five scenarios, over quota but not stopped |
 
 **What does not last.** Heroku clears the app's files at every deploy, config change and restart, and at least once a day. A restart also stops any run in progress. These all go with the files:
 

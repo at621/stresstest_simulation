@@ -16,6 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     b = sub.add_parser("build", help="build one hashed input set (default)")
     b.add_argument("--spec-dir", type=Path, default=Path("docs/spec"))
     b.add_argument("--params", type=Path, default=Path("foundation/parameter_set.yaml"))
+    b.add_argument("--scenarios", type=Path, default=Path("foundation/scenarios.yaml"))
     b.add_argument("--out", type=Path, default=Path("inputs"))
     b.add_argument("--seed", type=int, default=SEED)
     a = sub.add_parser("approve", help="record the owner's approval of an input set")
@@ -33,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         approve(args.folder, args.approver, date.today().isoformat())
         print(f"approved {args.folder.as_posix()} by {args.approver}")
         return 0
-    path = build(args.spec_dir, args.params, args.out, args.seed)
+    path = build(args.spec_dir, args.params, args.out, args.seed, args.scenarios)
     print(f"input set {path.as_posix()}")
     return 0
 

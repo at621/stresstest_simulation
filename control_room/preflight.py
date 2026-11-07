@@ -15,6 +15,7 @@ import re
 import tempfile
 import threading
 import traceback
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 
@@ -43,7 +44,7 @@ from stress.contracts.run import RunConfig
 from stress.contracts.specification import validate_document
 from stress.contracts.status import STATUS_SUFFIX
 from stress.ingest.specification import SpecificationLoader
-from stress.models import of_portfolio, resolve
+from stress.models import Economy, Model, of_portfolio, resolve
 from stress.projection.dynamic import validate_assumptions
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
@@ -142,7 +143,8 @@ def base_of(folder: Path) -> dict:
                      for name, v in ps["variants"].items()],
         "segments": segments, "portfolios": portfolios, "model_choices": choices,
         "facilities": len(fac), "gca": float(fac["gca"].sum()) / MILLION,
-        "scenarios": [{"id": s["id"], "label": s["label"]} for s in paths["scenarios"]],
+        "scenarios": [{"id": s["id"], "label": s["label"], "description": s.get("description")}
+                      for s in paths["scenarios"]],
         "variables": [{"id": v["id"], "label": v["label"], "unit": v["unit"], "value_type": v["value_type"]}
                       for v in paths["variables"]],
         "countries": sorted(values["country"].unique()), "years": sorted(int(y) for y in values["year"].unique()),
@@ -158,7 +160,38 @@ def model_view(name, role: str, portfolio: str) -> dict:
     except BlockingError as exc:
         return {"name": name, "problem": exc.message}
     return {"name": model.name, "location": model.location, "sensitivity": model.sensitivity,
-            "description": model.description}
+            "description": model.description, "reads": reads_of(model)}
+
+
+class _Probe(Mapping):
+    """Scenario values that answer every key with zero and note which variables are asked for."""
+
+    def __init__(self):
+        self.read: list[str] = []
+
+    def __getitem__(self, key):
+        if key[1] not in self.read:
+            self.read.append(key[1])
+        return (0.0, "supplied")
+
+    def __iter__(self):
+        return iter(())
+
+    def __len__(self):
+        return 0
+
+
+def reads_of(model: Model) -> list[str] | None:
+    """The scenario variables a model asks for, in the order it asks: the link from the paths to the
+    model, taken from its function rather than from its description."""
+    probe = _Probe()
+    try:
+        model.function(Economy("probe", "probe", 2027, probe))
+    except BlockingError:
+        pass  # a model that needs no variable, such as a supplied score, has read none
+    except Exception:  # noqa: BLE001 - a model that cannot take the probe is not known; the set still opens
+        return None
+    return probe.read
 
 
 def matrix_files(folder: Path) -> dict[str, str]:

@@ -202,7 +202,7 @@ SECTIONS = {  # the required sections first, in the contract's order; the rest t
         "release": "Its release.",
         "revision": "Its revision.",
         "status": "Its status.",
-        "scenarios": "The list of scenarios, each with id, label, status and source_type.",
+        "scenarios": "The list of scenarios, each with id, label, status and source_type, and a description the page shows.",
         "variables": "The list of macro variables, each with id, label, unit and value_type.",
         "values": f"One entry per scenario, variable, country and year, with {_words(SCENARIO_VALUE_FIELDS)}.",
         "starting_values": "The starting levels, each with variable, country, year, value, unit and value_type.",

@@ -1,0 +1,56 @@
+# O4 input (foundation.synth): what every scenario is, and the synthetic scenarios beyond the two
+# of requirements section 6.2. O4 writes the section 6.2 paths from docs/spec/scenarios.yaml and
+# adds the paths below; a section 6.2 scenario takes only its label and description from here.
+# Illustrative synthetic paths: not estimates and not official scenarios (SCN-04).
+# Values are in the units of the section 6.2 variables (percent) and hold for every country;
+# `by_country` gives one country its own path for a variable.
+source: foundation/scenarios.yaml (illustrative synthetic paths)
+release: '2026-11-06'
+scenarios:
+  baseline:
+    label: Baseline
+    description: >-
+      Steady growth of 1.5% to 1.8% a year, unemployment easing from 6.0% to 5.7%,
+      property prices up 2% to 3% a year and the reference rate drifting down from 2.5%.
+  adverse:
+    label: Adverse
+    description: >-
+      A recession: GDP falls 3.0% in 2027 and 2.0% in 2028, unemployment rises to 9.2%,
+      house prices fall 23% and CRE prices 29% over three years, and the reference rate
+      peaks at 4.5%.
+  severe_adverse:
+    label: Severe adverse
+    description: >-
+      A deeper and longer recession: GDP falls 5.0% in 2027 and 3.5% in 2028, unemployment
+      rises to 11.0%, house prices fall 31% and CRE prices 38% over three years, and the
+      reference rate peaks at 5.0%.
+    paths:
+      gdp_growth: {2027: -5.0, 2028: -3.5, 2029: -0.5}
+      unemployment: {2027: 8.5, 2028: 10.5, 2029: 11.0}
+      residential_price_change: {2027: -18.0, 2028: -12.0, 2029: -5.0}
+      cre_price_change: {2027: -22.0, 2028: -15.0, 2029: -7.0}
+      reference_rate: {2027: 4.5, 2028: 5.0, 2029: 4.0}
+  rates_shock:
+    label: Rates shock
+    description: >-
+      Persistent inflation pushes the reference rate to 6.5% in 2028 while growth stalls:
+      GDP falls 1.0% in 2027, unemployment rises to 7.8%, house prices fall 12% and CRE
+      prices 20% over three years.
+    paths:
+      gdp_growth: {2027: -1.0, 2028: -0.5, 2029: 0.5}
+      unemployment: {2027: 6.8, 2028: 7.6, 2029: 7.8}
+      residential_price_change: {2027: -6.0, 2028: -5.0, 2029: -2.0}
+      cre_price_change: {2027: -10.0, 2028: -8.0, 2029: -3.0}
+      reference_rate: {2027: 6.0, 2028: 6.5, 2029: 5.5}
+  property_crash:
+    label: Property crash
+    description: >-
+      Property prices collapse while the wider economy holds up: house prices fall 35% and
+      CRE prices 43% over three years, GDP dips 1.5% in 2027, unemployment peaks at 7.4%
+      and the reference rate follows the baseline.
+    paths:
+      gdp_growth: {2027: -1.5, 2028: -0.5, 2029: 0.8}
+      unemployment: {2027: 6.8, 2028: 7.4, 2029: 7.3}
+      residential_price_change: {2027: -20.0, 2028: -15.0, 2029: -5.0}
+      cre_price_change: {2027: -25.0, 2028: -18.0, 2029: -8.0}
+      reference_rate: {2027: 2.5, 2028: 2.3, 2029: 2.2}

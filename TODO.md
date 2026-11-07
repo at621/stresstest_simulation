@@ -30,7 +30,7 @@ The baseline no longer releases provisions in 2027. Most of the change comes fro
   - PD-06 and a note to PD-02 (C10);
   - MIG-07's last sentence, SYN-PAR-08 and AT-48 (C11);
   - the requirements §15 note on the draft's paragraph references (C8).
-- Approve input set `57bf340df85d5a54`, which is PENDING_OWNER_APPROVAL. It holds the data of `d62d0386f2c5256e` with the parameter set in its new form (A42).
+- Approve input set `5a296ffe0e198705`, which is PENDING_OWNER_APPROVAL. It holds the data of `d62d0386f2c5256e` with the parameter set in its new form (A42), and the three synthetic scenarios of `foundation/scenarios.yaml` beside the section 6.2 ones (A43). Approve or replace those paths and descriptions.
 - Calibrate each segment's LGD and prepayment model in `src/stress/models/`, which start as copies of its PD model's drivers (A42).
 - Decide the five settings in A30 that Claude Code proposed and the owner has not approved.
 - Not built yet:

@@ -1,6 +1,6 @@
 # Stress engine
 
-Deterministic credit stress-test engine for EBA 2027 preparation. It projects stage migration, PD, LGD, EAD and provisions for a synthetic €11bn EUR, amortised-cost book over 2027–2029, in a baseline and an adverse scenario.
+Deterministic credit stress-test engine for EBA 2027 preparation. It projects stage migration, PD, LGD, EAD and provisions for a synthetic €11bn EUR, amortised-cost book over 2027–2029, in a baseline and an adverse scenario. Three further synthetic scenarios (severe adverse, rates shock and property crash) sit beside them in the input set, and any can be added to a run.
 
 **Goals:**
 
@@ -163,7 +163,7 @@ instead of the design's default (see [conflicts C14 to C16](docs/assumptions.md)
 These features do not enable regulatory submissions; the readiness report records the open gates.
 
 ```
-uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/5a296ffe0e198705 --scenarios baseline,adverse --variant core
 uv run stress report --run runs/<run_id>      # print results/reports/summary.md
 uv run stress rerun --run runs/<run_id>       # rerun from the manifest; output hashes must match
 uv run stress compare --base runs/<a> --new runs/<b>
@@ -196,10 +196,12 @@ This opens <http://127.0.0.1:8770>.
 
 The page opens on one of two datasets, and the setting is `small`:
 
-| Setting | Input set | Holds | A run needs | Use it for |
+| Setting | Input set | Holds | A run of two scenarios needs | Use it for |
 |---|---|---|---:|---|
-| `small` (default) | `inputs/ffd95cf12192d960` | 1,002 facilities, about €1.2bn of GCA | about 0.55 GB | Trying the page. Its results cannot stand in for the full book's. |
-| `large` | `inputs/57bf340df85d5a54` | 10,000 facilities, €11bn of GCA | about 1.7 GB | The full book the requirements describe. |
+| `small` (default) | `inputs/d86a3b43d8c3bda3` | 1,002 facilities, about €1.2bn of GCA | about 0.55 GB | Trying the page. Its results cannot stand in for the full book's. |
+| `large` | `inputs/5a296ffe0e198705` | 10,000 facilities, €11bn of GCA | about 1.7 GB | The full book the requirements describe. |
+
+The page starts every scenario of the Scenarios file in the run, five today. Five need about 1.8 times the memory of two on `small` and 2.2 times on `large`, measured for the engine alone on Windows (271 MB to 482 MB, and 1,189 MB to 2,623 MB). Untick the scenarios a run does not need.
 
 To change it, pass `--dataset`, or set the `DATASET` environment variable, which `--dataset` overrides:
 
@@ -236,7 +238,7 @@ heroku config:set DATASET=large
 
 Two limits shape how to use it:
 
-- **Memory:** a `small` run with two scenarios needs about 0.55 GB, slightly over a Basic dyno's 0.5 GB quota but well under the 1 GB where Heroku stops it. A `large` run needs about 1.7 GB, so Heroku stops it on a Basic dyno.
+- **Memory:** a `small` run with two scenarios needs about 0.55 GB, slightly over a Basic dyno's 0.5 GB quota but well under the 1 GB where Heroku stops it. With the five scenarios the page starts with, a `small` run is further over that quota: about 0.75 GB, estimated from the engine's own increase and not measured on Heroku. A `large` run needs about 1.7 GB, so Heroku stops it on a Basic dyno.
 - **Files do not last:** Heroku clears the app's files at every deploy and restart, and at least once a day. Runs and anything added on the page go with them, so download the workbook to keep a result.
 
 Use synthetic data only. See [Hosting on Heroku](docs/runbook.md#hosting-on-heroku) in the runbook.

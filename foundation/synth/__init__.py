@@ -8,7 +8,9 @@ O4: end-2026 allowances from the generator's own formula, frozen as opening_prov
 ``uv run python -m foundation.synth`` runs O2, O3 and O4 and writes one hashed input set.
 """
 
+import re
 from datetime import date
+from math import isfinite
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +22,8 @@ from foundation.synth.allowances import opening_allowances
 from foundation.synth.generate import Generator
 from foundation.synth.inputset import MATRIX_DIR, write_input_set
 
-GENERATOR_VERSION = "0.2.0"
+GENERATOR_VERSION = "0.3.0"
+SCENARIO_LIBRARY = Path(__file__).resolve().parents[1] / "scenarios.yaml"  # every scenario's description; those beyond section 6.2
 
 
 def _load(path: Path) -> dict:
@@ -38,11 +41,66 @@ def spec_inputs(spec_dir: Path) -> dict:
     }
 
 
-def scenario_document(scenarios: dict, spec_version: str) -> dict:
-    """The scenarios dataset: every section 6.2 value for every country, with its unit,
-    value type, source and SYNTHETIC status (SCN-01, SCN-02, SCN-04)."""
+def library_scenarios(scenarios: dict, library: dict) -> dict:
+    """The paths of the scenarios ``foundation/scenarios.yaml`` adds to section 6.2: for each
+    scenario and country, every variable with every year, the country's own path where it has one.
+    A section 6.2 scenario takes only its label and description from the library. Anything
+    incomplete, unknown or not a finite number is refused."""
+    entries = _mapping(library.get("scenarios"), "the scenarios of foundation/scenarios.yaml")
+    for name in scenarios["paths"]:
+        if name not in entries:
+            raise ValueError(f"foundation/scenarios.yaml does not describe the section 6.2 scenario {name}")
+    variables, years = set(scenarios["variables"]), list(scenarios["years"])
+    added = {}
+    for name, entry in entries.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_]*", name):
+            raise ValueError(f"scenario {name!r} needs a lower-case identifier")
+        _mapping(entry, f"scenario {name}")
+        section = name in scenarios["paths"]
+        extra = set(entry) - ({"label", "description"} if section else {"label", "description", "paths", "by_country"})
+        if extra:
+            reason = "a section 6.2 scenario takes its paths from section 6.2" if section else "unknown fields"
+            raise ValueError(f"scenario {name}: {reason}: {sorted(extra)}")
+        for field in ("label", "description"):
+            if not isinstance(entry.get(field), str) or not entry[field].strip():
+                raise ValueError(f"scenario {name} needs a {field}")
+        if section:
+            continue
+        if "paths" not in entry:
+            raise ValueError(f"scenario {name} needs paths")
+        common = _mapping(entry["paths"], f"scenario {name}: paths")
+        own = _mapping(entry.get("by_country", {}), f"scenario {name}: by_country")
+        if set(own) - set(scenarios["countries"]):
+            raise ValueError(f"scenario {name} names unknown countries {sorted(set(own) - set(scenarios['countries']))}")
+        added[name] = {}
+        for country in scenarios["countries"]:
+            given = {**common, **_mapping(own.get(country, {}), f"scenario {name}: by_country {country}")}
+            if set(given) != variables:
+                raise ValueError(f"scenario {name} in {country}: missing {sorted(variables - set(given))}, "
+                                 f"unknown {sorted(set(given) - variables)}")
+            for var, path in given.items():
+                if set(_mapping(path, f"scenario {name}: {var} in {country}")) != set(years):
+                    raise ValueError(f"scenario {name}: {var} in {country} needs the years {years}")
+                for year, value in path.items():
+                    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+                        raise ValueError(f"scenario {name}: {var} in {country} {year} is {value!r}, not a finite number")
+            added[name][country] = given
+    return added
+
+
+def _mapping(value, where: str) -> dict:
+    if not isinstance(value, dict):
+        raise TypeError(f"{where} must be a mapping")
+    return value
+
+
+def scenario_document(scenarios: dict, spec_version: str, library: dict) -> dict:
+    """The scenarios dataset: every section 6.2 value for every country, then the values of the
+    scenarios the library adds, each with its unit, value type, source and SYNTHETIC status, and
+    every scenario with its label and description (SCN-01, SCN-02, SCN-04)."""
     source = f"requirements v{spec_version} section 6.2 (illustrative common paths)"
     release = "2026-10-17"
+    added = library_scenarios(scenarios, library)
     values = []
     for scenario, variables in scenarios["paths"].items():
         for var, path in variables.items():
@@ -55,6 +113,18 @@ def scenario_document(scenarios: dict, spec_version: str) -> dict:
                         "value_type": meta["value_type"], "source": source, "release": release,
                         "completeness": "complete", "status": scenarios["status"],
                     })
+    for scenario, countries in added.items():
+        for var, meta in scenarios["variables"].items():
+            for country in scenarios["countries"]:
+                path = countries[country][var]
+                for year in sorted(path):
+                    values.append({
+                        "scenario": scenario, "variable": var, "country": country, "year": int(year),
+                        "value": float(path[year]), "unit": meta["unit"],
+                        "value_type": meta["value_type"], "source": library["source"],
+                        "release": library["release"], "completeness": "complete",
+                        "status": scenarios["status"],
+                    })
     starting = [
         {"variable": var, "country": country, "year": scenarios["starting_year"],
          "value": float(v["value"]), "unit": v["unit"], "value_type": v["value_type"]}
@@ -62,14 +132,15 @@ def scenario_document(scenarios: dict, spec_version: str) -> dict:
     ]
     return {
         "scenario_set_id": f"SYN-SCN-{spec_version}",
-        "source": source,
-        "release": release,
-        "revision": 1,
+        "source": f"{source}; {library['source']}",
+        "release": library["release"],
+        "revision": 2,
         "status": scenarios["status"],
         "scenarios": [
-            {"id": s, "label": s.capitalize(), "status": scenarios["status"],
-             "source_type": scenarios["source_type"]}
-            for s in scenarios["paths"]
+            {"id": s, "label": library["scenarios"][s]["label"],
+             "description": " ".join(library["scenarios"][s]["description"].split()),
+             "status": scenarios["status"], "source_type": scenarios["source_type"]}
+            for s in [*scenarios["paths"], *added]
         ],
         "variables": [{"id": var, **meta} for var, meta in scenarios["variables"].items()],
         "starting_values": starting,
@@ -135,7 +206,8 @@ def segment_settings(param_doc: dict) -> dict:
             for portfolio, body in param_doc["portfolios"].items() for seg, settings in body["segments"].items()}
 
 
-def build(spec_dir: Path, params_path: Path, out_root: Path, seed: int = cfg.SEED) -> Path:
+def build(spec_dir: Path, params_path: Path, out_root: Path, seed: int = cfg.SEED,
+          scenarios_path: Path = SCENARIO_LIBRARY) -> Path:
     spec = spec_inputs(spec_dir)
     params = _load(params_path)
     targets = spec["targets"]
@@ -168,7 +240,7 @@ def build(spec_dir: Path, params_path: Path, out_root: Path, seed: int = cfg.SEE
         "opening_provisions": provisions, "ttc_pd_matrix": o2.matrix_table(matrices, grades),
     }
     documents = {
-        "scenarios": scenario_document(spec["scenarios"], targets["source"]["version"]),
+        "scenarios": scenario_document(spec["scenarios"], targets["source"]["version"], _load(scenarios_path)),
         "parameter_set": param_doc,
     }
     meta = {

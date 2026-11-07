@@ -73,7 +73,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = nb.ROOT
 PAGE = HERE / "index.html"
 SPECS = HERE / "specifications"  # the room's own setups, saved as the engine reads them
-BOOKS = {"small": "ffd95cf12192d960", "large": "57bf340df85d5a54"}  # docs/assumptions.md A41
+BOOKS = {"small": "d86a3b43d8c3bda3", "large": "5a296ffe0e198705"}  # docs/assumptions.md A41
 DATASET = "small"  # the book the page opens on, unless --dataset or the DATASET environment variable says otherwise
 PAGE_POLICY = ("default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; "
                "script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'")

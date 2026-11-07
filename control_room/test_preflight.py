@@ -29,9 +29,10 @@ import server
 from stress import cli, ingest, validate
 from stress.contracts.errors import BlockingError
 from stress.contracts.inputs import DATASETS, FACILITIES
+from stress.models import Model, Score
 
 nb = server.nb
-SOURCE = server.ROOT / "inputs" / "57bf340df85d5a54"
+SOURCE = server.ROOT / "inputs" / server.BOOKS["large"]
 OLDER = server.ROOT / "inputs" / "514ed0e86e3dc760"
 EXAMPLES = sorted(path for folder in (server.ROOT / "docs" / "examples", server.ROOT / "docs" / "run-workflow")
                   for path in folder.glob("*.yaml")
@@ -110,7 +111,7 @@ def test_the_files_of_a_set_are_reported_as_they_stand(copy_of_set):
     assert rows["matrices/P06_CI.parquet"]["rows"] == 121 and rows["matrices/P06_CI.parquet"]["hash_ok"] is True
     assert rows["facilities.parquet"]["rows"] == 10_000 and rows["facilities.parquet"]["hash_ok"] is True
     assert rows["facilities.parquet"]["columns"] == 35 and rows["facilities.parquet"]["missing_columns"] == []
-    assert rows["scenarios.yaml"]["hash_ok"] is True and rows["manifest.json"]["detail"].startswith("input set 57bf")
+    assert rows["scenarios.yaml"]["hash_ok"] is True and rows["manifest.json"]["detail"].startswith(f"input set {SOURCE.name[:4]}")
     assert rows["approval.json"]["detail"].startswith("PENDING")
     older = {row["file"]: row for row in preflight.files_of(OLDER)}
     assert older["facilities.parquet"]["missing_columns"] == ["credit_status_date"]
@@ -180,12 +181,64 @@ def test_a_scenarios_file_with_five_scenarios_is_read_as_it_stands(copy_of_set):
     (copy_of_set / "scenarios.yaml").write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
     folder = reseal(copy_of_set)
     base = preflight.base_of(folder)
-    assert [s["id"] for s in base["scenarios"]] == ["baseline", "adverse", "mild", "severe", "stagflation"]
+    assert [s["id"] for s in base["scenarios"]][-3:] == ["mild", "severe", "stagflation"]
     config = server.RunConfig(inputs=str(folder), scenarios=tuple(s["id"] for s in base["scenarios"]), variant="core")
     result = preflight.dry_run(config)
     assert result["verdict"] == "ready", result["blocked"]
     assert {z["scenario"] for z in result["z"]} == set(config.scenarios)
-    assert len(result["z"]) == 7 * 3 * 5 * 3
+    assert len(result["z"]) == 7 * 3 * len(config.scenarios) * 3
+
+
+def test_each_scenario_carries_its_description_from_the_file():
+    doc = yaml.safe_load((SOURCE / "scenarios.yaml").read_text(encoding="utf-8"))
+    shown = [(s["id"], s["label"], s["description"]) for s in preflight.base_of(SOURCE)["scenarios"]]
+    assert shown == [(s["id"], s["label"], s["description"]) for s in doc["scenarios"]]
+    assert len(shown) > 2 and all(description for _, _, description in shown)
+
+
+def test_a_file_without_descriptions_is_still_read(copy_of_set):
+    """The engine does not need a description, so an older Scenarios file stays usable."""
+    doc = yaml.safe_load((copy_of_set / "scenarios.yaml").read_text(encoding="utf-8"))
+    for entry in doc["scenarios"]:
+        entry.pop("description")
+    (copy_of_set / "scenarios.yaml").write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    folder = reseal(copy_of_set)
+    assert all(s["description"] is None for s in preflight.base_of(folder)["scenarios"])
+    assert preflight.dry_run(config_of(folder))["verdict"] == "ready"
+
+
+def test_each_model_says_which_scenario_variables_it_reads():
+    """The link from a scenario to the models: read from the model functions themselves."""
+    base = preflight.base_of(SOURCE)
+    assert base["segments"]["P01"]["models"]["pd"]["reads"] == ["gdp_growth", "unemployment", "residential_price_change"]
+    variables = {v["id"] for v in base["variables"]}
+    used = [m for segment in base["segments"].values() for m in segment["models"].values()]
+    assert used and all(m["reads"] and set(m["reads"]) <= variables for m in used)
+    choices = {m["name"]: m["reads"] for p in base["model_choices"].values() for models in p.values() for m in models}
+    assert choices["p04.pd_external"] == [], "a supplied score reads no variable"
+
+
+def test_a_model_is_said_to_read_a_lagged_variable_once():
+    def lagged(economy):
+        economy.value("gdp_growth", 1)
+        economy.value("unemployment")
+        economy.value("gdp_growth")
+        return Score(0.0, ())
+    assert preflight.reads_of(Model("p01.lagged", "pd", lagged)) == ["gdp_growth", "unemployment"]
+
+
+def test_a_model_that_reads_no_variable_reads_nothing():
+    def supplied(economy):
+        raise BlockingError("R4", "MISSING_SCENARIO_VALUE", "missing supplied score")
+    assert preflight.reads_of(Model("p01.supplied", "pd", supplied)) == []
+
+
+def test_a_model_that_fails_on_the_probe_is_not_known_and_the_set_still_opens():
+    def fragile(economy):
+        return Score(1 / economy.value("gdp_growth"), ())
+    model = Model("p01.fragile", "pd", fragile)
+    assert preflight.reads_of(model) is None
+    assert preflight.model_view("p01.pd", "pd", "P01")["reads"], "a registered model still reads"
 
 
 # --- the engine's own verdict -----------------------------------------------------------------------------

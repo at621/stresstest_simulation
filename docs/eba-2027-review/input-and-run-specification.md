@@ -16,7 +16,7 @@ uv run stress run --specification docs/examples/configurable-projection.yaml
 Or use the original command without a specification:
 
 ```
-uv run stress run --inputs inputs/57bf340df85d5a54 --scenarios baseline,adverse --variant core
+uv run stress run --inputs inputs/5a296ffe0e198705 --scenarios baseline,adverse --variant core
 ```
 
 With `--specification`, calculation flags must be placed in `run`, not on the command line.

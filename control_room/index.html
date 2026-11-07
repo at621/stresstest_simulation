@@ -138,8 +138,13 @@ table.slots td.num { padding-top: 7px; }
 table.scenario-list td { padding: 5px 12px 5px 0; }
 table.scenario-list input.name { width: 210px; font: 500 13px var(--sans); }
 table.scenario-list input.narrative { width: 100%; min-width: 200px; }
-.scenario-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 8px; }
-.scenario-grid .scenario { margin-bottom: 0; }
+table.macro { width: auto; }
+table.macro td { border-bottom-color: transparent; }
+table.macro tr.last td, table.macro td[rowspan] { border-bottom: 1px solid var(--grid); }
+table.macro td[rowspan] { vertical-align: top; padding-top: 4px; }
+table.macro td.drives { color: var(--muted); max-width: 26ch; white-space: normal; }
+table.macro th.scen { vertical-align: bottom; }
+table.macro th.scen .inline { margin-top: 3px; }
 details.method { margin-top: 2px; border-top: 1px solid var(--grid); padding: 7px 0 5px; }
 details.method > summary { cursor: pointer; }
 details.method > summary b { font-weight: 600; font-size: 13px; }
@@ -199,7 +204,6 @@ details.file > .body { padding: 6px 0 4px; }
 
 /* scenario cards */
 .scenario { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
-.scenario.derived { border-color: var(--run-line); }
 .scenario .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 6px; }
 .scenario .head b { font-size: 13px; }
 .scenario .head .end { margin-left: auto; display: flex; gap: 6px; align-items: center; }
@@ -465,13 +469,6 @@ function renameScenario(from, typed) {
   if (colourSlots.has(from)) { colourSlots.set(to, colourSlots.get(from)); colourSlots.delete(from); }
   clearProblem();
   return true;
-}
-function setTerminal(name, method, yearsValue) {
-  DOC.terminal_policies ??= {};
-  if (method === 'base') delete DOC.terminal_policies[name];
-  else if (method === 'flat') DOC.terminal_policies[name] = { method: 'flat' };
-  else DOC.terminal_policies[name] = { method: 'reversion', years: yearsValue };
-  prune('terminal_policies');
 }
 function setSegment(name, field, value) {
   DOC.segments ??= {};
@@ -814,14 +811,8 @@ function scenarioRow(id, i, ids) {
   const required = id === ANCHOR();
   const include = el('input', { type: 'checkbox', checked: inRun().includes(id), disabled: required, title: required ? 'Every run needs this scenario' : null, 'aria-label': `include ${scenarioName(id)}`, onchange: e => { DOC.run.scenarios = ids.filter(x => (x === id ? e.target.checked : inRun().includes(x))); syncVolumes(); renderScenarios(); renderSettings(); check(); } });
   const name = own ? el('input', { class: 'name', value: scenarioName(id), 'data-name': id, 'aria-label': 'scenario name', onchange: e => { if (renameScenario(id, e.target.value)) { renderScenarios(); renderSettings(); check(); } else e.target.value = scenarioName(id); } }) : el('b', {}, scenarioName(id));
-  let origin = 'Scenarios file';
-  if (own?.inherits) {
-    origin = select(ids.slice(0, i).map(x => ({ value: x, label: `Based on ${scenarioName(x)}` })), own.inherits, e => { own.inherits = e.target.value; renderScenarios(); check(); });
-    origin.className = 'inline';
-    origin.setAttribute('aria-label', `what ${scenarioName(id)} is based on`);
-  } else if (own) origin = 'Its own values';
-  const note = own ? el('input', { class: 'narrative', value: own.narrative ?? '', placeholder: 'What this scenario is', 'aria-label': 'what this scenario is', onchange: e => { own.narrative = e.target.value; check(); } }) : null;
-  return row([el('td', {}, include), el('td', { class: 'nowrap' }, dot(id), ' ', name), el('td', {}, origin), el('td', {}, required ? null : terminalControl(id)), el('td', {}, note), el('td', {}, own ? el('button', { class: 'action', type: 'button', onclick: () => removeScenario(id) }, 'Remove') : null)]);
+  const about = own ? el('input', { class: 'narrative', value: own.narrative ?? '', placeholder: 'What this scenario is', 'aria-label': 'what this scenario is', onchange: e => { own.narrative = e.target.value; check(); } }) : aboutOf(id);
+  return row([el('td', {}, include), el('td', { class: 'nowrap' }, dot(id), ' ', name), el('td', {}, about), el('td', {}, own ? el('button', { class: 'action', type: 'button', onclick: () => removeScenario(id) }, 'Remove') : null)]);
 }
 
 function renderScenarios() {
@@ -832,10 +823,9 @@ function renderScenarios() {
     return;
   }
   $('#scenarios-tools').replaceChildren(el('button', { class: 'action', type: 'button', onclick: addScenario }, '+ Add a scenario'));
-  const editable = scenarioIds().filter(id => DOC.scenarios?.[id]?.inherits);
-  box.replaceChildren(...[
-    el('div', { class: 'scroll-x' }, table(['In run', 'Scenario', 'Comes from', 'After 2029', 'Description', ''], scenarioIds().map(scenarioRow), () => false, 'scenario-list')),
-    editable.length ? el('div', { class: 'scenario-grid', style: 'margin-top:8px' }, editable.map(id => scenarioCard(id, true))) : null].filter(Boolean));
+  box.replaceChildren(
+    el('div', { class: 'scroll-x' }, table(['In run', 'Scenario', 'Description', ''], scenarioIds().map(scenarioRow), () => false, 'scenario-list')),
+    ...macroPaths(true));
 }
 
 const paramsNote = () => { const n = Object.keys(DOC.segments || {}).length; return n ? `${plural(n, 'segment')} changed from the file` : 'as in the file'; };
@@ -862,7 +852,7 @@ function renderSettings() {
     BASE() ? el('details', { class: 'method', open: paramsOpen, ontoggle: e => { paramsOpen = e.target.open; } },
       el('summary', {}, el('b', {}, 'Segment parameters'), el('span', { class: 'quiet', id: 'params-note' }, paramsNote())),
       el('div', { class: 'scroll-x', style: 'margin-top:4px' }, segmentsTable(true)),
-      el('button', { class: 'link', type: 'button', style: 'margin-top:4px', onclick: () => { delete DOC.segments; renderSettings(); check(); } }, 'Back to the file\'s values')) : null,
+      el('button', { class: 'link', type: 'button', style: 'margin-top:4px', onclick: () => { delete DOC.segments; renderScenarios(); renderSettings(); check(); } }, 'Back to the file\'s values')) : null,
     BASE() ? yamlBox() : null];
   $('#settings-body').replaceChildren(...nodes.filter(Boolean));
 }
@@ -1035,7 +1025,7 @@ function renderContents() {
         el('div', { class: 'scroll-x' }, table(['Portfolio', 'Allowance on, EUR m', 'Provision off, EUR m'], s.opening_provisions.by_portfolio.map(p => row([p.portfolio, amount(p.allowance_on), amount(p.provision_off)], i => i >= 1)), i => i >= 1)),
         previewBox('opening_provisions'))),
     el('div', { class: 'card' }, el('h2', {}, 'scenarios.yaml ', el('span', { class: 'quiet', style: 'font-weight:400;font-size:12px' }, `${plural(scenarioIds().length, 'scenario')} · ${base.variables.length} variables · countries ${base.countries.join(', ')} · years ${years().join(', ')}`)),
-      el('div', { class: 'scenario-grid' }, scenarioIds().map(id => scenarioCard(id)))),
+      el('div', { class: 'scroll-x' }, table(['Scenario', 'Description'], scenarioIds().map(id => row([el('td', { class: 'nowrap' }, dot(id), ' ', el('b', {}, scenarioName(id))), el('td', {}, aboutOf(id))])))), ...macroPaths(false)),
     el('div', { class: 'card' }, el('h2', {}, 'parameter_set.yaml ', el('span', { class: 'quiet', style: 'font-weight:400;font-size:12px' }, `each segment names its three models and its TTC matrix file · ${count(s.ttc_pd_matrix.rows)} matrix cells in ${plural(Object.keys(s.ttc_pd_matrix.files).length, 'file')} under matrices/ · grades ${s.ttc_pd_matrix.grades.join(', ')}`))),
     ...portfolioCards(),
   ];
@@ -1057,42 +1047,64 @@ function numberInput(current, placeholder, onvalue, attrs = {}) {
   return input;
 }
 
-function terminalControl(name) {
-  const policy = DOC.terminal_policies?.[name];
-  const method = policy?.method ?? 'base';
-  const rule = BASE()?.terminal_rule;
-  const yearsInput = numberInput(policy?.years ?? null, rule?.reversion_years, v => setTerminal(name, 'reversion', v ?? rule?.reversion_years), { min: 1, step: 1, style: 'width:52px', title: 'years to revert to baseline after 2029' });
-  const pick = select([
-    { value: 'base', label: `Returns to baseline over ${rule?.reversion_years ?? '?'} years` },
-    { value: 'flat', label: 'Stays at its last Z' },
-    { value: 'reversion', label: 'Returns to baseline over' },
-  ], method, e => { setTerminal(name, e.target.value, policy?.years ?? rule?.reversion_years); renderScenarios(); check(); });
-  pick.className = 'inline';
-  pick.setAttribute('aria-label', `${scenarioName(name)} after 2029`);
-  return el('span', { style: 'display:inline-flex;gap:5px;align-items:center' }, pick, method === 'reversion' ? [yearsInput, el('span', { class: 'quiet small' }, 'years')] : null);
+const aboutOf = id => DOC.scenarios?.[id]?.narrative ?? BASE()?.scenarios.find(s => s.id === id)?.description ?? gone;
+
+function drives() {  // each variable, and the portfolios whose chosen PD, LGD or prepayment model reads it
+  const base = BASE(), reads = {}, unknown = new Set();
+  const names = [...Object.keys(base.segments), ...Object.keys(DOC.segments || {}).filter(n => !base.segments[n])];
+  for (const name of names) {
+    const held = DOC.segments?.[name] || {};
+    const from = base.segments[name] ?? base.segments[held.inherits] ?? {};  // its models are those of this segment's portfolio
+    const portfolio = held.portfolio ?? from.portfolio;
+    for (const [role, setting] of ROLES) {
+      const model = (base.model_choices[from.portfolio]?.[role] || []).find(m => m.name === (held[setting] ?? from[setting]));
+      if (model && model.reads === null) unknown.add(portfolio);
+      for (const variable of model?.reads || []) (reads[variable] ??= new Set()).add(portfolio);
+    }
+  }
+  return { reads, unknown };
 }
 
-function scenarioCard(name, editable = false) {
-  const spec = DOC.scenarios?.[name];
-  const isDerived = !!spec;
-  const head = [dot(name), el('b', {}, scenarioName(name))];
-  if (isDerived) head.push(el('span', { class: 'quiet small' }, spec.inherits ? `based on ${scenarioName(spec.inherits)}` : 'its own values'));
-  if (!inRun().includes(name)) head.push(el('span', { class: 'quiet small' }, 'not in this run'));
-  const foreign = (spec?.overrides || []).filter(o => o.country !== '*').length;
-  const explicit = spec && !spec.inherits && spec.values;
-  const grid = table([el('th', {}, 'Common path, all countries'), ...years().map(y => el('th', { class: 'cell' }, String(y)))],
-    (BASE()?.variables || []).map(v => row([el('td', {}, el('span', { title: v.id }, v.label), el('span', { class: 'quiet' }, ` · ${v.unit}`)),
-      ...years().map(y => {
-        const got = effective(name, v.id, y);
-        if (!editable || !isDerived || explicit) return el('td', { class: 'cell' }, got.value === null ? el('span', { class: 'quiet', title: 'differs by country' }, 'by country') : fixed(got.value));
-        const own = ownOverride(name, v.id, y);
-        const parent = effective(spec.inherits, v.id, y);
-        return el('td', { class: 'cell' }, numberInput(own ? inBaseUnit(own, v.id) : null, parent.value, value => setOverride(name, v.id, y, value),
-          { title: parent.value === null ? `${spec.inherits} differs by country here; a value you type applies to every country` : `${spec.inherits}: ${fixed(parent.value)} ${v.unit}` }));
-      })])));
-  return el('div', { class: `scenario${isDerived ? ' derived' : ''}` }, el('div', { class: 'head' }, head),
-    el('div', { class: 'scroll-x' }, grid),
-    editable && foreign ? el('p', { class: 'small quiet', style: 'margin-top:4px' }, `Also ${plural(foreign, 'country-specific value')}, editable in the YAML.`) : null);
+function drivesText(portfolios, unknown) {
+  const all = BASE().portfolios;
+  const named = set => all.filter(p => set.has(p.id)).map(p => p.name ?? p.id).join(', ');
+  const known = !portfolios?.size ? 'No model' : all.every(p => portfolios.has(p.id)) ? 'Every portfolio' : named(portfolios);
+  return unknown.size ? `${known}; not known for ${named(unknown)}` : known;
+}
+
+function startsFrom(id, i, ids) {
+  const own = DOC.scenarios?.[id];
+  if (!own?.inherits) return null;
+  const pick = select(ids.slice(0, i).map(x => ({ value: x, label: `from ${scenarioName(x)}` })), own.inherits, e => { own.inherits = e.target.value; renderScenarios(); check(); });
+  pick.className = 'inline';
+  pick.setAttribute('aria-label', `what ${scenarioName(id)} starts from`);
+  return el('div', {}, pick);
+}
+
+function pathCell(id, v, y, editable) {
+  const spec = DOC.scenarios?.[id];
+  if (!editable || !spec?.inherits) {
+    const got = effective(id, v.id, y);
+    return el('td', { class: 'cell' }, got.value === null ? el('span', { class: 'quiet', title: 'differs by country' }, 'by country') : fixed(got.value));
+  }
+  const own = ownOverride(id, v.id, y);
+  const parent = effective(spec.inherits, v.id, y);
+  return el('td', { class: 'cell' }, numberInput(own ? inBaseUnit(own, v.id) : null, parent.value, value => setOverride(id, v.id, y, value),
+    { 'aria-label': `${scenarioName(id)} ${v.label} ${y}`, title: parent.value === null ? `${scenarioName(spec.inherits)} differs by country here; a value you type applies to every country` : `${scenarioName(spec.inherits)}: ${fixed(parent.value)} ${v.unit}` }));
+}
+
+function macroPaths(editable) {  // one column per scenario; a scenario you add is typed into its own column
+  const ids = scenarioIds(), ys = years(), { reads, unknown } = drives();
+  const head = el('tr', {}, el('th', {}, 'Macro path, all countries'), el('th', {}, 'Drives'), el('th', { class: 'cell' }, 'Year'),
+    ids.map((id, i) => el('th', { class: `cell scen${inRun().includes(id) ? '' : ' quiet'}` }, dot(id), ' ', scenarioName(id), editable ? startsFrom(id, i, ids) : null)));
+  const body = BASE().variables.flatMap(v => ys.map((y, k) => el('tr', { class: k === ys.length - 1 ? 'last' : null },
+    k ? null : [el('td', { rowSpan: ys.length }, el('span', { title: v.id }, v.label), el('span', { class: 'quiet' }, ` · ${v.unit}`)),
+      el('td', { rowSpan: ys.length, class: 'drives' }, drivesText(reads[v.id], unknown))],
+    el('td', { class: 'cell quiet' }, String(y)),
+    ids.map(id => pathCell(id, v, y, editable)))));
+  const foreign = ids.reduce((n, id) => n + (DOC.scenarios?.[id]?.overrides || []).filter(o => o.country !== '*').length, 0);
+  return [el('div', { class: 'scroll-x', style: 'margin-top:10px' }, el('table', { class: 'macro' }, el('thead', {}, head), el('tbody', {}, body))),
+    editable && foreign ? el('p', { class: 'small quiet', style: 'margin-top:4px' }, `Also ${plural(foreign, 'country-specific value')}, editable in the YAML.`) : null].filter(Boolean);
 }
 
 function segmentRow(name, base, isNew, editable) {
@@ -1106,7 +1118,7 @@ function segmentRow(name, base, isNew, editable) {
     const options = (BASE().model_choices[held.portfolio ?? base.portfolio]?.[role] || []).map(m => ({ value: m.name, label: m.name }));
     const current = held[setting] ?? base[setting] ?? '';
     if (!editable || options.length < 2) { cells.push(el('td', { class: 'nowrap' }, el('code', {}, current || gone))); continue; }
-    const pick = select(options, current, e => { setSegment(name, setting, e.target.value === base[setting] ? null : e.target.value); renderSettings(); check(); });
+    const pick = select(options, current, e => { setSegment(name, setting, e.target.value === base[setting] ? null : e.target.value); renderScenarios(); renderSettings(); check(); });
     pick.className = 'inline';
     pick.setAttribute('aria-label', `${name} ${label}`);
     cells.push(el('td', { class: 'nowrap' }, pick));
