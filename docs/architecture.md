@@ -87,11 +87,16 @@ Check the protection with [runbook.md](runbook.md) after any change to `.claude/
 
 ## 6. Open items
 
-v1 is complete. These items wait on the owner, and until they are settled the engine runs on the assumptions in [assumptions.md](assumptions.md). When one is settled, record the answer in the design or the requirements and remove it here.
+v1 is complete. These items wait on the owner, and until they are settled the engine runs on the assumptions in [assumptions.md](assumptions.md). When one is settled, record the answer in the design or the requirements and remove it here. This is the one list of what waits on the owner: [TODO.md](../TODO.md) holds the work that needs no decision.
 
 1. **Parameter values and oracle values** (requirements §1.5): proposed values are in `foundation/parameter_set.yaml` and await the owner. The AT-48, AT-51 and AT-52 numbers stay open. See [assumptions.md](assumptions.md) A2 and A10.
 2. **LGD-01 and LGD-04:** production recovery-model integration remains open (A12). The October 2026 preparation extension adds a separate synthetic single-date recovery diagnostic, without changing core LGD. Confirm the production model and its calibration (requirements §1.5).
-3. **PD-10 requirement text (C9):** the owner dropped the √(1−ρ) divisor of the PD-10 shift on 18 October 2026 (D13, A29), which also settles SYN-PAR-09 (A8, C2). PD-10's text still prescribes the divisor and calls Z = 0 the median year. The owner updates it (C9 proposes wording); O1 then reruns, and a new input set follows.
+3. **Requirement texts to amend.** The owner has decided each of these, but the requirement still says what it said before. `docs/spec/` is written only by O1, which retranscribes once the owner has amended the source and signed it off (GOV-03); the conflict named gives the proposed wording.
+   - PD-10 (C9): the owner dropped the √(1−ρ) divisor of the PD-10 shift on 18 October 2026 (D13, A29), which also settles SYN-PAR-09 (A8, C2). PD-10's text still prescribes the divisor and calls Z = 0 the median year. O1 then reruns, and a new input set follows.
+   - PD-06, and a note to PD-02 (C10): the part-year bucket is taken pro rata in the ECL.
+   - MIG-07's last sentence, SYN-PAR-08 and AT-48 (C11): the qualitative SICR triggers are used.
+   - SCN-08, LGD-10 and SYN-PAR-06 (C20): each segment has its own PD, LGD and prepayment model, with its coefficients in the model function.
+   - The requirements §15 note that the draft's paragraph references are unverified (C8): they were checked on 18 October 2026. Consider adding the draft's Box 1 to the citations of ECL-04 and ECL-10.
 4. **§8.7 opening performing LGD:** used as each segment's reference (mean) TTC LGD (A13). Confirm.
 5. **`inputs/bank/`:** protected and not in git. Delete it by hand, or keep it as the future place for real data (OPS-05).
 6. **Fail-closed hooks:** the terminal `claude` CLI is 2.1.263. After updating it to 2.1.295 or later, add `"onFailure": "block"` to both hooks so they fail closed (C7). A person then runs the protection check in [runbook.md](runbook.md), and every attempt must be blocked.
@@ -106,3 +111,11 @@ v1 is complete. These items wait on the owner, and until they are settled the en
 11. **Sector stress and calibration:** explicit NACE-based segment assignment and supplied sector drivers are available in the configurable extension (A38). Supply and validate sector paths, driver moments and Z calibration from data (A19); none are empirically estimated by this extension. Overrides are hash-bound and sealed as an experiment.
 12. **Unmet requirements with no decision:** REG-03, SCP-05, DAT-07, SYN-02, SYN-03, SCN-03, PD-07, LGD-11 and EAD-07, in the [traceability matrix](traceability/traceability-matrix.md). Accept each, or plan it.
 13. **Reproducing on another machine (A36, C18):** decide whether a rerun has to reproduce only on the same machine or within a tolerance, and whether to make `largest_remainder` tie-safe so that every system can compare its book with the committed set.
+14. **Assumptions proposed by Claude Code and not yet approved.** Approve or replace each one. Those with their own item above are left out here (A33 is item 10, A36 is item 13).
+    - A30: the five settings around the qualitative SICR triggers that the owner's decision of 18 October 2026 did not cover.
+    - A31: the LTV path and the average maturity in the reports.
+    - A32: the template replica.
+    - A34: how the traceability matrix links requirements, and that the authorisation of 30 October 2026 is not read as a local approval date.
+    - A35: the readings behind the published benchmarks.
+    - A43: the paths and descriptions of the three synthetic scenarios.
+    - C6: one opening horizon for both lifetime PDs of the SICR line, which the conflict asks the owner to confirm.

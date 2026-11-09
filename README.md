@@ -111,14 +111,16 @@ stress-engine/
 │   ├── transcribe/        O1
 │   ├── matrices/          O2 synthetic TTC PD matrices
 │   └── synth/             O3–O4 generator, opening allowances
-├── inputs/<hash>/         input set 7 datasets
+├── inputs/<hash>/         input set 6 datasets + matrices/, one per segment
 ├── runs/<run_id>/         config, data, results + manifest.json
 ├── src/stress/            PART 2 the engine
-│   ├── cli.py             stress run · stress report
+│   ├── cli.py             stress run · report · rerun · compare
 │   ├── contracts/         input schema, keys, value status
+│   ├── models/            each segment's PD, LGD and prepayment models,
+│   │                      one module per portfolio, closed registry
 │   ├── ingest/            load inputs, hash checks
 │   ├── validate/          scope, matrix and grade checks, routing
-│   ├── scenario/          indices, Z-score
+│   ├── scenario/          indices, each model's Z-score
 │   ├── cashflows/         contractual schedule
 │   ├── params/            matrix (TTC → PiT), pd, lgd,
 │   │                      prepay, ead, terminal, store
@@ -131,12 +133,14 @@ stress-engine/
 │   ├── unit/              one file per module, property tests
 │   ├── acceptance/        reads docs/spec/ oracles, one test per AT
 │   └── controls/          §12.2 rejections, no imports across parts
+├── notebooks/             start runs through the CLI and read sealed runs back
+├── control_room/          the page that takes a run through four steps
 ├── docs/                  code flow, repo rules, runbook
 │   └── spec/              locked requirements, targets, AT oracles
 └── archive/               people only Claude Code is blocked
 ```
 
-The folders marked locked are written only by the one-off code and the run. See [docs/architecture.md](docs/architecture.md) for how that is enforced.
+`docs/spec/`, `inputs/<hash>/` and `runs/<run_id>/` are locked: only the one-off code and the run write them. See [docs/architecture.md](docs/architecture.md) for how that is enforced.
 
 ## Setup
 
@@ -186,7 +190,7 @@ To rebuild the one-off material: `uv run python -m foundation.transcribe` (O1, `
 
 ## Control room
 
-The control room is one page that takes a run from its files to its results in four steps. Every action on it is an engine or one-off command, and every verdict is the engine's own.
+The control room is one page that takes a run from its files to its results in four steps. Every action on it is an engine or one-off command, and every verdict is the engine's own. The one exception is "Compare with…" on the outcomes step, which is the page's own subtraction of two runs' sealed figures.
 
 ```
 uv run python control_room/server.py
@@ -213,7 +217,7 @@ The setting belongs to the page. `stress run` names its input set with `--inputs
 
 | Step | What you do there |
 |---|---|
-| **1 Files and settings** | See the seven files a run needs and what each must contain, replace any of them, choose the scenarios and set the run's options. The engine's sanity checks run here without calculating anything. |
+| **1 Files and settings** | See the six files a run needs and what each must contain, replace any of them, choose the scenarios and set the run's options. The rating transition files, one per segment, come from the saved set. The engine's sanity checks run here without calculating anything. |
 | **2 Review the files** | View each table, rating transition matrix, scenario path and parameter. |
 | **3 Run** | See what will run, start it and follow its progress. |
 | **4 Outcomes** | Read the figures and charts, download the workbook, check that the run reproduces, and compare it with another run. |
