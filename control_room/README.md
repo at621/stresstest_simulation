@@ -1,6 +1,6 @@
 # Control room
 
-One page that takes a run through four steps. Every action on it is an engine or one-off command, and every verdict is the engine's own.
+One page that takes a run through four steps. Every action on it is an engine or one-off command, and every verdict on a setup or a run is the engine's own. The page does one sum itself: "Compare with…" in step 4 subtracts another run's four headline figures from this run's.
 
 ```
 uv run python control_room/server.py
@@ -28,13 +28,15 @@ The bar at the top stays in view. It shows the four steps, each as Passed or Not
 | **1 Files and settings** | The files the run needs, one row each: what the file holds, the file in use, its rows and size, and whether it fits. Add or replace any file with your computer's file dialog, or by dropping files on the card. "What this step expects" opens the guide: the rules every file follows, what happens to a file, and for each file its columns or sections, and which problems stop the run, stop it partway or leave a record out. Everything that changes a run is here: choose the scenarios, see their descriptions and macro paths side by side with the portfolios each variable drives, add your own and type their values, the balance sheet with its yearly volumes, the method choices, and each segment's settings and models: its asset correlation, Stage 2 multiple and prepayment rate, and for its PD, LGD and prepayment the model, chosen from those of its own portfolio. A model's coefficients are not edited here: they live in its function in `src/stress/models/`. The sanity checks then run without calculating, and the next step opens only when nothing stops them. |
 | **2 Review the files** | View only. Each table with its summary and a searchable row preview, the scenarios with their descriptions and macro paths, and one card per portfolio. For each segment the card shows its settings, its three models, each with its name, where its function lives, its sensitivity and its description as the function's docstring states it, and its rating transition matrix file. Then the Z of each segment, model, scenario and year. If something is wrong, go back to step 1. |
 | **3 Run** | What will run, in one list. Start, then the engine's progress and its log. The exact command is folded below the list. |
-| **4 Outcomes** | The run's figures, charts and workbook, a check that it reproduces, a comparison with another run, and every earlier run. "Run again with changes" loads the setup back into step 1. |
+| **4 Outcomes** | The run's figures, charts and workbook, a check that it reproduces, a comparison with another run, and every earlier run. The comparison is the difference between the two runs' cumulative impairment losses, first-year losses, stock of provisions and Stage 3 exposure, worked out on the page; `stress compare` in a terminal gives the engine's full difference report. "Run again with changes" loads the setup back into step 1. |
 
 ## Adding files by hand
 
 The engine reads only a frozen folder, `inputs/<hash>/`, and only the one-off step writes one. So a file added on the page waits in a temporary folder of this server, and is checked at once against the columns or sections its row needs. "Use these files" copies the added files and the saved files for the other rows together and runs `foundation.synth package`. If the contents match a saved set, that set comes back unchanged. Your originals and the saved sets are not touched.
 
 The file's row decides what it is, so a file can have any name. Files dropped on the card go to rows by name, and the page says which ones it could not place. Files wait until the server stops. The engine reads Parquet and YAML only, so a file in another format has to be converted first.
+
+A YAML file, or a setup pasted as YAML, may use aliases, but not to stand for more than it could hold written out: one whose aliases expand to more than 100,000 values, or more values than it has characters if that is larger, is refused before it is read. A few hundred bytes of nested aliases would otherwise expand to thousands of millions of values.
 
 Every row of the book the page opens on can be replaced. A set packaged here stays in use until the page is reloaded, when the page goes back to the setting's book. To reach it again, use "Load its setup" on one of its runs, or add its files again. Older sets the engine cannot read are not offered.
 
@@ -56,7 +58,7 @@ A plain setup runs as `stress run` with its options, on the `core` variant. Anyt
 
 The method choices are the readings of the draft recorded in `docs/assumptions.md` as C14 to C16, plus `--terminal-treatment`. Standard is the design's default.
 
-The sanity checks are the engine's own: `preflight.dry_run` runs R1 to R4 for real, in a temporary folder, and stops before R5. Nothing is calculated and nothing reaches `runs/`. "No errors observed" appears only when they pass with nothing left out. A stopped setup shows the engine's own message and cannot be started. Records the engine leaves out are listed with their reasons before the run.
+The sanity checks are the engine's own: `preflight.dry_run` runs R1 to R4 for real, in a temporary folder, and stops before R5. Nothing is calculated and nothing reaches `runs/`. "No errors observed" appears only when they pass with nothing left out. A stopped setup shows the engine's own message and cannot be started. Records the engine leaves out are listed before the run, one line per reason and detail, each with its own count. A setup that names no scenarios is checked, and shown, with the two the engine runs by default, baseline and adverse.
 
 The page does not compare the files with the requirements, because the small dataset differs from them by design. `preflight.differences` makes that comparison, using the measures and tolerances of AT-01, SYN-PAR-05 and section 6.2, and the tests hold the full book to it.
 
@@ -64,13 +66,16 @@ The page does not compare the files with the requirements, because the small dat
 
 - **A run is a `stress` command**, so it is an ordinary sealed folder under `runs/`, the same as one started in a terminal. Packaging and sign-off are the one-off steps, so an input set is written only by them.
 - **It changes no run.** The folder is outside the paths `code_version` hashes, so adding or editing it alters no run ID or rerun check.
-- **Only what the page offers runs.** The server checks the setup's shape and paths and rebuilds every command itself, so no text from the browser reaches a command line. A file name from the browser is only ever shown. The setup's contents are the engine's to judge, as they would be at R2. It starts one job at a time.
-- **It writes only its own files.** Saved setups go under `specifications/` here, named by one file name. Added files go to a temporary folder that goes when the server stops.
-- **No number is invented.** Every value comes from the files, a sealed run, `docs/spec/` or the engine's check.
+- **Only what the page offers runs.** The server checks the setup's shape and paths and rebuilds every command itself, so no text from the browser reaches a command line. A file name from the browser is only ever shown. The variant is one the input set holds, with flags and with a specification alike, because it names the run folder before the engine has judged anything. The rest of the setup's contents are the engine's to judge, as they would be at R2. It starts one job at a time.
+- **It writes only its own files.** A setup that needs a specification is written under `specifications/` here, named by one file name, when its run starts and not before: a start refused because a job is in progress writes nothing. Added files go to a temporary folder that goes when the server stops.
+- **No number is invented.** Every value comes from the files, a sealed run, `docs/spec/` or the engine's check. The differences "Compare with…" shows are the page's own subtraction of two sealed runs' figures.
+- **This machine's folders stay here.** An answer to the browser names no temporary folder of the server, and a fault in a sanity check sends its one-line message; the traceback goes to the server's own output.
 - **Closed folders stay closed.** Input sets are found by name, `inputs/<hash>/`, as in `nbtools.py`. A path in a setup is refused if it points into `archive/`, `inputs/bank/` or a tool cache.
 - **Local unless hosted.** It listens on `127.0.0.1` and refuses requests from any other host or site. The page loads nothing from the internet, and files go no further than this machine. Listening anywhere else takes `--host`; see [On Heroku](#on-heroku).
 
-After changing `server.py` or `preflight.py`, restart the server: it keeps its code in memory but reads the page fresh, and the page says so if the two have drifted apart.
+After changing `server.py` or `preflight.py`, restart the server: it keeps its code in memory but reads the page fresh. The page notices one such gap only, a server too old to have the sanity-check route, and then says to restart it. Any other difference between the two goes unnoticed.
+
+If the server restarts while a run is in progress, the page says that the server no longer follows the run, and stops showing it as in progress. Whether the run itself survived depends on what stopped the server. After Ctrl+C the engine carries on, and the run appears under Outcomes once it seals. When the whole machine or dyno restarts, the run is gone and its folder is listed as not finished. While the server does not answer at all, the page says so and keeps asking.
 
 ## On Heroku
 
@@ -80,7 +85,9 @@ After changing `server.py` or `preflight.py`, restart the server: it keeps its c
 - **https only.** A plain http request is redirected.
 - **Its own site only.** A request from another site is refused.
 
-The page keeps no record of who did what, and a sign-off's name is whatever was typed. One job at a time applies to everyone on the page.
+The page keeps no record of who did what, and a sign-off's name is whatever was typed. One job at a time applies to everyone on the page. So does the list of added files: the server holds one list, not one per visitor, so a file one visitor adds shows on every visitor's page, replaces a file another visitor added to the same row, and goes into whichever "Use these files" comes next. Two uploads to one row at the same moment each arrive whole, and the later one stays.
+
+A hosted page takes smaller files than a local one, because anyone with the address can send one: 64 MB for a table and 4 MB for a YAML file. A larger file is refused before it is read. The local page keeps its limit of 8 GB a file.
 
 Heroku gets both books and follows [the same setting](#small-or-large), so the app starts on `small`, because a run of the full book needs more memory than a small dyno has. `heroku config:set DATASET=large` moves it to the full book, which needs a larger dyno first.
 
@@ -91,7 +98,7 @@ The steps and limits are in [Hosting on Heroku](../docs/runbook.md#hosting-on-he
 | File | What it does |
 |---|---|
 | `server.py` | Holds added files, has the engine judge a setup, writes it as a specification, starts the engine and the one-off steps, reads sealed runs, serves the page. |
-| `preflight.py` | The files in words and each file's check, what a saved set holds, the dry run, the comparison with the requirements, and the setup as YAML and back. |
+| `preflight.py` | The files in words and each file's check, what a saved set holds, the dry run, the comparison with the requirements, the setup as YAML and back, and the reading of a YAML from outside within its limit. |
 | `guide.py` | The guide to step 1. Columns, allowed values and required sections come from the engine's contract, and each rule names the engine's reasons or block codes. A test fails if a new column, section, reason or block code has no place in it. The plain words still have to be read against the engine. |
 | `index.html` | The page: the bar and the four steps. Chart colours match `nbtools.py`. |
 | `small_set.py` | Cuts the large dataset to a tenth to make the small one, and has `foundation.synth package` freeze it. |

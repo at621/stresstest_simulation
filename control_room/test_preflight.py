@@ -14,6 +14,7 @@ import json
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -28,7 +29,7 @@ import server
 
 from stress import cli, ingest, validate
 from stress.contracts.errors import BlockingError
-from stress.contracts.inputs import DATASETS, FACILITIES
+from stress.contracts.inputs import DATASETS, FACILITIES, SCENARIOS
 from stress.models import Model, Score
 
 nb = server.nb
@@ -146,8 +147,10 @@ def test_a_prepared_folder_is_judged_before_it_is_packaged(tmp_path):
     assert not status["complete"] and not any(f["present"] for f in status["files"])
 
 
-def test_the_seven_files_are_named_and_described():
+def test_the_six_files_a_person_can_add_are_named_and_described():
+    """Six rows: the rating transitions, one file per segment, come from the saved set and have no row."""
     roles = preflight.file_roles()
+    assert len(roles) == 6 and "ttc_matrix" not in {r["name"] for r in roles}
     assert [r["file"] for r in roles] == [spec.filename for spec in DATASETS]
     assert all(r["label"] and r["holds"] for r in roles)
     assert {r["format"] for r in roles} == {"Parquet", "YAML"}
@@ -245,18 +248,37 @@ def test_a_model_that_fails_on_the_probe_is_not_known_and_the_set_still_opens():
 
 def test_the_committed_set_is_ready_and_matches_every_requirement():
     result = preflight.dry_run(config_of(SOURCE))
-    assert result["verdict"] == "ready" and result["reached"] == "R4" and result["blocked"] is None
+    assert result["verdict"] == "ready" and result["blocked"] is None and result["fault"] is None
     assert result["accepted"] == 10_000 and result["rejected"] == 0 and result["records"] == []
-    assert len(result["z"]) == 7 * 3 * 2 * 3 and sum(p["facilities"] for p in result["book"]) == 10_000
+    assert len(result["z"]) == 7 * 3 * 2 * 3
     gap = preflight.differences(SOURCE)
     assert gap["differing"] == [] and gap["unmeasured"] == [] and gap["compared"] > 100
 
 
-def test_a_dry_run_leaves_nothing_behind():
+def test_the_answer_of_a_dry_run_holds_what_the_page_reads_and_no_more():
+    """The page reads these and nothing else. The engine's log and a traceback name folders of the
+    machine, so neither is in the answer."""
+    assert set(preflight.dry_run(config_of(SOURCE))) == {"verdict", "blocked", "fault", "rejected", "records",
+                                                         "accepted", "z"}
+
+
+def test_a_dry_run_leaves_nothing_behind(tmp_path, monkeypatch):
+    """Its run folder is made in a temporary folder of its own, here one only this test uses, so that
+    another room checking at the same moment cannot be taken for a leftover."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    seen = []
+    opened = preflight.lineage.open_run
+
+    def watched(config, runs_dir, *rest):
+        seen.append(Path(runs_dir))
+        return opened(config, runs_dir, *rest)
+
+    monkeypatch.setattr(preflight.lineage, "open_run", watched)
     before = sorted(p.name for p in nb.RUNS_DIR.iterdir())
-    preflight.dry_run(config_of(SOURCE))
+    assert preflight.dry_run(config_of(SOURCE))["verdict"] == "ready"
+    assert len(seen) == 1 and seen[0].parent == tmp_path and seen[0].name.startswith("stress-preflight-")
+    assert list(tmp_path.iterdir()) == [], "the temporary folder went with the check"
     assert sorted(p.name for p in nb.RUNS_DIR.iterdir()) == before
-    assert not list(Path(tempfile.gettempdir()).glob("stress-preflight-*"))
 
 
 def test_a_derived_scenario_changes_the_z_the_engine_computes(tmp_path):
@@ -267,8 +289,8 @@ def test_a_derived_scenario_changes_the_z_the_engine_computes(tmp_path):
            "scenarios": {"deeper": {"inherits": "adverse", "narrative": "deeper", "overrides": [
                {"variable": "gdp_growth", "country": "*", "year": 2027, "value": -6.0, "unit": "percent", "value_type": "growth"}]}}}
     result = dry_run_of(doc, tmp_path)
-    assert result["verdict"] == "ready" and result["reached"] == "R4" and result["phases"][0] == "specification"
-    z = {(r["scenario"], r["year"]): r["mean"] for r in result["z"] if r["segment"] == "P01"}
+    assert result["verdict"] == "ready", result["blocked"]
+    z ={(r["scenario"], r["year"]): r["mean"] for r in result["z"] if r["segment"] == "P01"}
     assert z[("deeper", 2027)] < z[("adverse", 2027)] - 0.3
     assert z[("deeper", 2028)] == pytest.approx(z[("adverse", 2028)]), "only the overridden cell differs"
 
@@ -305,7 +327,7 @@ def test_a_defect_in_one_record_passes_the_requirements_and_blocks_the_engine(co
     folder = reseal(copy_of_set, totals=True)
     result = preflight.dry_run(config_of(folder))
     assert result["verdict"] == "blocked" and result["blocked"]["code"] == "DUPLICATE_COMMITMENT"
-    assert result["reached"] == "R3" and result["z"] is None
+    assert result["blocked"]["step"] == "R3" and result["z"] is None
     assert not differing(folder)
 
 
@@ -319,7 +341,30 @@ def test_a_wrong_amount_is_caught_by_both(copy_of_set):
     hit = {row["code"]: row for row in result["records"]}
     assert set(hit) == {"GCA_COMPONENTS_MISMATCH", "LINKED_RECORD_REJECTED"}
     assert hit["GCA_COMPONENTS_MISMATCH"]["sample"], "the page can name the record"
+    assert sum(row["records"] for row in result["records"]) == result["rejected"]
     assert "GCA" in differing(folder)
+
+
+def test_rejected_records_are_counted_for_each_reason_and_detail():
+    """One reason covers several rules. Each rule's detail is a line of its own with its own count and
+    its own records, so no detail is shown with the count of the whole reason."""
+    rows = pd.DataFrame({
+        "record_type": "facility", "record_id": ["F1", "F2", "F3", "F4"], "row": [1, 2, 3, 4], "step": "R3",
+        "reason_code": ["MISSING_FLAG", "MISSING_FLAG", "MISSING_FLAG", "INVALID_DPD"],
+        "detail": ["watchlist missing", "watchlist missing", "dpd missing", "dpd is negative"]})
+    lines = {(line["code"], line["detail"]): line for line in preflight._rejections(rows)}
+    assert set(lines) == {("MISSING_FLAG", "watchlist missing"), ("MISSING_FLAG", "dpd missing"),
+                          ("INVALID_DPD", "dpd is negative")}
+    assert lines["MISSING_FLAG", "watchlist missing"]["records"] == 2
+    assert lines["MISSING_FLAG", "watchlist missing"]["sample"] == ["F1", "F2"]
+    assert lines["MISSING_FLAG", "dpd missing"]["records"] == 1 and lines["MISSING_FLAG", "dpd missing"]["sample"] == ["F3"]
+    assert sum(line["records"] for line in lines.values()) == len(rows)
+
+
+def test_the_page_words_a_rejection_by_its_own_detail():
+    page = server.PAGE.read_text(encoding="utf-8")
+    listed = page[page.index("function verdictBox"):page.index("function renderVerdict")]
+    assert "r.detail ??" in listed and "details[0]" not in page
 
 
 def test_a_file_edited_by_hand_stops_at_its_hash(copy_of_set):
@@ -327,22 +372,24 @@ def test_a_file_edited_by_hand_stops_at_its_hash(copy_of_set):
     table.loc[0, "gca"] *= 2
     table.to_parquet(copy_of_set / "facilities.parquet")
     result = preflight.dry_run(config_of(copy_of_set))
-    assert result["blocked"]["code"] == "INPUT_HASH_MISMATCH" and result["reached"] == "R2"
+    assert result["blocked"]["code"] == "INPUT_HASH_MISMATCH" and result["blocked"]["step"] == "R2"
 
 
 def test_nothing_after_a_block_is_reported():
     result = preflight.dry_run(config_of(OLDER))
-    assert result["blocked"]["code"] == "MISSING_COLUMN" and result["reached"] == "R2"
-    assert result["accepted"] is None and result["z"] is None and result["book"] is None
+    assert result["blocked"]["code"] == "MISSING_COLUMN" and result["blocked"]["step"] == "R2"
+    assert result["accepted"] is None and result["z"] is None and result["rejected"] is None
 
 
-def test_a_fault_in_a_check_reads_as_a_fault_not_a_pass(monkeypatch):
+def test_a_fault_in_a_check_reads_as_a_fault_not_a_pass(monkeypatch, capsys):
     def broken(*_):
         raise RuntimeError("a bug")
 
     monkeypatch.setattr(validate, "validate_and_route", broken)
     result = preflight.dry_run(config_of(SOURCE))
-    assert result["verdict"] == "blocked" and "a bug" in result["fault"]["message"] and result["z"] is None
+    assert result["verdict"] == "blocked" and result["z"] is None
+    assert result["fault"] == {"message": "RuntimeError: a bug"}, "one line for the page, and no traceback"
+    assert "Traceback" in capsys.readouterr().err, "the traceback is for whoever runs the server"
 
 
 def test_the_dry_run_follows_the_pipeline():
@@ -441,3 +488,71 @@ def test_yaml_the_engine_would_refuse_is_refused_here(text, said):
     with pytest.raises(BlockingError) as caught:
         preflight.parse_yaml(text, None)
     assert said in caught.value.message
+
+
+# --- YAML from outside: aliases are read, and none may stand for more than a file could hold -----------------
+
+def nested_aliases(levels: int, width: int = 10) -> str:
+    """A list of `width` aliases to a list of `width` aliases, and so on: width ** levels values."""
+    lines = ["a0: &a0 [" + ", ".join(["x"] * width) + "]"]
+    lines += [f"a{n}: &a{n} [" + ", ".join([f"*a{n - 1}"] * width) + "]" for n in range(1, levels)]
+    return "\n".join(lines) + "\n"
+
+
+def merged_aliases(levels: int, width: int = 10) -> str:
+    """The same through merge keys, which the parser itself writes out while it reads."""
+    lines = ["a0: &a0 {k0: v}"]
+    lines += [f"a{n}: &a{n} {{<<: [" + ", ".join([f"*a{n - 1}"] * width) + f"], k{n}: v}}" for n in range(1, levels)]
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize("text", [nested_aliases(12), merged_aliases(7), "a: &a [*a, *a]\n", "[" * 5000 + "]" * 5000],
+                         ids=["nested aliases", "merge keys", "an alias to itself", "five thousand levels deep"])
+def test_a_yaml_that_expands_beyond_what_it_could_hold_is_refused_before_it_is_built(text):
+    """Twelve levels of ten are a million million values from six hundred bytes. The answer must come
+    at once: the count stops at the limit, long before the document is built or written out. The
+    merge keys stop at seven levels, because the parser itself writes those out: if this check were
+    ever lost, twelve would take the machine's memory with the test."""
+    assert len(text) < 20_000
+    began = time.perf_counter()
+    with pytest.raises(preflight.TooLarge):
+        preflight.load_yaml(text)
+    assert time.perf_counter() - began < 5
+
+
+def test_a_yaml_within_the_limit_is_read_as_yaml_reads_it_aliases_and_all():
+    text = "base: &base {a: 1, b: [1, 2]}\ncopy: *base\nmerged: {<<: *base, c: 3}\n"
+    assert preflight.load_yaml(text) == yaml.safe_load(text)
+    assert preflight.load_yaml(nested_aliases(4)) == yaml.safe_load(nested_aliases(4)), "ten thousand values pass"
+    assert preflight.load_yaml("") is None
+    for name in ("scenarios.yaml", "parameter_set.yaml"):
+        text = (SOURCE / name).read_text(encoding="utf-8")
+        assert preflight.load_yaml(text) == yaml.safe_load(text)
+
+
+def test_a_long_yaml_without_aliases_is_never_refused_for_its_length(monkeypatch):
+    """The limit grows with the text, so only what aliases add can pass it."""
+    monkeypatch.setattr(preflight, "YAML_VALUES", 10)
+    text = yaml.safe_dump({"values": [{"scenario": "baseline", "year": year, "value": 1.5} for year in range(200)]})
+    assert preflight.load_yaml(text) == yaml.safe_load(text)
+    with pytest.raises(preflight.TooLarge):
+        preflight.load_yaml(nested_aliases(3))
+
+
+def test_a_pasted_setup_with_runaway_aliases_is_refused_as_the_engine_words_a_refusal():
+    text = ("schema_version: 1\nstatus: SYNTHETIC\nsource: s\nversion: v\ninput_set_hash: h\n"
+            f"run: {{inputs: inputs/{SOURCE.name}}}\nreporting:\n"
+            + "".join(f"  {line}\n" for line in nested_aliases(12).splitlines()) + "additional_values: *a11\n")
+    with pytest.raises(BlockingError) as caught:
+        preflight.parse_yaml(text, None)
+    assert caught.value.code == "INVALID_SPECIFICATION" and "aliases expand" in caught.value.message
+
+
+def test_an_added_yaml_file_with_runaway_aliases_is_named_as_not_read(tmp_path):
+    doc = (SOURCE / "scenarios.yaml").read_text(encoding="utf-8")
+    path = tmp_path / "scenarios.yaml"
+    path.write_text(doc + nested_aliases(12), encoding="utf-8")
+    view = preflight.inspected(SCENARIOS, path)
+    assert "aliases expand" in view["problem"] and view["rows"] is None
+    path.write_text(doc + nested_aliases(2), encoding="utf-8")
+    assert preflight.inspected(SCENARIOS, path)["problem"] is None, "an alias as such is no fault"

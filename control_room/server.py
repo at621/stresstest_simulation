@@ -14,9 +14,10 @@ The page opens on the small or the large dataset, as --dataset or the DATASET en
 Every action is an engine or one-off command: `stress run`, `stress rerun`, `foundation.synth package`,
 `foundation.synth approve`. Files added on the page wait in a temporary folder until the files are
 packaged as inputs/<hash>/, so the input folders stay written by the one-off step alone. A setup a
-flag cannot say is written as a specification YAML under this folder's specifications/ and runs with
---specification. This server listens on the loopback address and answers only its own page. Given
-another --host it is a public site with no sign-in, and answers only over https, from its own site.
+flag cannot say is written as a specification YAML under this folder's specifications/ when its run
+starts, and runs with --specification. This server listens on the loopback address and answers only
+its own page. Given another --host it is a public site with no sign-in: it answers only over https,
+from its own site, and takes added files up to a fixed size only.
 """
 
 import argparse
@@ -24,7 +25,6 @@ import json
 import os
 import re
 import shutil
-import statistics
 import subprocess
 import sys
 import tempfile
@@ -88,6 +88,9 @@ RUN_FILES = {
 }
 
 REQUIRED_SCENARIO = "baseline"  # adverse reverts toward it; R4 blocks a run without it
+# What `stress run` runs when nothing says otherwise (cli.cmd_run). A setup that is silent runs these.
+ENGINE_SCENARIOS = ("baseline", "adverse")
+ENGINE_VARIANT = "core"
 READINGS = (  # the choices the draft leaves open; each default is the design's, docs/assumptions.md C14 to C16
     {"field": "terminal_treatment", "flag": "--terminal-treatment", "label": "After 2029",
      "help": "How the stress fades once the scenario years end.",
@@ -108,11 +111,14 @@ READINGS = (  # the choices the draft leaves open; each default is the design's,
 )
 SPEC_OF = {spec.name: spec for spec in DATASETS}
 
-HEADLINE = re.compile(r"(\S+): cumulative charge \S+ EUR ([\d,.]+)m")
+HEADLINE = re.compile(r"(\S+): cumulative charge \S+ EUR (-?[\d,.]+)m")  # a net release is a negative charge
 STEP_LINE = re.compile(r"stress\.(R\d+)\s+(.*)")
+OPENED_LINE = re.compile(r"stress\.R1\s+run (\S+) opened in ")  # R1 names the run folder as soon as it exists
 RUN_LINE = re.compile(r"(?:re)?run (\S+): [A-Z_]+$")
 PACKAGED_LINE = re.compile(r"input set (?:.*/)?([0-9a-f]{16})$")
 OUTCOME_LINE = re.compile(r"blocked at .*|reproduced: .*|NOT reproduced.*|input set .*|approved .*")
+# A block as the engine prints it: of a sealed run, or of a run that never got a folder. The page shows the words.
+BLOCKED_LINE = re.compile(r"(?:blocked at [^:]+:|stress\s+\[[^\]]+\]) [A-Z][A-Z0-9_]*: (.*)")
 RUN_ROUTE = re.compile(r"/api/runs/([^/]+)(?:/(report|summary|log))?")
 INPUT_ROUTE = re.compile(r"/api/inputs/([^/]+)(?:/(preview|matrix))?")
 FILE_ROUTE = re.compile(r"/api/files/([a-z_]+)")
@@ -122,6 +128,9 @@ APPROVER = re.compile(r"[\w][\w .@'-]{0,63}")
 INPUT_FOLDER = re.compile(r"inputs/[0-9a-f]{16}")
 BODY_LIMIT = 256 * 1024
 FILE_LIMIT = 8 * 1024 ** 3  # one added file; a local copy, so the limit only guards against a mistake
+# Hosted, anyone with the address can add a file, and the dyno holds it in memory to check it.
+HOSTED_TABLE_LIMIT = 64 * 1024 ** 2
+HOSTED_YAML_LIMIT = 4 * 1024 ** 2
 CHUNK = 1024 * 1024
 LOG_TAIL = 14
 # Ctrl+C reaches every process of a console. The engine gets its own group, so that stopping this
@@ -156,6 +165,42 @@ def closed(path: Path) -> bool:
     return bool(CLOSED & set(relative.parts)) or any(relative.is_relative_to(p) for p in CLOSED_PATHS)
 
 
+def _temp_paths() -> re.Pattern:
+    """The system's temporary folder, and a folder of this room inside it, as a message can write
+    either: with either slash, and doubled where the message quotes the path."""
+    slash = r"[\\/]+"
+    forms = set()
+    for root in {tempfile.gettempdir(), str(Path(tempfile.gettempdir()).resolve())}:
+        parts = [part.strip("\\/") for part in Path(root).parts]
+        lead = "" if parts[0] else slash  # a POSIX path starts at the root, a Windows one at its drive
+        forms.add(lead + slash.join(re.escape(part) for part in parts if part))
+    return re.compile(rf"(?<![\w.\\/-])(?:{'|'.join(sorted(forms))})(?:{slash}stress-[\w-]+)?", re.IGNORECASE)
+
+
+TEMP_PATHS = _temp_paths()
+
+
+def without_temp_paths(value):
+    """An answer on its way to the browser, with no temporary folder of this machine in any text of
+    it. Added files, sanity checks and packaging all work in one, and their messages name it."""
+    if isinstance(value, str):
+        return TEMP_PATHS.sub("(temporary folder)", value)
+    if isinstance(value, dict):
+        return {key: without_temp_paths(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [without_temp_paths(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return without_temp_paths(str(value))  # anything else goes out as its text
+
+
+def file_limit(name: str, hosted: bool) -> int:
+    """The largest file a row takes, in bytes."""
+    if not hosted:
+        return FILE_LIMIT
+    return HOSTED_TABLE_LIMIT if SPEC_OF.get(name) in TABLE_DATASETS else HOSTED_YAML_LIMIT
+
+
 # --- what is available ---------------------------------------------------------------------------
 
 def contract_gaps(folder: Path) -> list[str]:
@@ -187,9 +232,18 @@ def why_unusable(gaps: list[str]) -> str:
     return f"The {' and the '.join(parts)}, which the engine needs."
 
 
+def _text(value) -> str:
+    """An id or a label as the page lists it. A file can put anything there: a number that is none
+    (.nan) has no JSON form, and an alias can stand for a whole tree."""
+    if not isinstance(value, str):
+        raise TypeError(f"an id or a label is {type(value).__name__}, not text")
+    return value
+
+
 def input_inventory() -> list[dict]:
     """Every input set with what it holds and whether today's engine can read it."""
-    rows = nb.input_sets().to_dict("records")
+    rows = [{key: preflight.plain(value) for key, value in row.items()}
+            for row in nb.input_sets().to_dict("records")]
     for row in rows:
         folder = nb.INPUTS_DIR / row["inputs"].split("/")[1]
         manifest = folder / "manifest.json"
@@ -199,16 +253,19 @@ def input_inventory() -> list[dict]:
             cells = totals["by_portfolio_stage"].values()
             parameters = read_yaml(folder / "parameter_set.yaml")
             gaps = contract_gaps(folder)
-            row.update(
-                facilities=sum(c["count"] for c in cells), gca=sum(c["gca"] for c in cells) / nb.MILLION,
-                gaps=gaps, runnable=not gaps, why_not=why_unusable(gaps) if gaps else None,
-                scenarios=[{"id": s["id"], "label": s["label"]}
-                           for s in read_yaml(folder / "scenarios.yaml")["scenarios"]],
-                variants=[{"id": name, "label": spec["label"],
-                           "bullet": set(spec["repayment_profile"].values()) == {"bullet"}}
-                          for name, spec in parameters["variants"].items()])
+            held = {
+                "facilities": sum(c["count"] for c in cells), "gca": sum(c["gca"] for c in cells) / nb.MILLION,
+                "gaps": gaps, "runnable": not gaps, "why_not": why_unusable(gaps) if gaps else None,
+                "scenarios": [{"id": _text(s["id"]), "label": _text(s["label"])}
+                              for s in read_yaml(folder / "scenarios.yaml")["scenarios"]],
+                "variants": [{"id": _text(name), "label": _text(spec["label"]),
+                              "bullet": set(spec["repayment_profile"].values()) == {"bullet"}}
+                             for name, spec in parameters["variants"].items()]}
+            json.dumps(held, allow_nan=False)  # the state every visitor loads carries this line
+            row.update(held)
         except (OSError, KeyError, TypeError, ValueError, AttributeError, yaml.YAMLError) as exc:
-            # One unreadable set must not hide the others: it is listed, and it cannot be chosen.
+            # One unreadable set must not hide the others, or take the page down: it is listed, and
+            # it cannot be chosen.
             row.update(facilities=None, gca=None, gaps=[f"unreadable: {exc}"], runnable=False,
                        why_not=why_unusable(["unreadable"]), scenarios=[], variants=[])
     return rows
@@ -267,13 +324,6 @@ def list_runs(runs_dir: Path) -> list[dict]:
         return []
     folders = (p for p in runs_dir.iterdir() if p.is_dir() and p.name != COMPARISONS_DIR)
     return [_listed(path) for path in sorted(folders, key=lambda p: p.name, reverse=True)]
-
-
-def typical_seconds(runs: list[dict]) -> float | None:
-    """The median wall time of the latest sealed runs, to say how long a start takes."""
-    spans = [(datetime.fromisoformat(r["sealed_at"]) - datetime.fromisoformat(r["created_at"])).total_seconds()
-             for r in runs[:10] if r.get("sealed_at")]
-    return statistics.median(spans) if spans else None
 
 
 def replay_state(manifest: dict) -> dict:
@@ -386,10 +436,17 @@ def checked_document(form: dict, inputs: list[dict]) -> dict:
     run = doc["run"]
     if set(run) - RUN_FIELDS:
         raise Refused(f"unknown run settings {sorted(set(run) - RUN_FIELDS)}")
-    listed = {row["inputs"] for row in inputs}
+    listed = {row["inputs"]: row for row in inputs}
     folder = run.get("inputs")
     if not isinstance(folder, str) or not INPUT_FOLDER.fullmatch(folder) or folder not in listed:
         raise Refused(f"input set {folder!r} is not on offer")
+    # The variant names the run folder before the engine has judged anything, so on every path, with
+    # flags or with a specification, it is one the input set holds. A set that cannot be read offers
+    # the engine's default alone, so that the sanity checks still say what is wrong with it.
+    variants = {v["id"] for v in listed[folder]["variants"]} or {ENGINE_VARIANT}
+    variant = run.get("variant") or ENGINE_VARIANT
+    if not isinstance(variant, str) or variant not in variants:
+        raise Refused(f"variant {variant!r} is not on offer")
     if run.get("analysis"):
         checked_yaml(run["analysis"])
     for name in ("scenarios", "segments", "terminal_policies", "balance_sheet", "reporting"):
@@ -408,7 +465,7 @@ def run_arguments(doc: dict, inputs: list[dict]) -> list[str]:
     usable = {row["inputs"]: row for row in inputs if row["runnable"]}
     chosen = usable[_one_of(run.get("inputs"), usable, "input set")]
     variants = {v["id"]: v for v in chosen["variants"]}
-    variant = _one_of(run.get("variant") or "core", variants, "variant")
+    variant = _one_of(run.get("variant") or ENGINE_VARIANT, variants, "variant")
     known = [s["id"] for s in chosen["scenarios"]]
     scenarios = run.get("scenarios") or []
     if not isinstance(scenarios, list) or not scenarios:
@@ -437,16 +494,26 @@ def run_config(doc: dict) -> RunConfig:
     run = doc["run"]
     readings = {r["field"]: run.get(r["field"]) or r["default"] for r in READINGS}
     return RunConfig(inputs=str(ROOT / run["inputs"]), scenarios=tuple(run.get("scenarios") or []),
-                     variant=run.get("variant") or "core", balance_sheet=run.get("balance_sheet") or "static",
+                     variant=run.get("variant") or ENGINE_VARIANT, balance_sheet=run.get("balance_sheet") or "static",
                      analysis=str(ROOT / run["analysis"]) if run.get("analysis") else None, **readings)
 
 
-def specification_text(doc: dict, folder: Path) -> str:
-    """The YAML of a setup as a file in `folder` must state it."""
+def specification_config(path: Path) -> RunConfig:
+    """A run from a specification file as cli.cmd_run builds it: wherever the file is silent, the
+    engine's own defaults, so that a sanity check judges the run that Start would start."""
+    return RunConfig(inputs="", scenarios=ENGINE_SCENARIOS, variant=ENGINE_VARIANT, specification=str(path))
+
+
+def specification_text(doc: dict, folder: Path | None) -> str:
+    """The YAML of a setup as a file in `folder` must state it: its paths relative to that folder.
+    With no folder the paths are absolute, for a file that may sit on another drive than the
+    repository, as a sanity check's temporary copy can."""
+    def stated(value: str) -> str:
+        return (ROOT / value).as_posix() if folder is None else relative_to_folder(ROOT / value, folder)
+
     run = doc["run"]
-    analysis = relative_to_folder(ROOT / run["analysis"], folder) if run.get("analysis") else None
-    spec = preflight.specification_document(doc, relative_to_folder(ROOT / run["inputs"], folder), analysis)
-    return preflight.yaml_text(spec)
+    analysis = stated(run["analysis"]) if run.get("analysis") else None
+    return preflight.yaml_text(preflight.specification_document(doc, stated(run["inputs"]), analysis))
 
 
 def checked_name(name) -> str:
@@ -471,13 +538,15 @@ def save_specification(name: str, doc: dict) -> Path:
     return path
 
 
-def document_of_config(config: dict, input_set: str) -> dict:
-    """A sealed run's config.yaml as a setup: what a plain run was started with."""
-    run = {"inputs": f"inputs/{input_set}", "scenarios": list(config["scenarios"]), "variant": config["variant"],
-           "balance_sheet": config.get("balance_sheet", "static")}
+def document_of_config(config: dict, input_set_hash: str, name: str) -> dict:
+    """A sealed run's config.yaml as a setup: what a plain run was started with. Its heading is
+    filled in as the page fills in a new setup, so that it is whole once a change makes it a
+    specification: the engine reads none without a source, a version and its input set's hash."""
+    run = {"inputs": f"inputs/{input_set_hash[:16]}", "scenarios": list(config["scenarios"]),
+           "variant": config["variant"], "balance_sheet": config.get("balance_sheet", "static")}
     run.update({r["field"]: config.get(r["field"], r["default"]) for r in READINGS})
-    return {"schema_version": 1, "status": "SYNTHETIC", "source": "", "version": "", "input_set_hash": "",
-            "run": run}
+    return {"schema_version": 1, "status": "SYNTHETIC", "source": f"Control room, {datetime.now():%Y-%m-%d}",
+            "version": name, "input_set_hash": input_set_hash, "run": run}
 
 
 def setup_of(query: dict, runs_dir: Path) -> dict:
@@ -487,14 +556,14 @@ def setup_of(query: dict, runs_dir: Path) -> dict:
     if not RUN_NAME.fullmatch(run_id) or not folder.is_dir():
         raise Refused(f"no run {run_id}")
     manifest = read_manifest(folder)
-    input_set = manifest["input_set_hash"][:16]
+    name = f"setup-{run_id[:8]}-{run_id[9:13]}"
     sealed = folder / "data" / "specification.yaml"
     notes = []
     if sealed.is_file():
         doc = preflight.parse_yaml(sealed.read_text(encoding="utf-8"), None)
-        doc["run"]["inputs"] = f"inputs/{input_set}"
+        doc["run"]["inputs"] = f"inputs/{manifest['input_set_hash'][:16]}"
     else:
-        doc = document_of_config(manifest["config"], input_set)
+        doc = document_of_config(manifest["config"], manifest["input_set_hash"], name)
     if manifest["config"].get("analysis"):
         original = Path(manifest["config"]["analysis"])
         try:
@@ -502,7 +571,7 @@ def setup_of(query: dict, runs_dir: Path) -> dict:
         except Refused:
             doc["run"].pop("analysis", None)
             notes.append(f"its analysis package {from_root(original)} is no longer there, so it is left out")
-    return {"document": doc, "name": f"setup-{run_id[:8]}-{run_id[9:13]}", "from": run_id, "notes": notes}
+    return {"document": doc, "name": name, "from": run_id, "notes": notes}
 
 
 # --- starting a job ------------------------------------------------------------------------------
@@ -535,7 +604,7 @@ class Job:
                 self.detail = text.removeprefix("start: ") if text.startswith("start: ") else STEPS[code]
             if code not in self.reached:
                 self.reached.append(code)
-        named = RUN_LINE.match(line)
+        named = OPENED_LINE.match(line) or RUN_LINE.match(line)
         if named:
             self.run_id = named[1]
         packaged = PACKAGED_LINE.match(line)
@@ -557,12 +626,21 @@ class Job:
         return {EXIT_OK: "sealed", EXIT_BLOCKED: "blocked",
                 EXIT_NOT_REPRODUCED: "not_reproduced"}.get(self.exit_code, "fault")
 
-    def as_dict(self) -> dict:
+    @property
+    def message(self) -> str | None:
+        """The job's last word as the page shows it. A block reads as its message, as it does on a
+        sealed run: the step and the block code stay in the log."""
         tail = list(self.lines)
-        return {"kind": self.kind, "shown": self.shown, "state": self.state, "step": self.step,
+        said = self.outcome or (tail[-1] if tail else None)
+        stopped = BLOCKED_LINE.fullmatch(said) if said else None
+        return stopped[1] if stopped else said
+
+    def as_dict(self) -> dict:
+        """The job for the page. The command is left out: packaging names a temporary folder in it."""
+        return {"kind": self.kind, "state": self.state, "step": self.step,
                 "detail": self.detail, "reached": self.reached, "run_id": self.run_id, "input_set": self.input_set,
                 "exit_code": self.exit_code, "elapsed": (self.finished or time.time()) - self.started,
-                "log": tail[-LOG_TAIL:], "message": self.outcome or (tail[-1] if tail else None)}
+                "log": list(self.lines)[-LOG_TAIL:], "message": self.message}
 
 
 class Busy(RuntimeError):
@@ -572,14 +650,17 @@ class Busy(RuntimeError):
 class Control:
     """What the page's requests share: where runs go, the book it opens on, and the one job in hand."""
 
-    def __init__(self, runs_dir: Path, dataset: str = DATASET):
+    def __init__(self, runs_dir: Path, dataset: str = DATASET, hosted: bool = False):
         self.runs_dir = runs_dir
         self.opening = f"inputs/{BOOKS[dataset]}"
+        self.hosted = hosted  # anyone with the address is on the page, so an added file has a size it may not pass
         self.job: Job | None = None
         self.lock = threading.Lock()
         self._holding = tempfile.TemporaryDirectory(prefix="stress-room-files-", ignore_cleanup_errors=True)
         self.held = Path(self._holding.name)  # files added on the page, until they join a set
         self.added: dict[str, dict] = {}
+        # A held file, its check and its line on the list change together. Taken before `lock`, never after.
+        self._files = threading.Lock()
 
     def command(self, args: list[str]) -> tuple[list[str], str]:
         """(what is executed, what the page shows). The two differ only in how stress is called."""
@@ -594,13 +675,22 @@ class Control:
     def run_argument(self, run_id: str) -> str:
         return from_root(self.runs_dir / run_id)
 
+    def file_limit(self, name: str) -> int:
+        return file_limit(name, self.hosted)
+
     def _refuse_if_busy(self) -> None:
         if self.job and self.job.exit_code is None:
             raise Busy(f"a {self.job.kind} is already in progress")
 
-    def start(self, kind: str, command: list[str], shown: str, after: Callable[[], None] | None = None) -> Job:
+    def start(self, kind: str, command: list[str], shown: str, after: Callable[[], None] | None = None,
+              before: Callable[[], None] | None = None) -> Job:
+        """Start the one job. `before` writes what the job will read, and runs only once the start is
+        certain: a start refused because a job is in progress has written nothing, so it cannot
+        replace the file that job is about to read."""
         with self.lock:
             self._refuse_if_busy()
+            if before:
+                before()
             self.job = job = Job(kind, shown, after=after)
             try:
                 process = subprocess.Popen(
@@ -616,12 +706,19 @@ class Control:
 
     @staticmethod
     def _follow(job: Job, process: subprocess.Popen) -> None:
-        for line in process.stdout:
-            job.add(line.rstrip())
-        code = process.wait()
-        if code == 0 and job.after:
-            job.after()
-        job.finish(code)
+        """Read the job to its end. Whatever happens here, the job ends: one left as running would
+        refuse every later start."""
+        code = EXIT_ERROR
+        try:
+            for line in process.stdout:
+                job.add(line.rstrip())
+            code = process.wait()
+            if code == 0 and job.after:
+                job.after()
+        except Exception as exc:  # noqa: BLE001 - the job's own outcome stands; what went wrong after it is logged
+            job.lines.append(f"after the job: {type(exc).__name__}: {exc}")
+        finally:
+            job.finish(code)
 
     def folder(self, run_id: str) -> Path | None:
         path = self.runs_dir / run_id
@@ -652,9 +749,8 @@ class Control:
         if flags is None:
             with tempfile.TemporaryDirectory(prefix="stress-preflight-") as temp:
                 path = Path(temp) / "specification.yaml"
-                path.write_text(specification_text(doc, path.parent), encoding="utf-8", newline="\n")
-                config = RunConfig(inputs="", scenarios=(REQUIRED_SCENARIO,), variant="core", specification=str(path))
-                verdict = preflight.dry_run(config)
+                path.write_text(specification_text(doc, None), encoding="utf-8", newline="\n")
+                verdict = preflight.dry_run(specification_config(path))
             shown = self.command(["run", "--specification", from_root(SPECS / f"{name}.yaml")])[1]
         else:
             verdict = preflight.dry_run(run_config(doc))
@@ -663,11 +759,13 @@ class Control:
                 "yaml": specification_text(doc, SPECS)}
 
     def start_run(self, form: dict) -> Job:
-        """Start exactly what the page showed: the flags, or the file saved under the name shown."""
+        """Start exactly what the page showed: the flags, or the file saved under the name shown. The
+        file is written as part of the start, so a start that is refused leaves the folder as it was."""
         doc, flags, name = self.plan(form)
-        if flags is None:
-            flags = ["run", "--specification", from_root(save_specification(name, doc))]
-        return self.start("run", *self.command(flags))
+        if flags is not None:
+            return self.start("run", *self.command(flags))
+        command = self.command(["run", "--specification", from_root(SPECS / f"{name}.yaml")])
+        return self.start("run", *command, before=lambda: save_specification(name, doc))
 
     def add_file(self, name: str, original: str, stream, length: int) -> dict:
         """A file the page sends for one of the dataset places. It waits here, and only `use_files` puts
@@ -677,29 +775,35 @@ class Control:
         if spec is None:
             raise Refused(f"the run has no file called {name}")
         target = self.held / spec.filename
-        partial = target.with_suffix(".part")
-        with partial.open("wb") as out:
-            left = length
-            while left:
-                chunk = stream.read(min(CHUNK, left))
-                if not chunk:
-                    raise Refused("the file did not arrive in full")
-                out.write(chunk)
-                left -= len(chunk)
-        os.replace(partial, target)  # a transfer that broke off leaves the earlier file in place
-        shown = Path(original.replace("\\", "/")).name[:200] or spec.filename  # shown, never a path
-        view = {"name": name, "original": shown, "bytes": length, **preflight.inspected(spec, target)}
-        with self.lock:
-            self.added[name] = view
+        # Each transfer writes a file of its own: two for the same place at once must not share one.
+        handle, partial = tempfile.mkstemp(dir=self.held, prefix=f"{spec.name}-", suffix=".part")
+        try:
+            with os.fdopen(handle, "wb") as out:
+                left = length
+                while left:
+                    chunk = stream.read(min(CHUNK, left))
+                    if not chunk:
+                        raise Refused("the file did not arrive in full")
+                    out.write(chunk)
+                    left -= len(chunk)
+            shown = Path(original.replace("\\", "/")).name[:200] or spec.filename  # shown, never a path
+            view = {"name": name, "original": shown, "bytes": length, **preflight.inspected(spec, Path(partial))}
+            with self._files:  # the file takes its place and its line together
+                os.replace(partial, target)  # a transfer that broke off leaves the earlier file in place
+                with self.lock:
+                    self.added[name] = view
+        finally:
+            Path(partial).unlink(missing_ok=True)
         return view
 
     def remove_file(self, name: str) -> None:
         spec = SPEC_OF.get(name)
         if spec is None:
             raise Refused(f"the run has no file called {name}")
-        with self.lock:
-            self.added.pop(name, None)
-        (self.held / spec.filename).unlink(missing_ok=True)
+        with self._files:
+            with self.lock:
+                self.added.pop(name, None)
+            (self.held / spec.filename).unlink(missing_ok=True)
 
     def use_files(self, form: dict) -> Job:
         """O-step: the files added here, with the saved set's files for the other places and its matrix
@@ -709,38 +813,42 @@ class Control:
         saved = None
         if base is not None:
             saved = nb.INPUTS_DIR / _one_of(base, {row["inputs"] for row in input_inventory()}, "saved set").split("/")[1]
-        with self.lock:
-            self._refuse_if_busy()
-            used = dict(self.added)
+        with self._files:  # no held file changes while it is copied, and no second copy starts beside this one
+            with self.lock:
+                self._refuse_if_busy()
+                used = dict(self.added)
             assembled = self.held / "assembled"
             shutil.rmtree(assembled, ignore_errors=True)
             assembled.mkdir()
-        absent = []
-        for spec in DATASETS:
-            source = self.held / spec.filename if spec.name in used else saved and saved / spec.filename
-            if source and source.is_file():
-                shutil.copyfile(source, assembled / spec.filename)
+            absent = []
+            for spec in DATASETS:
+                source = self.held / spec.filename if spec.name in used else saved and saved / spec.filename
+                if source and source.is_file():
+                    shutil.copyfile(source, assembled / spec.filename)
+                else:
+                    absent.append(preflight.FILE_GUIDE[spec.name][0])
+            if saved is not None and (saved / MATRIX_DIR).is_dir():
+                shutil.copytree(saved / MATRIX_DIR, assembled / MATRIX_DIR)
             else:
-                absent.append(preflight.FILE_GUIDE[spec.name][0])
-        if saved is not None and (saved / MATRIX_DIR).is_dir():
-            shutil.copytree(saved / MATRIX_DIR, assembled / MATRIX_DIR)
-        else:
-            absent.append(preflight.FILE_GUIDE[TTC_MATRIX.name][0])
-        if absent:
-            raise Refused(f"still missing: {', '.join(absent)}")
-        wrong = [f"{preflight.FILE_GUIDE[f['name']][0]}: {f['problem']}"
-                 for f in preflight.prepared_status(assembled)["files"] if f["problem"]]
-        if wrong:
-            raise Refused(" ".join(wrong))
+                absent.append(preflight.FILE_GUIDE[TTC_MATRIX.name][0])
+            if absent:
+                raise Refused(f"still missing: {', '.join(absent)}")
+            wrong = [f"{preflight.FILE_GUIDE[f['name']][0]}: {f['problem']}"
+                     for f in preflight.prepared_status(assembled)["files"] if f["problem"]]
+            if wrong:
+                raise Refused(" ".join(wrong))
 
-        def release() -> None:  # a file added while the packaging ran stays on the list
-            with self.lock:
-                taken = [name for name, view in used.items() if self.added.get(name) is view]
-            for name in taken:
-                self.remove_file(name)
+            def release() -> None:  # a file added while the packaging ran stays on the list
+                with self._files:
+                    for name, view in used.items():
+                        with self.lock:
+                            if self.added.get(name) is not view:
+                                continue
+                            del self.added[name]
+                        (self.held / SPEC_OF[name].filename).unlink(missing_ok=True)
 
-        return self.start("package", *self.one_off(["package", "--source", str(assembled), "--out", from_root(nb.INPUTS_DIR)]),
-                          after=release)
+            package =["package", "--source", str(assembled), "--out", from_root(nb.INPUTS_DIR)]
+            return self.start("package", *self.one_off(package), after=release)
 
     def approve(self, form: dict) -> Job:
         """O-step: record the owner's approval beside an input set. The data files are not touched."""
@@ -753,10 +861,15 @@ class Control:
     def state(self) -> dict:
         """Everything the page shows that does not belong to one run or one input set."""
         runs = list_runs(self.runs_dir)
+        job = self.job
+        if job and job.exit_code is None and job.run_id:  # its folder is there and not sealed yet: not a failure
+            for run in runs:
+                run["in_progress"] = run["status"] == "UNSEALED" and run["run_id"] == job.run_id
+        roles = [{**role, "limit": self.file_limit(role["name"])} for role in preflight.file_roles()]
         return {
-            "steps": STEPS, "typical_seconds": typical_seconds(runs), "runs": runs, "readings": READINGS,
-            "inputs": input_inventory(), "opening": self.opening, "roles": preflight.file_roles(), "added": self.added,
-            "anchor": REQUIRED_SCENARIO, "inputs_dir": from_root(nb.INPUTS_DIR),
+            "steps": STEPS, "runs": runs, "readings": READINGS,
+            "inputs": input_inventory(), "opening": self.opening, "roles": roles, "added": self.added,
+            "anchor": REQUIRED_SCENARIO, "default_scenarios": ENGINE_SCENARIOS, "inputs_dir": from_root(nb.INPUTS_DIR),
         }
 
 
@@ -802,7 +915,7 @@ class Handler(BaseHTTPRequestHandler):
             pass  # the page went away
 
     def _json(self, status: int, payload) -> None:
-        self._send(status, json.dumps(payload, allow_nan=False, default=str).encode(), "application/json")
+        self._send(status, json.dumps(without_temp_paths(payload), allow_nan=False).encode(), "application/json")
 
     def _ours(self) -> bool:
         if self.hosted:
@@ -836,7 +949,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": str(exc)})
         except BlockingError as exc:  # a file the engine refuses to read
             self._json(400, {"error": f"{exc.code}: {exc.message}"})
-        except (OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+        except (OSError, KeyError, IndexError, TypeError, ValueError, RecursionError) as exc:
             self._json(500, {"error": f"{type(exc).__name__}: {exc}"})
 
     def _get(self) -> None:
@@ -901,25 +1014,44 @@ class Handler(BaseHTTPRequestHandler):
             except BlockingError as exc:  # a sealed file changed, or the folder was never sealed
                 self._json(409, {"error": f"{exc.code}: {exc.message}"})
 
+    def _refuse_unread(self, status: int, message: str, length: int) -> None:
+        """Refuse a request without using its body. A sender still writing when the line closes may
+        never see the answer, so a body of modest size is read off the line and dropped first; a
+        larger one is left, and the line closes on it."""
+        try:
+            if 0 < length <= CHUNK:
+                self.rfile.read(length)
+        except OSError:
+            pass  # the sender went away
+        self._json(status, {"error": message})
+
     def do_POST(self) -> None:
         if not self._ours():
             return
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = -1
+        if length < 0:  # read as it stands, a negative length would read until the sender hangs up
+            self._json(400, {"error": "Content-Length must be a whole number, zero or more"})
+            return
         path = urlsplit(self.path).path
         kind = self.headers.get_content_type()
         added = FILE_ROUTE.fullmatch(path)
         if added:  # a file's bytes, not a form. Neither type can come from a plain cross-site form.
+            limit = self.control.file_limit(added[1])
             if kind != "application/octet-stream":
-                self._json(415, {"error": "send the file's bytes"})
-            elif not 0 < length <= FILE_LIMIT:
-                self._json(413, {"error": "that file is empty or too large"})
+                self._refuse_unread(415, "send the file's bytes", length)
+            elif not 0 < length <= limit:
+                megabytes = limit // 1024 ** 2
+                self._refuse_unread(413, f"that file is empty, or larger than the {megabytes:,} MB this page takes", length)
             else:
                 original = unquote(self.headers.get("X-File-Name") or "")
                 self._answering(lambda: self._json(200, self.control.add_file(added[1], original, self.rfile, length)))
         elif kind != "application/json":
-            self._json(415, {"error": "send JSON"})
+            self._refuse_unread(415, "send JSON", length)
         elif length > BODY_LIMIT:
-            self._json(413, {"error": "too large"})
+            self._refuse_unread(413, "too large", length)
         else:
             body = self.rfile.read(length)
             self._answering(lambda: self._post(path, body))
@@ -937,9 +1069,6 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(text, str):
                     raise Refused("send the YAML text")
                 self._json(200, {"document": preflight.parse_yaml(text, SPECS)})
-            elif path == "/api/save":
-                doc, _, name = control.plan(form)
-                self._json(200, {"path": from_root(save_specification(name, doc))})
             elif path == "/api/start":
                 self._json(202, control.start_run(form).as_dict())
             elif path == "/api/rerun":
@@ -970,7 +1099,8 @@ class Server(ThreadingHTTPServer):
 
 def serve(runs_dir: Path, port: int = PORT, host: str = HOST, dataset: str = DATASET) -> Server:
     check_dataset(dataset)
-    handler = type("BoundHandler", (Handler,), {"control": Control(runs_dir, dataset), "hosted": host != HOST})
+    hosted = host != HOST
+    handler = type("BoundHandler", (Handler,), {"control": Control(runs_dir, dataset, hosted), "hosted": hosted})
     return Server((host, port), handler)
 
 

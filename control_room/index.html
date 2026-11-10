@@ -21,8 +21,8 @@
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+@media (prefers-color-scheme: dark) {  /* the page follows the system; it has no switch of its own */
+  :root {
     color-scheme: dark;
     --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
     --run: #4f76e8; --run-hover: #6387ee; --run-ink: #ffffff; --run-soft: #18223a; --run-line: #3d5698;
@@ -33,17 +33,6 @@
     --stage-1: #184f95; --stage-2: #3987e5; --stage-3: #9ec5f4;
     --grid: #232c37; --axis: #3a4552;
   }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #0e1319; --surface: #151b23; --surface-2: #1d252f; --fg: #e3e8ee; --muted: #9aa5b3; --line: #2a333f;
-  --run: #4f76e8; --run-hover: #6387ee; --run-ink: #ffffff; --run-soft: #18223a; --run-line: #3d5698;
-  --warn: #e6a94f; --warn-soft: #2c2215; --warn-line: #7d5b2a;
-  --block: #ff8a83; --block-soft: #3a1c1c; --block-line: #7d3a37;
-  --ok: #74d3a3; --ok-soft: #16302a; --ok-line: #2f6b52;
-  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
-  --stage-1: #184f95; --stage-2: #3987e5; --stage-3: #9ec5f4;
-  --grid: #232c37; --axis: #3a4552;
 }
 * { box-sizing: border-box; }
 html { overflow-y: scroll; }  /* a short step must not shift the navigation */
@@ -59,8 +48,6 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .quiet { color: var(--muted); }
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-bottom: 8px; }
 .top h1 { font-size: 17px; line-height: 1.2; font-weight: 600; }
-.ghost { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 1px 9px; cursor: pointer; font-size: 12px; color: var(--muted); }
-.ghost:hover { background: var(--surface-2); color: var(--fg); }
 .notice { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 7px 11px; font-size: 12.5px; margin: 0 0 8px; }
 .notice.warn { border-color: var(--warn-line); background: var(--warn-soft); }
 .notice.block { border-color: var(--block-line); background: var(--block-soft); }
@@ -98,22 +85,17 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .card h3 { font-size: 13.5px; line-height: 1.35; font-weight: 600; }
 .card .sub { color: var(--muted); font-size: 12px; margin-bottom: 7px; }
 .facts { display: flex; flex-wrap: wrap; gap: 3px 6px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 7px; }
-.footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; margin: 4px 0 14px; }
-.footer .left { margin-right: auto; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
-.grid-2 > .card, .grid-3 > .card, .grid-4 > .card { margin-bottom: 0; }
+.grid-2 > .card, .grid-4 > .card { margin-bottom: 0; }
 .stacked { margin-bottom: 10px; }
 
 /* controls */
 .field { display: grid; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
 .field select, .field input[type=text], .search, input.path { width: 100%; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); font-size: 12.5px; }
-.field.changed select { border-color: var(--warn-line); background: var(--warn-soft); }
 .primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 16px; border: 0; border-radius: 8px; background: var(--run); color: var(--run-ink); font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .primary:hover:not(:disabled) { background: var(--run-hover); }
 .primary:disabled { background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
-.primary.big { padding: 9px 22px; font-size: 14.5px; }
 .action { display: inline-block; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 2px 9px; font-size: 12px; color: var(--fg); text-decoration: none; cursor: pointer; white-space: nowrap; }
 .action:hover:not(:disabled) { border-color: var(--run-line); background: var(--run-soft); }
 .action:disabled { color: var(--muted); cursor: not-allowed; }
@@ -130,7 +112,6 @@ table.slots td.num { padding-top: 7px; }
 .setting:first-child { border-top: 0; }
 .setting .q { font-weight: 600; font-size: 13px; }
 .setting .h { color: var(--muted); font-size: 12px; }
-.setting select { max-width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); font-size: 13px; }
 .choice { display: grid; gap: 3px; font-size: 13px; }
 .choice label { display: flex; gap: 6px; align-items: baseline; }
 .choice label.off { color: var(--muted); }
@@ -159,8 +140,6 @@ input.num.bad { border-color: var(--block-line); background: var(--block-soft); 
 input.name { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg); font: 500 13px var(--mono); width: 170px; }
 input.narrative { flex: 1 1 240px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg); font-size: 12.5px; min-width: 0; }
 .inline { padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); font-size: 12px; color: var(--fg); }
-.checks { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 12.5px; }
-.checks label { display: inline-flex; gap: 5px; align-items: center; }
 
 /* tables */
 .scroll-x { overflow-x: auto; }
@@ -186,7 +165,6 @@ table.preview th, table.preview td { padding: 2px 10px 2px 0; white-space: nowra
 .heat td, .heat th { text-align: center; padding: 2px 3px; border-bottom: 0; font-variant-numeric: tabular-nums; font-size: 11px; }
 .heat th:first-child, .heat td:first-child { text-align: left; color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0 6px; }
-pre.text { font: 11px/1.45 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 8px; max-height: 360px; overflow: auto; margin: 0; white-space: pre; }
 textarea.yaml { width: 100%; height: 280px; font: 11px/1.4 var(--mono); background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical; white-space: pre; }
 details.twin { margin-top: 4px; font-size: 12px; }
 details.twin > summary { cursor: pointer; color: var(--muted); width: max-content; }
@@ -206,7 +184,6 @@ details.file > .body { padding: 6px 0 4px; }
 .scenario { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
 .scenario .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 6px; }
 .scenario .head b { font-size: 13px; }
-.scenario .head .end { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .scenario table { width: auto; }
 .scenario th, .scenario td { padding: 2px 10px 2px 0; }
 
@@ -219,7 +196,6 @@ details.file > .body { padding: 6px 0 4px; }
 .verdict .line { font-size: 12.5px; margin-top: 2px; overflow-wrap: anywhere; }
 .verdict ul { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
 .command { font: 12px/1.5 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 7px 9px; overflow-wrap: anywhere; margin: 6px 0 8px; min-height: 24px; }
-.error-line { font-size: 12px; color: var(--block); margin: 6px 0; overflow-wrap: anywhere; }
 .pips { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 3px; margin: 8px 0 4px; max-width: 760px; }
 .pip { height: 8px; border-radius: 4px; background: var(--surface-2); }
 .pip.done { background: var(--ok); }
@@ -229,7 +205,6 @@ details.file > .body { padding: 6px 0 4px; }
 @media (prefers-reduced-motion: reduce) { .pip.active { animation: none; } }
 .job-state { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
 .job-log { font: 11px/1.45 var(--mono); background: var(--surface-2); border-radius: 6px; padding: 6px 8px; margin: 5px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
-.oneoff { font-size: 12.5px; margin-top: 6px; }
 
 /* results */
 .kpi .row { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; column-gap: 7px; align-items: baseline; }
@@ -268,9 +243,9 @@ svg text { font-family: var(--sans); }
 #tip .line b { font-weight: 600; font-variant-numeric: tabular-nums; }
 #tip .line span { color: var(--muted); }
 
-@media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1040px) { .track { flex-basis: 100%; } .track button { flex: 1 1 0; width: auto; } .track .line { flex: 0 1 8px; } }
-@media (max-width: 680px) { .page { padding: 10px 12px 48px; } .grid-2, .grid-3, .grid-4, .setting { grid-template-columns: minmax(0, 1fr); } .track { align-items: stretch; } .track .line { display: none; } .track button { align-content: start; grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; padding: 2px; } .track .n { grid-row: auto; } .track .t { white-space: normal; font-size: 11.5px; line-height: 1.2; } .track .s { max-width: 100%; font-size: 10.5px; } #now-action { flex: 1 1 100%; } }
+@media (max-width: 680px) { .page { padding: 10px 12px 48px; } .grid-2, .grid-4, .setting { grid-template-columns: minmax(0, 1fr); } .track { align-items: stretch; } .track .line { display: none; } .track button { align-content: start; grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; padding: 2px; } .track .n { grid-row: auto; } .track .t { white-space: normal; font-size: 11.5px; line-height: 1.2; } .track .s { max-width: 100%; font-size: 10.5px; } #now-action { flex: 1 1 100%; } }
 @media (max-width: 680px) { table.slots thead { display: none; } table.slots, table.slots tbody, table.slots tr, table.slots td { display: block; } table.slots tr { padding: 6px 0; border-bottom: 1px solid var(--grid); } table.slots td, table.slots td.num { padding: 1px 0; border: 0; text-align: left; } table.slots td.num:empty { display: none; } .slot-do { justify-content: flex-start; margin-top: 3px; } }
 @media (forced-colors: active) { .bar, .key, .dot { forced-color-adjust: none; } }
 </style>
@@ -376,6 +351,7 @@ function select(options, chosen, onchange) {
 let STATE = null, SET = null, DOC = null, PRE = null, RESULT = null, COMPARE = null, JOB = null;
 let ADDED = {}, STEP = 1, checking = false, preTimer = null, preTicket = 0, setTicket = 0, runTicket = 0, compareTicket = 0;
 let jobRunning = false, watching = false, yamlDirty = false, selectedRun = null, setupName = defaultName(), farthest = 1;
+let pollTimer = null, unanswered = false;
 let finishedAt = null, methodOpen = false, paramsOpen = false;
 const open = { previews: new Map(), segments: new Set() };
 const uploading = new Set();
@@ -533,10 +509,15 @@ async function chooseSet(folder) {
   check();
 }
 
+function adopt(setup) {  // a setup from a run or from YAML. One that names no scenarios runs the engine's own choice, so the page says which
+  DOC = setup;
+  if (!DOC.run.scenarios?.length) DOC.run.scenarios = [...STATE.default_scenarios];
+}
+
 async function loadRunSetup(runId) {
   try {
     const answer = await api(`/api/setup?run=${encodeURIComponent(runId)}`);
-    DOC = answer.document;
+    adopt(answer.document);
     setupName = answer.name;
     for (const note of answer.notes) problem(`Loaded ${answer.from}, but ${note}.`);
     if (!answer.notes.length) clearProblem();
@@ -588,6 +569,7 @@ function nowFiles() {
 }
 
 function nowOf() {
+  if (jobRunning && unanswered) return { text: 'The server is not answering, so this page cannot follow what it started. It keeps trying.', kind: 'block' };
   if (jobRunning && engineJob(JOB)) return { text: `${JOB.kind === 'rerun' ? 'The repeat run' : 'The run'} is in progress: ${progressText(JOB)}. It carries on if you close this page.` };
   if (STEP === 1) return nowFiles();
   if (STEP === 2) {
@@ -639,7 +621,7 @@ function renderStep() {
   if (STEP === 4) { renderRunSelect(); renderRuns(); renderResult(); }
 }
 
-// --- step 1: the seven files --------------------------------------------------------------------------------------------
+// --- step 1: the files: six rows, and one rating transitions file per segment from the saved set ---------------------------
 
 const pending = () => Object.keys(ADDED).length > 0;
 const setName = r => `Saved ${longStamp(r.saved_at)}${r.facilities === null ? ', unreadable' : `, ${count(r.facilities)} facilities, €${one.format(r.gca / 1000)}bn`}`;
@@ -654,7 +636,7 @@ function savedProblem(f) {
   return `Columns missing: ${f.missing_columns.slice(0, 4).join(', ')}${more > 0 ? ` and ${more} more` : ''}.`;
 }
 
-function slots() {  // each of the seven places: a file added here, the saved set's file, or nothing yet
+function slots() {  // each of the six rows: a file added here, the saved set's file, or nothing yet
   const saved = SET && DOC.run.inputs ? SET.files : [];
   return STATE.roles.map(role => {
     const added = ADDED[role.name];
@@ -671,6 +653,11 @@ function pickFile(accept, onpicked) {  // the computer's own file dialog; cancel
 }
 
 async function addFile(name, file) {
+  const role = STATE.roles.find(r => r.name === name);
+  if (role && file.size > role.limit) {  // the server refuses it too; said here, before the whole file is sent
+    problem(`${file.name} could not be added: a ${role.label} file can be ${kb(role.limit)} at most on this page, and this one is ${kb(file.size)}.`);
+    return;
+  }
   uploading.add(name);
   renderFiles(); renderWhere();
   try {
@@ -859,7 +846,7 @@ function renderSettings() {
 
 // --- the engine's verdict -------------------------------------------------------------------------------------------------
 
-const CHECK_STAGE = { specification: 'reading the setup', R1: 'opening the run', R2: 'loading the files', R3: 'validating the records', R4: 'building the scenarios' };
+const CHECK_STAGE = { R1: 'opening the run', R2: 'loading the files', R3: 'validating the records', R4: 'building the scenarios' };
 
 function verdictBox() {
   const box = el('div', { class: 'verdict' });
@@ -876,7 +863,7 @@ function verdictBox() {
     const rejected = PRE.rejected > 0;
     box.className = `verdict ${rejected ? 'warn' : 'ok'}`;
     box.replaceChildren(el('div', { class: 'head' }, rejected ? `! Sanity checks done: ${plural(PRE.rejected, 'record')} will be left out` : '✓ Sanity checks done, no errors observed'),
-      rejected ? el('ul', {}, PRE.records.map(r => el('li', {}, r.details[0] ?? r.code.replaceAll('_', ' ').toLowerCase(), `: ${plural(r.records, 'record')}`, r.sample.length ? el('span', { class: 'quiet' }, ` (${r.sample.join(', ')}${r.records > r.sample.length ? '…' : ''})`) : null)))
+      rejected ? el('ul', {}, PRE.records.map(r => el('li', {}, r.detail ?? r.code.replaceAll('_', ' ').toLowerCase(), `: ${plural(r.records, 'record')}`, r.sample.length ? el('span', { class: 'quiet' }, ` (${r.sample.join(', ')}${r.records > r.sample.length ? '…' : ''})`) : null)))
         : el('div', { class: 'line quiet' }, `The engine read the files and settings and accepted ${count(PRE.accepted)} facilities.`));
   }
   return box;
@@ -1114,8 +1101,8 @@ function segmentRow(name, base, isNew, editable) {
     el('td', { class: 'num' }, base.facilities === undefined ? gone : count(base.facilities)),
     el('td', { class: 'num' }, base.gca === undefined ? gone : amount(base.gca))];
   for (const field of FIELDS) cells.push(editable ? el('td', { class: 'cell' }, numberInput(held[field] ?? null, base[field], v => setSegment(name, field, v), { title: `${FIELD_HELP[field]}; in the file ${fixed(base[field])}` })) : el('td', { class: 'cell', title: FIELD_HELP[field] }, fixed(held[field] ?? base[field])));
-  for (const [role, setting, label] of ROLES) {
-    const options = (BASE().model_choices[held.portfolio ?? base.portfolio]?.[role] || []).map(m => ({ value: m.name, label: m.name }));
+  for (const [role, setting, label] of ROLES) {  // a segment's models are those of its own portfolio, wherever this run reports it
+    const options = (BASE().model_choices[base.portfolio]?.[role] || []).map(m => ({ value: m.name, label: m.name }));
     const current = held[setting] ?? base[setting] ?? '';
     if (!editable || options.length < 2) { cells.push(el('td', { class: 'nowrap' }, el('code', {}, current || gone))); continue; }
     const pick = select(options, current, e => { setSegment(name, setting, e.target.value === base[setting] ? null : e.target.value); renderScenarios(); renderSettings(); check(); });
@@ -1154,7 +1141,7 @@ function volumesBox() {
 async function applyYaml() {
   try {
     const answer = await api('/api/yaml', { yaml: $('#yaml').value });
-    DOC = answer.document;
+    adopt(answer.document);
     yamlDirty = false;
     clearProblem();
     if (DOC.run.inputs !== SET?.folder) await loadSet(DOC.run.inputs); else if (SET?.base) DOC.input_set_hash = SET.base.hash;
@@ -1229,7 +1216,8 @@ async function startJob(path, body) {
   }
 }
 
-const END_TEXT = { sealed: ['ok', '✓', 'Finished'], blocked: ['block', '✕', 'Stopped'], fault: ['block', '✕', 'Failed'], not_reproduced: ['block', '✕', 'Did not reproduce'], done: ['ok', '✓', 'Done'] };
+// 'gone' is the page's own word: the server restarted and no longer knows the job this page was following.
+const END_TEXT = { sealed: ['ok', '✓', 'Finished'], blocked: ['block', '✕', 'Stopped'], fault: ['block', '✕', 'Failed'], not_reproduced: ['block', '✕', 'Did not reproduce'], done: ['ok', '✓', 'Done'], gone: ['block', '✕', 'The server restarted, so it no longer follows this run'] };
 
 function progressText(job) {
   const codes = Object.keys(STATE.steps);
@@ -1239,10 +1227,12 @@ function progressText(job) {
 function showOneOff(job) {
   const saving = job.kind === 'package';
   const running = job.state === 'running', good = job.state === 'done';
+  const gone = job.state === 'gone';
   const text = running ? (saving ? 'Saving your files…' : 'Recording the sign-off…')
     : good ? (saving ? '✓ Your files are saved and in use.' : '✓ Signed off.')
-      : `✕ ${saving ? 'The files could not be saved' : 'The sign-off could not be recorded'}. ${job.message ?? ''}`;
-  $('#files-note').replaceChildren(el('div', { class: `notice ${running ? '' : good ? 'ok' : 'block'}`, style: 'margin:8px 0 0' }, text, running || good ? null : el('pre', { class: 'job-log' }, job.log.join('\n'))));
+      : gone ? `✕ The server restarted while ${saving ? 'it was saving your files' : 'it was recording the sign-off'}. ${job.message}`
+        : `✕ ${saving ? 'The files could not be saved' : 'The sign-off could not be recorded'}. ${job.message ?? ''}`;
+  $('#files-note').replaceChildren(el('div', { class: `notice ${running ? '' : good ? 'ok' : 'block'}`, style: 'margin:8px 0 0' }, text, running || good || gone ? null : el('pre', { class: 'job-log' }, job.log.join('\n'))));
 }
 
 function showJob(job) {
@@ -1255,27 +1245,51 @@ function showJob(job) {
   const pips = el('div', { class: 'pips', role: 'img', 'aria-label': progressText(job) }, codes.map((code, i) => {
     let state = '';
     if (job.state === 'sealed' || job.state === 'not_reproduced') state = 'done';
-    else if (job.state === 'running' && code === job.step) state = 'active';
-    else if (job.state !== 'running' && code === job.step) state = 'failed';
+    else if (code === job.step) state = job.state === 'running' ? 'active' : job.state === 'gone' ? '' : 'failed';
     else if (job.reached.includes(code) || i < at) state = 'done';
     return el('div', { class: `pip ${state}`, title: STATE?.steps[code] ?? '' });
   }));
   const verb = job.kind === 'rerun' ? 'Repeat run' : 'Run';
   const reproduced = job.kind === 'rerun' && job.state === 'sealed';
+  const title = job.state === 'running' ? `${verb} in progress: ${progressText(job)}` : job.state === 'gone' ? `${verb} no longer followed` : `${verb} ended`;
   $('#job-body').replaceChildren(
-    el('div', { class: 'job-state' }, el('span', {}, job.state === 'running' ? `${verb} in progress: ${progressText(job)}` : `${verb} ended`), el('span', { class: 'quiet' }, `${job.elapsed.toFixed(0)} s`)),
+    el('div', { class: 'job-state' }, el('span', {}, title), el('span', { class: 'quiet' }, `${job.elapsed.toFixed(0)} s`)),
     pips,
     ...(job.state === 'running' ? [] : [el('p', { class: `notice ${kind}`, style: 'margin:6px 0 0' }, `${icon} ${reproduced ? 'Reproduced: every output matches' : word}`, job.message && job.state !== 'sealed' ? el('span', { class: 'small', style: 'display:block' }, job.message) : null)]),
     el('details', { class: 'twin', open: job.state === 'fault' }, el('summary', {}, 'Engine log'), el('pre', { class: 'job-log' }, job.log.join('\n'))));
   renderWhere();
 }
 
+function pollIn(ms) {  // one timer at most, however many places ask
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(poll, ms);
+}
+
+async function jobGone() {  // the server knows no job, and this page was following one: it restarted
+  watching = false;
+  const wasRun = JOB.kind === 'run';
+  showJob({ ...JOB, state: 'gone', message: engineJob(JOB) ? 'If the run finished, it is listed under Outcomes. If it did not, start it again.' : 'Look at the files below, and do it again if it did not go through.' });
+  if (wasRun) finishedAt = null;
+  await reloadState();
+  renderStep();
+  check();
+}
+
 async function poll() {
+  clearTimeout(pollTimer);
   let job;
-  try { job = await api('/api/job'); } catch { jobRunning = false; problem('The server stopped. A run in progress still finishes.'); return; }
-  if (job.state === 'idle') return;
+  try { job = await api('/api/job'); } catch {
+    // One request that fails is not the end of the job. While this page follows one it keeps asking, and says so.
+    if (jobRunning || watching) { unanswered = true; renderWhere(); pollIn(3000); } else problem('The server is not answering. Is it running?');
+    return;
+  }
+  unanswered = false;
+  if (job.state === 'idle') {
+    if (JOB && (jobRunning || watching)) await jobGone(); else renderWhere();
+    return;
+  }
   if (engineJob(job) || job.state === 'running' || watching) showJob(job);
-  if (job.state === 'running') { watching = true; setTimeout(poll, 600); return; }
+  if (job.state === 'running') { watching = true; pollIn(600); return; }
   if (!watching) return;
   watching = false;
   await reloadState();
@@ -1321,7 +1335,7 @@ function renderRuns() {
   const scenarios = [...new Set(runs.flatMap(r => Object.keys(r.headline || {})))].sort((a, b) => (a === ANCHOR() ? -1 : b === ANCHOR() ? 1 : a.localeCompare(b)));
   const headers = ['Started', 'Scenarios', 'Settings', ...scenarios.map(s => el('th', { class: 'num', title: `cumulative impairment losses, ${s}, EUR m` }, `${scenarioName(s)} impairment losses`)), ''];
   const rows = runs.slice(0, 40).map(run => {
-    const settings = run.status === 'UNSEALED' ? 'Did not finish' : run.status === 'BLOCKED' ? `Stopped: ${settingsOf(run)}` : settingsOf(run);
+    const settings = run.status === 'UNSEALED' ? (run.in_progress ? 'In progress' : 'Did not finish') : run.status === 'BLOCKED' ? `Stopped: ${settingsOf(run)}` : settingsOf(run);
     const cells = [run.created_at ? stamp(run.created_at) : gone, (run.scenarios || []).map(scenarioName).join(', '), settings,
       ...scenarios.map(s => el('td', { class: 'num' }, run.headline?.[s] ?? gone)),
       el('td', { class: 'nowrap' }, run.status === 'UNSEALED' ? null : el('button', { class: 'link', type: 'button', onclick: e => { e.stopPropagation(); loadRunSetup(run.run_id); } }, 'Load its setup'))];
@@ -1332,6 +1346,7 @@ function renderRuns() {
 
 async function selectRun(id) {
   if (!id) return;
+  if (id !== selectedRun) { COMPARE = null; ++compareTicket; }  // a comparison belongs to the run it was chosen for
   selectedRun = id;
   const ticket = ++runTicket;
   try {
@@ -1644,9 +1659,6 @@ const dropZone = $('#files-card');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drop'); });
 dropZone.addEventListener('dragleave', e => { if (e.target === dropZone) dropZone.classList.remove('drop'); });
 dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drop'); if (e.dataTransfer.files.length) addSeveral([...e.dataTransfer.files]); });
-
-
-try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch { /* private window */ }
 
 load().catch(fault => problem(`${fault.message}. Is the server running?`));
 </script>
