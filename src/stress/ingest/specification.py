@@ -1,7 +1,8 @@
 """Read and apply a versioned experiment without changing its immutable base input set.
 
-R2 has a preflight before R1 so run identity contains resolved settings. R2 then captures
-the same bytes, rather than reading an editable file a second time. OPS-01, SCN-01.
+R2 has a preflight before R1 so run identity contains resolved settings and the content of the
+specification and of the analysis file. R2 then captures the same bytes, rather than reading an
+editable file a second time. OPS-01, SCN-01.
 """
 
 import copy
@@ -11,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import (
     ENGINE_NAMES,
     MODEL_SETTINGS,
@@ -18,6 +20,7 @@ from stress.contracts.inputs import (
     SCENARIO_VALUE_TYPES,
 )
 from stress.contracts.specification import (
+    STEP,
     invalid,
     mapping,
     number,
@@ -47,8 +50,19 @@ SpecificationLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_T
 
 
 def resolve(config):
-    if not config.specification:
-        return config
+    """R2's preflight, before R1 opens the run: take the run settings of a specification and read
+    the analysis file, so that R1 names the run by what the two files say, not by where they are."""
+    if config.specification:
+        _read_specification(config)
+    if config.analysis:
+        try:
+            config._analysis_bytes = Path(config.analysis).read_bytes()
+        except OSError:
+            config._analysis_bytes = None  # R2 blocks on the unreadable file, in a sealed run folder
+    return config
+
+
+def _read_specification(config) -> None:
     path = Path(config.specification).resolve()
     try:
         raw = path.read_bytes()
@@ -69,11 +83,10 @@ def resolve(config):
             value = tuple(value)
         setattr(config, name, value)
     if not config.inputs:
-        invalid("run.inputs or --inputs is required")
+        invalid("run.inputs is required: a specification names its own input set")
     config.specification_hash = digest
     config._specification_document = doc
     config._specification_bytes = raw
-    return config
 
 
 def apply(loaded, ctx):
@@ -185,11 +198,23 @@ SEGMENT_FIELDS = {"inherits", "portfolio", "template_class", *MODEL_SETTINGS.val
                   "asset_correlation", "sicr_k", "cpr_ttc", "ccf"}
 
 
+def _once(table: pd.DataFrame, key: str, needed_by: str) -> None:
+    """A specification that selects or checks records by ``key`` needs each key once. Without a
+    specification R3 rejects every copy of a repeated record and the run goes on (A17)."""
+    repeated = sorted(set(table.loc[table[key].duplicated(keep=False), key].astype(str)))
+    if repeated:
+        raise BlockingError(STEP, Block.DUPLICATE_KEY,
+                            f"{needed_by} needs each {key} once, and {len(repeated)} appear more than once "
+                            f"(first: {repeated[0]}); remove the copies from the input set")
+
+
 def apply_segments(loaded, definitions, assignments):
     """Point segments at other models of their portfolio or change their settings; a new segment
-    inherits an existing one's models, settings and TTC matrix. Settings use the parameter set's
-    names, and a model is named the same way (``p02.pd_nonlinear``)."""
+    inherits an existing one's models, settings, TTC matrix and, in every variant, its CCF
+    override. Settings use the parameter set's names, and a model is named the same way
+    (``p02.pd_nonlinear``)."""
     segments = loaded.parameter_set["segments"]
+    replaced_sicr_k = {}
     for name, definition in definitions.items():
         text(name, "segment")
         mapping(definition, SEGMENT_FIELDS, f"segment {name}")
@@ -202,13 +227,22 @@ def apply_segments(loaded, definitions, assignments):
             matrix = loaded.ttc_pd_matrix[loaded.ttc_pd_matrix.segment == parent].copy()
             matrix["segment"] = name
             loaded.ttc_pd_matrix = pd.concat([loaded.ttc_pd_matrix, matrix], ignore_index=True)
+            # A variant's CCF override is the parent's too: without it the facilities filed under
+            # the new segment would run on their own CCF in a run named for the variant.
+            for variant in loaded.parameter_set.get("variants", {}).values():
+                overrides = variant.get("ccf") or {}
+                if parent in overrides and name not in overrides:
+                    overrides[name] = overrides[parent]
         elif "inherits" in definition:
             invalid("existing segments cannot be reparented")
+        if "sicr_k" in definition:
+            replaced_sicr_k[name] = segments[name].get("sicr_k")
         segments[name].update({ENGINE_NAMES.get(k, k): copy.deepcopy(v) for k, v in definition.items()
                                if k != "inherits"})
         for field in ("portfolio", "template_class", *MODEL_SETTINGS.values()):
             if field in definition:
                 text(definition[field], f"{name}.{field}")
+    loaded.replaced_sicr_k = replaced_sicr_k
     facilities = loaded.facilities.data
     original = facilities.copy()
     obligors = loaded.obligors.data.set_index("obligor_id")
@@ -223,8 +257,11 @@ def apply_segments(loaded, definitions, assignments):
         mask = pd.Series(True, index=facilities.index)
         for field, value in where.items():
             text(value, f"assignment {field}")
-            actual = (original.obligor_id.map(obligors[field]) if field in ("country", "nace_code")
-                      else original[field])
+            if field in ("country", "nace_code"):
+                _once(loaded.obligors.data, "obligor_id", f"an assignment by {field}")
+                actual = original.obligor_id.map(obligors[field])
+            else:
+                actual = original[field]
             mask &= actual.eq(value)
         ids = set(facilities.loc[mask, "facility_id"])
         if not ids or used & ids:
@@ -238,6 +275,7 @@ def apply_segments(loaded, definitions, assignments):
     expectations = {name: d["ccf"] for name, d in definitions.items() if d.get("ccf") is not None}
     if expectations:
         commitments = loaded.commitments.data
+        _once(facilities, "facility_id", "a segment ccf in the specification")
         segment_of = facilities.set_index("facility_id")["segment"]
         expected = commitments.facility_id.map(segment_of).map(expectations)
         tolerance = loaded.parameter_set["tolerances"]["probability_identity"]["abs"]

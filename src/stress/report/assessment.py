@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from stress.contracts.checks import number, required
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import SCENARIO_UNITS
 from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, usable_ltv
 from stress.contracts.run import ADVERSE
@@ -13,25 +13,25 @@ from stress.contracts.run import ADVERSE
 def mapped_cells(spec: dict, tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     required(spec, ("version", "cells"), "template mapping")
     if not spec["version"] or not spec["cells"]:
-        raise BlockingError("report", "MISSING_INPUT", "mapping requires version and cells")
+        raise BlockingError("report", Block.MISSING_INPUT, "mapping requires version and cells")
     seen, out = set(), []
     for cell in spec["cells"]:
         required(cell, ("sheet", "row", "column", "table", "measure", "filters"), "mapped cell")
         key = (cell["sheet"], cell["row"], cell["column"])
         if key in seen:
-            raise BlockingError("report", "DUPLICATE_KEY", "duplicate template destination")
+            raise BlockingError("report", Block.DUPLICATE_KEY, "duplicate template destination")
         seen.add(key)
         if cell["table"] not in tables or not isinstance(cell["filters"], dict):
-            raise BlockingError("report", "MISSING_INPUT", "unknown source table or invalid filters")
+            raise BlockingError("report", Block.MISSING_INPUT, "unknown source table or invalid filters")
         rows = tables[cell["table"]]
         if cell["measure"] not in rows or set(cell["filters"]) - set(rows):
-            raise BlockingError("report", "MISSING_INPUT", "unknown source measure or dimension")
+            raise BlockingError("report", Block.MISSING_INPUT, "unknown source measure or dimension")
         for column, value in cell["filters"].items():
             rows = rows.loc[rows[column].eq(value)]
         if rows.empty or rows[cell["measure"]].isna().any():
-            raise BlockingError("report", "MISSING_INPUT", "empty selection or missing mapped values")
+            raise BlockingError("report", Block.MISSING_INPUT, "empty selection or missing mapped values")
         if not pd.api.types.is_numeric_dtype(rows[cell["measure"]]):
-            raise BlockingError("report", "INVALID_INPUT", "mapped measure must be numeric")
+            raise BlockingError("report", Block.INVALID_INPUT, "mapped measure must be numeric")
         value = number(float(rows[cell["measure"]].sum()), "mapped value")
         out.append(dict(zip(("sheet", "row", "column"), key)) | {
             "mapping_version": spec["version"], "source_table": cell["table"], "source_measure": cell["measure"],
@@ -53,7 +53,7 @@ def portfolio_diagnostics(portfolio: pd.DataFrame, obligors: pd.DataFrame,
     dimensions = joined.groupby(["scenario", "year", "portfolio", "country", "nace_code",
                                  "nace_version", "stage"], dropna=False)[measures].sum().reset_index()
     if not np.allclose(dimensions[measures].sum(), slices[measures].sum(), rtol=1e-10, atol=.01):
-        raise BlockingError("report", "RECONCILIATION", "dimensional aggregation lost exposure")
+        raise BlockingError("report", Block.RECONCILIATION, "dimensional aggregation lost exposure")
     concentration = joined.groupby(["scenario", "year", "group_id"])[measures].sum().reset_index()
     total = concentration.groupby(["scenario", "year"])["gca"].transform("sum")
     concentration["gca_share"] = concentration.gca / total
@@ -87,7 +87,7 @@ def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.D
     secured = in_book.loc[usable_ltv(in_book, "report"), ["facility_id", "ltv", "collateral_type"]].copy()
     secured["variable"] = secured["collateral_type"].map(COLLATERAL_INDEX)
     if secured["variable"].isna().any():
-        raise BlockingError("report", "MISSING_INPUT", "no price index for a collateral type")
+        raise BlockingError("report", Block.MISSING_INPUT, "no price index for a collateral type")
     growth = price_growth(indices)
     book = slices[["scenario", "year", "facility_id", "stage", "gca"]].merge(
         secured, on="facility_id", validate="many_to_one").merge(
@@ -96,7 +96,7 @@ def stressed_ltv(portfolio: pd.DataFrame, facilities: pd.DataFrame, slices: pd.D
         on=["scenario", "country", "variable", "year"], how="left", validate="many_to_one")
     book["growth"] = book["growth"].where(book["year"] >= indices["year"].min(), 1.0)  # the snapshot
     if book["growth"].isna().any():
-        raise BlockingError("report", "MISSING_INPUT", "no price index for a projected year")
+        raise BlockingError("report", Block.MISSING_INPUT, "no price index for a projected year")
     level = book["ltv"] / book["growth"]
     if dynamic:
         total = slices.groupby(["scenario", "year", "facility_id"])["gca"].sum()
@@ -119,7 +119,7 @@ def average_maturity(portfolio: pd.DataFrame, slices: pd.DataFrame, schedule: pd
         rest, left_on=["facility_id", "year"], right_on=["facility_id", "valuation_year"], how="left",
         validate="many_to_one").merge(portfolio[["facility_id", "portfolio"]], on="facility_id")
     if book["remaining_maturity"].isna().any():
-        raise BlockingError("report", "MISSING_INPUT", "no residual maturity for a performing slice")
+        raise BlockingError("report", Block.MISSING_INPUT, "no residual maturity for a performing slice")
     book["maturity_numerator"] = book["gca"] * book["remaining_maturity"]
     out = _with_total(book, ["scenario", "year", "portfolio"], ["gca", "maturity_numerator"])
     out["average_maturity"] = (out["maturity_numerator"] / out["gca"]).where(out["gca"] > 0)
@@ -149,7 +149,7 @@ def plausibility_sheet(spec: dict, impairment: pd.DataFrame, by_stage: pd.DataFr
     def path(variable: str) -> pd.Series:
         values = paths[paths["variable"] == variable].groupby("year")["value"].mean()
         if values.empty:
-            raise BlockingError("report", "MISSING_INPUT", f"no adverse path for {variable}")
+            raise BlockingError("report", Block.MISSING_INPUT, f"no adverse path for {variable}")
         return values
 
     def price_fall(variable: str) -> float:
@@ -180,9 +180,9 @@ def plausibility_sheet(spec: dict, impairment: pd.DataFrame, by_stage: pd.DataFr
     for row in spec["rows"]:
         required(row, ("measure", "scope", "published", "source"), "plausibility row")
         if row["measure"] not in measures:
-            raise BlockingError("report", "INVALID_INPUT", f"unknown plausibility measure {row['measure']}")
+            raise BlockingError("report", Block.INVALID_INPUT, f"unknown plausibility measure {row['measure']}")
         if row["source"] not in spec["sources"]:
-            raise BlockingError("report", "MISSING_INPUT", f"no source named {row['source']}")
+            raise BlockingError("report", Block.MISSING_INPUT, f"no source named {row['source']}")
         value = measures[row["measure"]](row["scope"])
         published = number(row["published"], "published")
         out.append({"measure": row["measure"], "scope": row["scope"], "engine": value, "published": published,

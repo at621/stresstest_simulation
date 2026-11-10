@@ -45,6 +45,9 @@ from stress.validate.sicr import (
 STEP = "R3"
 LOG = logging.getLogger("stress.R3")
 USABLE = [str(s) for s in USABLE_STATUSES]
+# Where the starting-point reconciliation shows a facility that names no portfolio. R3 rejects it,
+# and it stays in the loaded and rejected totals (OPS-07).
+NO_PORTFOLIO = "(no portfolio)"
 
 
 # --- matrices -----------------------------------------------------------------------------------
@@ -59,12 +62,22 @@ def matrix_set(table: pd.DataFrame, tol: float) -> tuple[dict[str, np.ndarray], 
     )
     if labels["from_rank"].duplicated().any() or labels["from_grade"].duplicated().any():
         raise BlockingError(STEP, Block.INVALID_MATRIX, "grade labels differ between segments")
+    if table[["from_rank", "to_rank", "from_grade", "to_grade"]].isna().any().any():
+        raise BlockingError(STEP, Block.INVALID_MATRIX, "a matrix cell has no grade or no rank")
     grades = tuple(labels["from_grade"])
     if not grades or grades[-1] != DEFAULT_GRADE:
         raise BlockingError(STEP, Block.INVALID_MATRIX, "the master scale must end with D")
     size = len(grades)
-    if list(labels["from_rank"]) != list(range(1, size + 1)):
+    if [int(rank) for rank in labels["from_rank"]] != list(range(1, size + 1)):
         raise BlockingError(STEP, Block.INVALID_MATRIX, "grade ranks are not 1..N+1")
+    # Every cell lands at (from_rank, to_rank): a to_rank must be the rank of its to_grade.
+    known = set(zip(labels["from_rank"].astype(int), labels["from_grade"]))
+    ends = table[["to_rank", "to_grade"]].drop_duplicates()
+    wrong = [(int(rank), grade) for rank, grade in zip(ends["to_rank"], ends["to_grade"])
+             if (int(rank), grade) not in known]
+    if wrong:
+        raise BlockingError(STEP, Block.INVALID_MATRIX,
+                            f"to_rank {wrong[0][0]} is not the rank of grade {wrong[0][1]} on a scale of {size} grades")
     matrices = {}
     for segment, cells in table.groupby("segment", sort=True):
         if len(cells) != size * size:
@@ -134,10 +147,36 @@ def _usable(status: pd.DataFrame, col: str) -> pd.Series:
 
 # --- checks -------------------------------------------------------------------------------------
 
+def _check_variant(name: str, variant, segments) -> None:
+    """The variant of this run against what this run knows (EAD-04, EAD-10). A ccf for a segment
+    the run does not have is applied to nothing, and a repayment profile for an unknown product or
+    with an unknown word runs as another profile: each would seal the variant's name on other
+    numbers. R2 has checked the shape of every variant; this checks the one in use."""
+    profile = variant.get("repayment_profile") if isinstance(variant, dict) else None
+    if not isinstance(profile, dict):
+        raise BlockingError(STEP, Block.UNKNOWN_VARIANT, f"variant {name!r} has no repayment_profile mapping")
+    unknown = sorted(str(segment) for segment in set(variant.get("ccf") or {}) - set(segments))
+    if unknown:
+        raise BlockingError(STEP, Block.UNKNOWN_VARIANT,
+                            f"variant {name!r}: ccf names {unknown}, which this run has no segment for "
+                            f"({sorted(segments)})")
+    products = sorted(str(product) for product in set(profile) - {*PRODUCTS, "default"})
+    if products:
+        raise BlockingError(STEP, Block.UNKNOWN_VARIANT,
+                            f"variant {name!r}: repayment_profile names {products}, which are not products "
+                            f"({', '.join(PRODUCTS)}) or default")
+    words = sorted({str(word) for word in profile.values()} - set(REPAYMENT_PROFILES))
+    if words:
+        raise BlockingError(STEP, Block.UNKNOWN_VARIANT,
+                            f"variant {name!r}: repayment_profile holds {words}; a profile is "
+                            f"{', '.join(REPAYMENT_PROFILES[:-1])} or {REPAYMENT_PROFILES[-1]}")
+
+
 def _check_parameters(ps: dict, segments: set[str], variant: str) -> None:
     if variant not in ps["variants"]:
         raise BlockingError(STEP, Block.UNKNOWN_VARIANT,
                             f"variant {variant!r} is not in the parameter set ({sorted(ps['variants'])})")
+    _check_variant(variant, ps["variants"][variant], ps["segments"])
     for seg in sorted(segments):
         params = ps["segments"].get(seg)
         if params is None:
@@ -268,6 +307,7 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     add(f["poci"].eq(True), Reason.POCI_NOT_IN_V1, "POCI has its own treatment, not in v1")
     add(f["counterparty_sector"] == CENTRAL_BANK_SECTOR, Reason.CENTRAL_BANK_NOT_IN_V1,
         "central-bank exposures take the prescribed zero-loss route, not in v1")
+    add(~_usable(fst, "portfolio"), Reason.MISSING_PORTFOLIO, "portfolio missing")
     known_segments = set(matrices) & set(ps["segments"])
     add(~f["segment"].isin(known_segments), Reason.UNKNOWN_SEGMENT,
         "segment has no TTC matrix or parameters")
@@ -374,6 +414,10 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     cand = f.loc[~f["_row"].isin(bad_rows) & performing].copy()
     lifetime = TtcLifetime(matrices)
     sicr = np.full(len(cand), default_rank, dtype=int)
+    # Where a specification gave a segment another sicr_k, also the line of the k it replaced.
+    replaced = {seg: float(k) for seg, k in loaded.replaced_sicr_k.items()
+                if isinstance(k, (int, float)) and not isinstance(k, bool) and np.isfinite(k) and k > 0}
+    before = sicr.copy()
     for pos, (seg, horizon, g0) in enumerate(zip(cand["segment"], cand["residual_maturity"],
                                                   cand["origination_grade"])):
         pd_life = lifetime.pd(seg, float(horizon))
@@ -382,14 +426,24 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
             raise BlockingError(STEP, Block.MATRIX_NOT_MONOTONE,
                                 f"{seg}: lifetime TTC PD does not rise with the grade over {horizon} years")
         sicr[pos] = line
+        before[pos] = sicr_rank(pd_life, rank[g0], replaced[seg])[0] if seg in replaced else line
     cand["sicr_rank"] = sicr
     cand["current_rank"] = cand["current_grade"].map(rank)
     cand["qualitative_trigger"] = qualitative_trigger(cand["dpd"], cand["watchlist"], cand["forborne"],
                                                       ps["sicr_triggers"])
+    reported = cand["ifrs_stage"].astype(int).to_numpy()
     derived = np.where((cand["current_rank"] >= cand["sicr_rank"]) | cand["qualitative_trigger"], 2, 1)
-    conflict = pd.Series(derived != cand["ifrs_stage"].astype(int).to_numpy(), index=cand.index)
-    log.add(cand, conflict, "facility", "facility_id", Reason.STAGE_GRADE_CONFLICT,
+    conflict = pd.Series(derived != reported, index=cand.index)
+    # A stage that the replaced k explained and the specification's k does not: the override
+    # contradicts reported data, and that blocks the run (A44) instead of rejecting the facility.
+    explained = np.where((cand["current_rank"] >= before) | cand["qualitative_trigger"], 2, 1) == reported
+    moved = conflict & pd.Series(explained, index=cand.index)
+    log.add(cand, conflict & ~moved, "facility", "facility_id", Reason.STAGE_GRADE_CONFLICT,
             "neither the SICR line nor a qualitative trigger gives back the reported stage")
+    for seg in sorted(set(cand.loc[moved, "segment"])):
+        log.add(cand, moved & (cand["segment"] == seg), "facility", "facility_id", Reason.SICR_OVERRIDE_CONFLICT,
+                f"segment {seg}: the specification's sicr_k {float(ps['segments'][seg]['sicr_k']):g} "
+                f"(in place of {replaced[seg]:g}) does not give back the reported stage")
     bad_rows = log.ids("facility")
     good_fac_ids = set(f.loc[~f["_row"].isin(bad_rows), "facility_id"])
     log.add(com, com["facility_id"].isin(set(f["facility_id"]) - good_fac_ids)
@@ -444,7 +498,9 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     else:
         for (kind, code), n in rejections.groupby(["record_type", "reason_code"]).size().items():
             LOG.warning("rejected %s %s record(s): %s", f"{n:,}", kind, code)
-    reconciliation = reconcile(fac, f.loc[f["_row"].isin(bad_rows)], portfolio, com, good_com, tol_agg)
+    named = f["portfolio"].where(_usable(fst, "portfolio"), NO_PORTFOLIO)
+    reconciliation = reconcile(fac.assign(portfolio=named), f.assign(portfolio=named).loc[f["_row"].isin(bad_rows)],
+                               portfolio, com, good_com, tol_agg)
     return RoutedPortfolio(portfolio=portfolio, rejections=rejections, grades=grades,
                            reconciliation=reconciliation)
 
@@ -483,7 +539,16 @@ def reconcile(loaded: pd.DataFrame, rejected: pd.DataFrame, accepted: pd.DataFra
 
 def raise_if_blocking(rejections: pd.DataFrame) -> None:
     """Block the run when a rejection is one the requirements treat as blocking the run
-    (EAD-04, EAD-09). The caller has written rejections.parquet before this, so the log is kept."""
+    (EAD-04, EAD-09), or one that only a specification's sicr_k causes (A44). The caller has
+    written rejections.parquet before this, so the log is kept."""
+    moved = rejections[rejections["reason_code"] == str(Reason.SICR_OVERRIDE_CONFLICT)]
+    if len(moved):
+        counts = moved.groupby("detail").size()
+        summary = "; ".join(f"{detail} of {n:,} facilit{'y' if n == 1 else 'ies'}" for detail, n in counts.items())
+        LOG.error("a specification's sicr_k contradicts reported stages: %s", summary)
+        raise BlockingError(STEP, Reason.SICR_OVERRIDE_CONFLICT,
+                            f"{summary}. A stage is reported data: a specification may change sicr_k only "
+                            "where every reported stage is still explained; see rejections.parquet")
     hits = rejections[rejections["reason_code"].isin([str(r) for r in RUN_BLOCKING_REASONS])]
     if len(hits):
         counts = hits["reason_code"].value_counts().sort_index()

@@ -52,6 +52,9 @@ class RunConfig:
     specification_hash: str | None = None
     _specification_document: dict = field(default_factory=dict, repr=False)
     _specification_bytes: bytes = field(default=b"", repr=False)
+    # The analysis file as the R2 preflight read it: R1 names the run by these bytes and R2 seals
+    # them. None when there is no analysis file, or when it could not be read (R2 then blocks).
+    _analysis_bytes: bytes | None = field(default=None, repr=False)
 
     def selected_methods(self) -> dict[str, str]:
         """Each reading of the draft this run selects in place of the design's default."""

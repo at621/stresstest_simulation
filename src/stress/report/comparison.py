@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from stress.contracts.artifacts import sha256_file, verified_manifest
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 from stress.contracts.inputs import INPUT_MANIFEST
 from stress.contracts.run import (
     COMPARISONS_DIR,
@@ -54,7 +54,7 @@ def compare(base: Path, new: Path) -> tuple[dict[str, pd.DataFrame], dict, dict]
     manifests = verified_manifest(base), verified_manifest(new)
     for run, manifest in zip((base, new), manifests):
         if manifest["status"] == STATUS_BLOCKED:  # a run blocked at R10 has some reports, so look at its status
-            raise BlockingError(STEP, "RUN_INTEGRITY", f"{run.name} sealed as BLOCKED, so it has no results to compare")
+            raise BlockingError(STEP, Block.RUN_INTEGRITY, f"{run.name} sealed as BLOCKED, so it has no results to compare")
     tables = {}
     for report, name, keys, columns in TABLES:
         left, right = (pd.read_csv(run / RESULTS_DIR / REPORTS_DIR / report) for run in (base, new))
@@ -165,7 +165,7 @@ def _in_a_sealed_folder(folder: Path) -> bool:
 def write_report(tables: dict[str, pd.DataFrame], base: dict, new: dict, folder: Path) -> None:
     """The difference tables, a summary and a record that ties them to both runs."""
     if _in_a_sealed_folder(folder):
-        raise BlockingError(STEP, "RUN_INTEGRITY", "sealed folders are write-once: choose one outside them")
+        raise BlockingError(STEP, Block.RUN_INTEGRITY, "sealed folders are write-once: choose one outside them")
     folder.mkdir(parents=True, exist_ok=True)
     for name, table in tables.items():
         _rounded(table).to_csv(folder / f"{name}.csv", index=False, lineterminator="\n")

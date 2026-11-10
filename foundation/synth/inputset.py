@@ -154,17 +154,52 @@ def approve(folder: Path, approver: str, on: str) -> None:
     }, indent=2), encoding="utf-8", newline="\n")
 
 
+def check_matrix_files(source: Path, parameter_set) -> None:
+    """Refuse a parameter set that packaging cannot freeze into a set the engine runs: every
+    segment, filed under ``portfolios.<portfolio>.segments``, names its TTC matrix file, and that
+    file is in the source folder. Raises ValueError with what to correct."""
+    portfolios = parameter_set.get("portfolios") if isinstance(parameter_set, dict) else None
+    if not isinstance(portfolios, dict) or not portfolios:
+        raise ValueError(
+            f"{FILES['parameter_set']} has no portfolios section. A parameter set files each segment under "
+            "portfolios.<portfolio>.segments.<segment>, with its models and its ttc_matrix file; a file with "
+            "segments at the top is the form used before 6 November 2026 (A42) and cannot be packaged")
+    without = []
+    for portfolio, body in portfolios.items():
+        segments = body.get("segments") if isinstance(body, dict) else None
+        if not isinstance(segments, dict) or not segments:
+            raise ValueError(f"{FILES['parameter_set']}: portfolio {portfolio} holds no mapping of segments")
+        for segment, settings in segments.items():
+            if not isinstance(settings, dict) or not settings.get("ttc_matrix"):
+                without.append(str(segment))
+    if without:
+        raise ValueError(
+            f"{FILES['parameter_set']}: segment {', '.join(sorted(without))} names no ttc_matrix. Every segment "
+            f"names its TTC matrix file under {MATRIX_DIR}/, and without it the engine blocks the set")
+    absent = sorted(path for path in set(matrix_paths(parameter_set).values()) if not (source / path).is_file())
+    if absent:
+        raise ValueError(f"{source.as_posix()} has no {', '.join(absent)}, which {FILES['parameter_set']} names")
+
+
 def package(source: Path, destination: Path) -> Path:
     """Package user-prepared datasets without generating facilities or recalibrating models.
 
     The engine performs financial/type validation at R2/R3. This step freezes exactly the
-    supplied tables and YAML, creates their manifest and records pending owner approval.
+    supplied tables and YAML, creates their manifest and records pending owner approval. It
+    refuses a parameter set whose segments do not each name a matrix file of the source folder,
+    because the set it would seal is one the engine cannot run.
     """
+    lacking = sorted(filename for filename in FILES.values() if not (source / filename).is_file())
+    if lacking:
+        raise ValueError(f"{source.as_posix()} has no {', '.join(lacking)}")
     tables = {name: pd.read_parquet(source / filename) for name, filename in FILES.items()
               if filename.endswith(".parquet")}
     documents = {name: yaml.safe_load((source / filename).read_text(encoding="utf-8"))
                  for name, filename in FILES.items() if filename.endswith(".yaml")}
     ps = documents["parameter_set"]
+    check_matrix_files(source, ps)
+    if not ps.get("parameter_set_id"):
+        raise ValueError(f"{FILES['parameter_set']} has no parameter_set_id")
     tables[MATRICES] = load_matrices(source, ps)
     meta = {"status": "SYNTHETIC", "spec_version": str(ps.get("spec_version", "unapproved")),
             "parameter_set_id": ps["parameter_set_id"], "generator": {"method": "supplied_datasets", "version": "1"}}

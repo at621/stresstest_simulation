@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 
 
 def sha256_file(path: Path) -> str:
@@ -40,4 +40,4 @@ def verified_manifest(run_dir: Path) -> dict:
                 raise ValueError(f"integrity failed: {name}")
         return manifest
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        raise BlockingError("audit", "RUN_INTEGRITY", str(exc)) from exc
+        raise BlockingError("audit", Block.RUN_INTEGRITY, str(exc)) from exc

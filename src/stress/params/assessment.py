@@ -9,7 +9,7 @@ import pandas as pd
 from scipy.special import ndtr, ndtri
 
 from stress.contracts.checks import number, required
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 from stress.params.lgd import lgd_from_z, loss_weighted_lgd
 
 FAMILIES = {
@@ -49,15 +49,15 @@ def default_weighted_lgd(slices: pd.DataFrame, facility: pd.DataFrame, curves: p
 def benchmark_selection(rows: list[dict]) -> pd.DataFrame:
     """Choose whole model/benchmark parameter bundles, not an opportunistic scalar mix."""
     if not rows:
-        raise BlockingError("analysis", "MISSING_INPUT", "empty benchmark population")
+        raise BlockingError("analysis", Block.MISSING_INPUT, "empty benchmark population")
     stable, seen = {}, set()
     for row in rows:
         required(row, ("exposure_id", "country", "pivot", "family", "scenario", "year", "gca",
                        "model_available", "route"), "benchmark row")
         if row["family"] not in FAMILIES or row["route"] not in ("ordinary", "sovereign", "central_bank"):
-            raise BlockingError("analysis", "INVALID_INPUT", "unknown benchmark family or route")
+            raise BlockingError("analysis", Block.INVALID_INPUT, "unknown benchmark family or route")
         if not isinstance(row["model_available"], bool):
-            raise BlockingError("analysis", "INVALID_INPUT", "model_available must be boolean")
+            raise BlockingError("analysis", Block.INVALID_INPUT, "model_available must be boolean")
         if row["model_available"]:
             required(row, ("model_parameters", "model_version"), "eligible model")
             required(row["model_parameters"], FAMILIES[row["family"]], "eligible complete family")
@@ -67,12 +67,12 @@ def benchmark_selection(rows: list[dict]) -> pd.DataFrame:
         identity = tuple(row[k] for k in ("exposure_id", "country", "pivot", "family"))
         key = identity + (row["scenario"], row["year"])
         if key in seen:
-            raise BlockingError("analysis", "DUPLICATE_KEY", "duplicate benchmark exposure")
+            raise BlockingError("analysis", Block.DUPLICATE_KEY, "duplicate benchmark exposure")
         seen.add(key)
         choice = (row["model_available"], row["route"], row["gca"], row.get("model_version"),
                   row.get("benchmark_version"))
         if identity in stable and stable[identity] != choice:
-            raise BlockingError("analysis", "UNSTABLE_SELECTION", "model choice changes across scenarios/years")
+            raise BlockingError("analysis", Block.UNSTABLE_SELECTION, "model choice changes across scenarios/years")
         stable[identity] = choice
     groups = {}
     for row in rows:
@@ -86,12 +86,12 @@ def benchmark_selection(rows: list[dict]) -> pd.DataFrame:
         populations.setdefault(pivot, {})[period] = population
     for pivot, views in populations.items():
         if set(views) != periods or len(set(views.values())) != 1:
-            raise BlockingError("analysis", "UNSTABLE_SELECTION", f"pivot population changes: {pivot}")
+            raise BlockingError("analysis", Block.UNSTABLE_SELECTION, f"pivot population changes: {pivot}")
     out = []
     for key, group in groups.items():
         total = sum(r["gca"] for r in group)
         if total <= 0:
-            raise BlockingError("analysis", "INVALID_INPUT", "zero pivot exposure")
+            raise BlockingError("analysis", Block.INVALID_INPUT, "zero pivot exposure")
         coverage = sum(r["gca"] for r in group if r["model_available"]) / total
         for row in group:
             source = ("zero_loss" if row["route"] == "central_bank" else
@@ -107,13 +107,13 @@ def benchmark_selection(rows: list[dict]) -> pd.DataFrame:
                 required(values, names, "complete parameter family")
                 version = row[source + "_version"]
                 if not isinstance(version, str) or not version.strip():
-                    raise BlockingError("analysis", "MISSING_INPUT", "empty selected source version")
+                    raise BlockingError("analysis", Block.MISSING_INPUT, "empty selected source version")
             for name in names:
                 number(values[name], name, 0, 1)
             if row["family"] == "pd_tr":
                 for origin in (1, 2):
                     if not np.isclose(sum(values[f"tr{origin}{j}"] for j in (1, 2, 3)), 1., atol=1e-10, rtol=0):
-                        raise BlockingError("analysis", "INVALID_MATRIX", "transition row must sum to one")
+                        raise BlockingError("analysis", Block.INVALID_MATRIX, "transition row must sum to one")
             for name in names:
                 out.append({**dict(zip(("country", "pivot", "family", "scenario", "year"), key)),
                             "exposure_id": row["exposure_id"], "gca": row["gca"],
@@ -130,12 +130,12 @@ def recovery_lgd(rows: list[dict]) -> pd.DataFrame:
     for row in rows:
         required(row, fields, "recovery")
         if row["facility_id"] in seen:
-            raise BlockingError("analysis", "DUPLICATE_KEY", "duplicate recovery facility")
+            raise BlockingError("analysis", Block.DUPLICATE_KEY, "duplicate recovery facility")
         seen.add(row["facility_id"])
         ead = number(row["ead"], "ead", 0)
         rate = number(row["eir"], "eir")
         if ead <= 0 or rate <= -1:
-            raise BlockingError("analysis", "INVALID_INPUT", "ead must be positive and eir > -1")
+            raise BlockingError("analysis", Block.INVALID_INPUT, "ead must be positive and eir > -1")
         value = number(row["collateral_value"], "collateral_value", 0)
         allocation = number(row["allocation"], "allocation", 0, 1)
         haircut = number(row["haircut"], "haircut", 0, 1)
@@ -144,11 +144,11 @@ def recovery_lgd(rows: list[dict]) -> pd.DataFrame:
         unsecured = number(row["unsecured_recovery"], "unsecured_recovery", 0)
         cid = row["collateral_id"]
         if cid in collateral_values and collateral_values[cid] != value:
-            raise BlockingError("analysis", "INVALID_INPUT", "shared collateral values disagree")
+            raise BlockingError("analysis", Block.INVALID_INPUT, "shared collateral values disagree")
         collateral_values[cid] = value
         allocations[cid] = allocations.get(cid, 0.) + allocation
         if allocations[cid] > 1 + 1e-10:
-            raise BlockingError("analysis", "INVALID_INPUT", "shared collateral allocated more than once")
+            raise BlockingError("analysis", Block.INVALID_INPUT, "shared collateral allocated more than once")
         recovery = min(ead, max(0., value * allocation * (1 - haircut) + unsecured - cost))
         pv = recovery / (1 + rate)**time
         out.append({"facility_id": row["facility_id"], "model_version": row["model_version"],
@@ -162,7 +162,7 @@ def reverse_threshold(loss, target: float, lower: float, upper: float, iteration
     for name, value in (("target", target), ("lower", lower), ("upper", upper)):
         number(value, name, 0)
     if upper <= lower:
-        raise BlockingError("analysis", "INVALID_INPUT", "reverse-stress bracket must increase")
+        raise BlockingError("analysis", Block.INVALID_INPUT, "reverse-stress bracket must increase")
     left, right = number(loss(lower), "loss"), number(loss(upper), "loss")
     if left >= target:
         return {"status": "ALREADY_BREACHED", "severity": lower, "loss": left}
@@ -172,7 +172,7 @@ def reverse_threshold(loss, target: float, lower: float, upper: float, iteration
         mid = (lower + upper) / 2
         value = number(loss(mid), "loss")
         if value < left - 1e-8 or value > right + 1e-8:
-            raise BlockingError("analysis", "NON_MONOTONE", "loss is not monotone within the bracket")
+            raise BlockingError("analysis", Block.NON_MONOTONE, "loss is not monotone within the bracket")
         if value >= target:
             upper, right = mid, value
         else:
@@ -200,10 +200,10 @@ def challenge_analysis(spec: dict, portfolio: pd.DataFrame, ps: dict) -> tuple[p
     """One-year PD x accounting EAD x LGD sensitivity, not lifetime ECL or capital depletion."""
     required(spec, ("severity_grid", "loss_limit_eur", "lower", "upper", "limit_name"), "challenge")
     if not spec["severity_grid"] or not spec["limit_name"]:
-        raise BlockingError("analysis", "MISSING_INPUT", "challenge requires grid and named internal limit")
+        raise BlockingError("analysis", Block.MISSING_INPUT, "challenge requires grid and named internal limit")
     perf = portfolio.loc[portfolio.stage.ne(3)]
     if perf.empty:
-        raise BlockingError("analysis", "MISSING_INPUT", "challenge needs performing exposures")
+        raise BlockingError("analysis", Block.MISSING_INPUT, "challenge needs performing exposures")
     anchors = dict(zip(ps["master_scale"]["grades"], ps["master_scale"]["ttc_pd"]))
     p = perf.current_grade.map(anchors).to_numpy(float)
     rho = perf.segment.map(lambda s: ps["segments"][s]["rho"]).to_numpy(float)
@@ -211,7 +211,7 @@ def challenge_analysis(spec: dict, portfolio: pd.DataFrame, ps: dict) -> tuple[p
     ccf = perf.ccf.where(perf.undrawn.gt(0), 0.).to_numpy(float)
     exposure = perf.gca.to_numpy(float) + perf.undrawn.to_numpy(float)*ccf
     if not np.isfinite(p).all() or not np.isfinite(exposure).all():
-        raise BlockingError("analysis", "MISSING_INPUT", "challenge exposure or anchor missing")
+        raise BlockingError("analysis", Block.MISSING_INPUT, "challenge exposure or anchor missing")
 
     def loss(severity):
         pd = ndtr(ndtri(p) + np.sqrt(rho)*severity)

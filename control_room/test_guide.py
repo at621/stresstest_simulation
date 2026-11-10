@@ -43,7 +43,11 @@ NOT_ABOUT_THE_FILES = {
     Block.REGULATORY_MODE, Block.INVALID_ARGUMENT, Block.RUN_EXISTS, Block.INPUT_SET_NOT_FOUND,
     Block.INPUT_HASH_MISMATCH, Block.CONTROL_TOTAL_MISMATCH, Block.UNKNOWN_SCENARIO, Block.PD_IDENTITY,
     Block.LGD_OUT_OF_RANGE, Block.STATIC_BALANCE, Block.S3_RELEASE, Block.NOT_PERMITTED_MOVEMENT,
-    Block.RECONCILIATION}
+    Block.RECONCILIATION,
+    # An engine fault, a setup, a sealed run read back or rerun, and the optional analysis file.
+    Block.INTERNAL_ERROR, Block.INVALID_SPECIFICATION, Block.RUN_INTEGRITY, Block.SOURCE_MISMATCH,
+    Block.ENVIRONMENT_MISMATCH, Block.INVALID_INPUT, Block.INVALID_HORIZON, Block.INVALID_SCOPE,
+    Block.UNSTABLE_SELECTION, Block.NON_MONOTONE}
 
 
 def test_it_covers_every_kind_of_file_in_the_order_of_the_page():
@@ -131,10 +135,18 @@ def test_the_collateral_list_and_the_price_indices_are_the_engines():
 
 
 def test_what_no_check_catches_is_said_outright():
-    assert "Fill in portfolio" in FILES["facilities"]["warning"]
     assert all(word in FILES["facilities"]["warning"] for word in ("regulatory_approach", *APPROACHES))
-    assert "runs as linear" in FILES["parameter_set"]["warning"]
-    assert all(profile in FILES["parameter_set"]["warning"] for profile in REPAYMENT_PROFILES)
+    assert "Nothing checks" in FILES["scenarios"]["warning"]
+
+
+def test_a_check_the_engine_now_makes_is_a_rule_and_no_longer_a_warning():
+    """A blank portfolio is left out and an unknown repayment profile stops the run, so neither is
+    still listed as something no check catches."""
+    assert "portfolio" not in FILES["facilities"]["warning"] and FILES["parameter_set"]["warning"] is None
+    left_out = [rule["text"] for rule in FILES["facilities"]["rules"] if rule["effect"] == guide.LEFT_OUT]
+    assert "portfolio is filled in." in left_out
+    stops = " ".join(rule["text"] for rule in FILES["parameter_set"]["rules"] if rule["effect"] == guide.STOPS)
+    assert "repayment_profile" in stops and all(profile in stops for profile in REPAYMENT_PROFILES)
 
 
 def test_the_decimal_rule_is_kept_to_the_tables():

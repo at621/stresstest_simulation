@@ -30,7 +30,9 @@ runs/<run_id>/
 
 ## Run ID
 
-`<yyyymmddThhmmZ>-<variant>-<hash8>`, for example `20261017T1830Z-core-3f2a9c1b`. The hash covers the config, the input set, the code version and the spec version. A run that selects a reading of the draft in place of the design's default carries it after the variant, for example `20261031T0900Z-core+held-3f2a9c1b`, so it cannot be read as the core run.
+`<yyyymmddThhmmZ>-<variant>-<hash8>`, for example `20261017T1830Z-core-3f2a9c1b`. The hash covers the config, the input set, the code version and the spec version. It covers a specification and an analysis file by their content, not by where the file is, so the same file in another folder and a rerun, which reads the sealed copies, get the same hash. A second run in the same minute gets `-2` at the end.
+
+A run that selects a reading of the draft in place of the design's default carries it after the variant, for example `20261031T0900Z-core+held-3f2a9c1b`, so it cannot be read as the core run. A run whose specification holds more than `run` settings (a scenario, a segment or model, an assignment, a reporting class, a terminal policy or volumes) carries `+spec` last, for example `20261109T0900Z-core+spec-3f2a9c1b` or `-core+dynamic+spec-`. The variant holds only letters, digits, `_`, `.` and `-`; R1 refuses any other name before a folder is made.
 
 ## Rules
 

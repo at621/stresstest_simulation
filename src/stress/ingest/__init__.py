@@ -1,6 +1,6 @@
 """R2 load inputs: check each file's hash against R1, parse into typed tables (EUR amounts,
-decimal rates, a status on every value), keep the raw files unchanged, record row counts
-and control totals.
+decimal rates, a status on every value), check the shape of the two YAML documents, keep the raw
+files unchanged, record row counts and compare the control totals with the manifest.
 
 Section 4.2, DAT-02, DAT-03, OPS-01.
 """
@@ -12,7 +12,7 @@ import logging
 import re
 import shutil
 from datetime import date
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import numpy as np
 import pandas as pd
@@ -43,10 +43,10 @@ from stress.contracts.inputs import (
     inside_set,
     segments_of,
 )
-from stress.contracts.run import RunContext
+from stress.contracts.run import ADVERSE, RunContext
 from stress.contracts.status import ALL_STATUSES, STATUS_SUFFIX, ValueStatus
 from stress.contracts.tables import MODEL_LGD, MODEL_PREPAYMENT
-from stress.ingest import specification
+from stress.ingest import shape, specification
 from stress.models import resolve
 
 STEP = "R2"
@@ -206,8 +206,11 @@ def read_scenarios(ctx: RunContext) -> tuple[pd.DataFrame, dict]:
     missing = [k for k in SCENARIO_TOP_KEYS if k not in doc]
     if missing:
         raise BlockingError(STEP, Block.MISSING_COLUMN, f"scenarios.yaml lacks {missing}")
+    shape.scenarios(doc)
     rows = []
     for n, value in enumerate(doc["values"]):
+        if not isinstance(value, dict):
+            raise BlockingError(STEP, Block.BAD_VALUE_TYPE, f"scenario value {n} is not a mapping of its fields")
         absent = [f for f in SCENARIO_VALUE_FIELDS if f not in value]
         if "unit" in absent or not value.get("unit"):
             raise BlockingError(STEP, Block.SCENARIO_WITHOUT_UNIT,
@@ -220,13 +223,14 @@ def read_scenarios(ctx: RunContext) -> tuple[pd.DataFrame, dict]:
         if value["value_type"] not in SCENARIO_VALUE_TYPES:
             raise BlockingError(STEP, Block.BAD_VALUE_TYPE,
                                 f"scenario value {n} has an unknown value type {value['value_type']!r}")
+        shape.scenario_value(value, n)
         raw = value["value"]
         number = np.nan if raw is None else float(raw)
         if raw is not None and not np.isfinite(number):
             raise BlockingError(STEP, Block.BAD_VALUE_TYPE, f"scenario value {n} is not finite")
         rows.append({
             "scenario": value["scenario"], "variable": value["variable"],
-            "country": value["country"], "year": int(value["year"]),
+            "country": value["country"], "year": value["year"],
             "value": number * SCENARIO_UNITS[value["unit"]],
             "raw_value": number, "unit": value["unit"], "value_type": value["value_type"],
             "status": value["status"], "completeness": value["completeness"],
@@ -245,10 +249,12 @@ def read_parameter_set(ctx: RunContext) -> dict:
     missing = [k for k in PARAMETER_SET_TOP_KEYS if k not in doc]
     if missing:
         raise BlockingError(STEP, Block.MISSING_PARAMETER, f"parameter_set.yaml lacks {missing}")
+    shape.parameter_set(doc)
     try:
         doc["segments"] = segments_of(doc)
     except (TypeError, ValueError) as exc:
         raise BlockingError(STEP, Block.MISSING_PARAMETER, f"parameter_set.yaml: {exc}") from exc
+    shape.segments(doc["segments"])
     del doc["portfolios"]
     return doc
 
@@ -319,17 +325,36 @@ def _close(a: float, b: float, tol: dict) -> bool:
     return abs(a - b) <= max(tol["abs"], tol["rel"] * abs(b))
 
 
-def compare_controls(loaded: dict, expected: dict, tol: dict) -> list[str]:
+CONTROL_GROUPS = ("rows", "by_portfolio_stage", "undrawn_by_portfolio")
+CONTROL_AMOUNTS = ("gca_total", "undrawn_total", "allowance_on_total", "provision_off_total")
+
+
+def compare_controls(loaded: dict, expected, tol: dict) -> list[str]:
+    """Where the totals R2 recomputed from the files differ from the manifest's control totals. A
+    manifest without them, or without one of them, is a difference too: with nothing to compare,
+    nothing was checked."""
+    if not isinstance(expected, dict):
+        return ["the manifest has no control_totals to check the files against"]
+    absent = [name for name in (*CONTROL_GROUPS, *CONTROL_AMOUNTS) if name not in expected]
+    unusable = [name for name in CONTROL_GROUPS if name in expected and not isinstance(expected[name], dict)]
+    unusable += [name for name in CONTROL_AMOUNTS if name in expected and not shape.is_number(expected[name])]
+    if absent or unusable:
+        return [f"the manifest's control_totals lack {absent + unusable}"]
     problems = []
-    for name, count in expected.get("rows", {}).items():
+    for name, count in expected["rows"].items():
         if loaded["rows"].get(name) != count:
             problems.append(f"{name}: {loaded['rows'].get(name)} rows, manifest {count}")
-    for key, cell in expected.get("by_portfolio_stage", {}).items():
+    for key, cell in expected["by_portfolio_stage"].items():
         got = loaded["by_portfolio_stage"].get(key, {"count": 0, "gca": 0.0})
-        if got["count"] != cell["count"] or not _close(got["gca"], cell["gca"], tol):
+        if (not isinstance(cell, dict) or got["count"] != cell.get("count") or not shape.is_number(cell.get("gca"))
+                or not _close(got["gca"], cell["gca"], tol)):
             problems.append(f"{key}: loaded {got}, manifest {cell}")
-    for name in ("gca_total", "undrawn_total", "allowance_on_total", "provision_off_total"):
-        if name in expected and not _close(loaded[name], expected[name], tol):
+    for name, amount in expected["undrawn_by_portfolio"].items():
+        got = loaded["undrawn_by_portfolio"].get(name, 0.0)
+        if not shape.is_number(amount) or not _close(got, amount, tol):
+            problems.append(f"undrawn of {name}: loaded {got}, manifest {amount}")
+    for name in CONTROL_AMOUNTS:
+        if not _close(loaded[name], expected[name], tol):
             problems.append(f"{name}: loaded {loaded[name]}, manifest {expected[name]}")
     return problems
 
@@ -366,7 +391,7 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
     matrix = read_matrices(ctx, parameter_set["segments"], hashes)
     loaded_controls = control_totals(facilities.data, commitments.data, provisions.data)
     tol = parameter_set["tolerances"]["aggregate"]
-    problems = compare_controls(loaded_controls, manifest.get("control_totals", {}), tol)
+    problems = compare_controls(loaded_controls, manifest.get("control_totals"), tol)
     if problems:
         raise BlockingError(STEP, Block.CONTROL_TOTAL_MISMATCH, "; ".join(problems[:5]))
     LOG.info("all %d files match their manifest hashes (input set %s)", len(hashes),
@@ -381,12 +406,13 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
              f"{len(scenario_values):,}")
     LOG.info("parameter set %s (%s)", parameter_set["parameter_set_id"], parameter_set["status"])
     LOG.info("control totals match the manifest: GCA EUR %.1fm, undrawn EUR %.1fm, "
-             "opening allowances EUR %.1fm", loaded_controls["gca_total"] / 1_000_000,
+             "opening allowances EUR %.1fm; rows, each portfolio and stage and undrawn by portfolio too",
+             loaded_controls["gca_total"] / 1_000_000,
              loaded_controls["undrawn_total"] / 1_000_000,
              (loaded_controls["allowance_on_total"] + loaded_controls["provision_off_total"]) / 1_000_000)
     controls = {
         "loaded": loaded_controls,
-        "manifest": manifest.get("control_totals", {}),
+        "manifest": manifest["control_totals"],
         "rows": {
             "facilities": len(facilities.data), "obligors": len(obligors.data),
             "commitments": len(commitments.data), "opening_provisions": len(provisions.data),
@@ -404,14 +430,28 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
     return loaded
 
 
+def analysis_scenarios(doc: dict) -> dict[str, set[str]]:
+    """The scenarios each supplied section is about and cannot do without: the plausibility
+    comparison reads the adverse results, and each climate row names its scenario."""
+    needs = {}
+    if "plausibility" in doc:
+        needs["plausibility"] = {ADVERSE}
+    if "climate" in doc:
+        needs["climate"] = {row["scenario"] for row in doc["climate"] if isinstance(row.get("scenario"), str)}
+    return needs
+
+
 def read_analysis(ctx: RunContext) -> dict:
-    """Optional versioned preparation inputs, captured once at R2 and sealed with the run."""
+    """Optional versioned preparation inputs, captured once and sealed with the run. The bytes are
+    the ones the preflight read before R1, which named the run by them; a file it could not read
+    is read here, so that the run is sealed with the block."""
     if not ctx.config.analysis:
         return {}
-    from pathlib import Path
     path = Path(ctx.config.analysis)
     try:
-        raw = path.read_bytes()
+        raw = ctx.config._analysis_bytes
+        if raw is None:
+            raw = path.read_bytes()
         doc = yaml.safe_load(raw)
         allowed = {"schema_version", "input_set_hash", "status", "source", "version", "benchmarks", "recoveries",
                    "capital", "climate", "template_mapping", "challenge", "npe_backstop",
@@ -429,6 +469,12 @@ def read_analysis(ctx: RunContext) -> dict:
         for section in ("capital", "template_mapping", "challenge", "npe_backstop", "plausibility"):
             if section in doc and (not isinstance(doc[section], dict) or not doc[section]):
                 raise ValueError(f"{section} must be a nonempty mapping")
+        for section, names in analysis_scenarios(doc).items():
+            lacking = sorted(names - set(ctx.scenarios))
+            if lacking:
+                raise BlockingError(STEP, Block.UNKNOWN_SCENARIO,
+                                    f"analysis: {section} is about scenario {', '.join(lacking)}, which this run "
+                                    f"does not hold ({', '.join(ctx.scenarios)}); run it too, or leave {section} out")
         (ctx.data_dir / "analysis.yaml").write_bytes(raw)
         ctx.lineage["analysis"] = {"sha256": hashlib.sha256(raw).hexdigest(),
                                    "version": doc["version"], "source": doc["source"],
