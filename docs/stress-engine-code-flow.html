@@ -411,7 +411,7 @@ html { scroll-behavior: smooth; }
         <div class="step-id">O4</div>
         <div class="step-body">
           <h3>Compute and freeze opening allowances <code>foundation/synth</code></h3>
-          <p>Calculates each facility's end-2026 allowance with the generator's own formula: PD curves from the TTC matrix, TTC LGD, the TTC prepayment rate and the facility's own schedule (D8). Writes the results as the opening-provisions file, with the scenarios file beside it: the §6.2 paths, the synthetic scenarios that <code>foundation/scenarios.yaml</code> adds, and a label and description for each (A43). Then it hashes the whole file set and records the approval. Raw data, adjustments and the final starting point stay separate.</p>
+          <p>Calculates each facility's end-2026 allowance with the generator's own formula: PD curves from the TTC matrix, TTC LGD, the TTC prepayment rate and a bullet schedule at the facility's rate and maturity (D8, SYN-PAR-09). Writes the results as the opening-provisions file, with the scenarios file beside it: the §6.2 paths, the synthetic scenarios that <code>foundation/scenarios.yaml</code> adds, and a label and description for each (A43). Then it hashes the whole file set and records the approval. Raw data, adjustments and the final starting point stay separate.</p>
         </div>
         <dl class="step-meta">
           <dt>Requirements</dt><dd><span class="chip">§5.2 frozen allowances</span><span class="chip">SYN-PAR-09</span><span class="chip">DAT-03</span></dd>
@@ -563,7 +563,7 @@ html { scroll-behavior: smooth; }
         </div>
         <dl class="step-meta">
           <dt>Requirements</dt><dd><span class="chip">OPS-01</span><span class="chip">OPS-04</span><span class="chip">SCN-04</span><span class="chip">REG-01</span></dd>
-          <dt>Blocks on</dt><dd class="blocks">Synthetic scenario labelled official · regulatory mode requested</dd>
+          <dt>Blocks on</dt><dd class="blocks">Regulatory mode requested. A synthetic scenario labelled official blocks at R4, on the scenarios R2 loaded.</dd>
         </dl>
       </article>
       <article class="step run" id="r2">
@@ -1336,7 +1336,7 @@ html { scroll-behavior: smooth; }
 ├── inputs/&lt;hash&gt;/         <span class="tg-lock">input set</span> <span class="c">6 datasets + matrices/, one per segment</span>
 ├── runs/&lt;run_id&gt;/         <span class="c">config, data, results + manifest.json</span>
 ├── src/stress/            <span class="tg-run">PART 2</span> <span class="c">the engine</span>
-│   ├── cli.py             <span class="c">stress run · stress report</span>
+│   ├── cli.py             <span class="c">stress run · report · rerun · compare</span>
 │   ├── contracts/         <span class="c">input schema, keys, value status</span>
 │   ├── models/            <span class="c">each segment's PD, LGD and prepayment models,</span>
 │   │                      <span class="c">one module per portfolio, closed registry</span>
@@ -1355,6 +1355,8 @@ html { scroll-behavior: smooth; }
 │   ├── unit/              <span class="c">one file per module, property tests</span>
 │   ├── acceptance/        <span class="c">reads docs/spec/ oracles, one test per AT</span>
 │   └── controls/          <span class="c">§12.2 rejections, no imports across parts</span>
+├── notebooks/             <span class="c">start runs through cli.py, read sealed runs back</span>
+├── control_room/          <span class="c">the page that takes a run through four steps</span>
 ├── docs/                  <span class="c">code flow, repo rules, runbook</span>
 │   └── spec/              <span class="tg-lock">locked</span> <span class="c">requirements, targets, AT oracles</span>
 └── archive/               <span class="tg-lock">people only</span> <span class="c">Claude Code is blocked</span></pre>
@@ -1397,7 +1399,7 @@ html { scroll-behavior: smooth; }
         <div class="d-body">
           <h3>How finely to project</h3>
           <p class="rec">One row per facility and slice: one slice for each performing grade, plus original S3 and each new S3 cohort. Stage is derived from the grade, or from a qualitative trigger (D2).</p>
-          <p class="why">AT-18 needs no-release checked for each exposure, and RPT-06 sums ECL from facility results. 10,000 facilities × (N grades + up to 4 S3 cohorts) × 3 years × 2 scenarios is still small.</p>
+          <p class="why">AT-18 needs no-release checked for each exposure, and RPT-06 sums ECL from facility results. 10,000 facilities × (N grades + up to 7 S3 slices) × 3 years × 2 scenarios is still small.</p>
         </div>
         <div class="d-tags"><span class="chip st">R7</span><span class="chip st">R8</span></div>
       </li>
@@ -1423,7 +1425,7 @@ html { scroll-behavior: smooth; }
         <span class="d-id">D4</span>
         <div class="d-body">
           <h3>Z-score LGD: formula and coefficients</h3>
-          <p class="rec">LGD[k] = Φ(Φ⁻¹(LGD_TTC) − w × Z[k]), with Z = Σ β_i × (x_i − μ_i) ÷ σ_i by segment and country. The β, μ, σ and w values are synthetic, sit in the parameter set, and you supply them.</p>
+          <p class="rec">LGD[k] = Φ(Φ⁻¹(LGD_TTC) − w × Z[k]), with Z = Σ β_i × (x_i − μ_i) ÷ σ_i by segment and country. The β, μ, σ and w values are synthetic, sit in each segment's LGD model in <code>src/stress/models/</code> (A42), and you supply them.</p>
           <p class="why">This form gives back the TTC value when Z = 0, stays between 0 and 1 without a cap, and rises as the economy worsens (LGD-08, LGD-11).</p>
         </div>
         <div class="d-tags"><span class="chip st">R4</span><span class="chip st">R6</span></div>
