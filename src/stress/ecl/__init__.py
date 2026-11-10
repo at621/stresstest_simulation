@@ -309,8 +309,7 @@ def year_end_provisions(slices: pd.DataFrame, params: Parameters, z: pd.DataFram
     out["floor_binding"] = (out["stage"] == 3) & ((out["masked_on"] > FLOOR_EPS) | (out["masked_off"] > FLOOR_EPS))
     provisions = PROVISIONS.check(out, STEP).sort_values(list(PROVISIONS.key), kind="mergesort")
     new_slices = SLICES.check(out, STEP).sort_values(list(SLICES.key), kind="mergesort")
-    buckets = ecl_buckets(ecl, perf, i, g, share_on, share_off, s1, terminal, on12, off12,
-                          facts, scenario, year)
+    buckets = ecl_buckets(ecl, i, g, share_on, share_off, s1, on12, off12, facts, scenario, year)
     by_stage = out.groupby("stage")[["allowance_on", "provision_off"]].sum().sum(axis=1) / 1_000_000
     binding = out["floor_binding"].astype(bool)
     LOG.info("%s %d%s: provisions EUR %.1fm on-balance, %.1fm off-balance (S1 %.1fm, S2 %.1fm, S3 %.1fm)%s; "
@@ -324,9 +323,10 @@ def year_end_provisions(slices: pd.DataFrame, params: Parameters, z: pd.DataFram
                           provisions=provisions.reset_index(drop=True), ecl_buckets=buckets)
 
 
-def ecl_buckets(ecl: PerformingEcl, perf: pd.DataFrame, i, g, share_on, share_off, s1, terminal,
-                on12, off12, facts, scenario, year) -> pd.DataFrame:
-    """Performing ECL split by default bucket, summed by segment and stage (ECL-09)."""
+def ecl_buckets(ecl: PerformingEcl, i, g, share_on, share_off, s1, on12, off12, facts, scenario,
+                year) -> pd.DataFrame:
+    """Performing ECL split by default bucket, summed by segment and stage (ECL-09). ``on12`` and
+    ``off12`` are the S1 amounts the caller booked, the end-2029 interpolation included."""
     n_fac, n_grades, _ = ecl.m.shape
     w2_on = np.zeros((n_fac, n_grades))
     w2_off = np.zeros((n_fac, n_grades))

@@ -1,5 +1,6 @@
 """R9 stock to flow: charge = closing − opening allowance, on- and off-balance separately.
-FX movement fixed at zero; overlays tracked by risk and year.
+FX movement fixed at zero; each facility's opening overlay is one amount, carried unchanged
+through every year, so none is counted twice (A24).
 
 ACC-01–ACC-04.
 """

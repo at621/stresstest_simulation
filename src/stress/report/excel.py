@@ -1,9 +1,14 @@
 """R10 Excel report: results/reports/stress_report.xlsx.
 
-One workbook that shows what happened in the run, by portfolio, baseline next to adverse, in
-EUR millions. Engine results are written as values (blue); every derived figure (totals,
-coverage, cost of risk, adverse minus baseline, the summary KPIs) is an Excel formula (black),
-so the sheet recalculates and can be traced. Display formats round; the stored values do not.
+One workbook that shows what happened in the run, by portfolio, the run's scenarios side by
+side, in EUR millions. Engine results are written as values (blue); every derived figure (totals,
+coverage, cost of risk, the difference of two scenarios, the summary KPIs) is an Excel formula
+(black), so the sheet recalculates and can be traced. Display formats round; the stored values
+do not.
+
+Coverage is the on-balance allowance over GCA on every sheet, as in impairment_by_stage.csv and
+``stress compare`` (A45); off-balance provisions are shown as amounts. Group headers show each
+scenario's label from the Scenarios file; a scenario's id stays where formulas match on it.
 
 The file is byte-for-byte reproducible: fixed document times and fixed zip entry times, so a
 rerun gives the same output hash (section 12.2 reproducibility).
@@ -39,6 +44,8 @@ THIN = Side(style="thin", color="BFBFBF")
 FORMATS = {
     "eur": '#,##0.0;(#,##0.0);"-"',
     "eur2": '#,##0.00;(#,##0.00);"-"',
+    # A check that ties within half a euro shows a dash, not the float residue of its sums.
+    "tie": '[>=0.0000005]#,##0.0;[<=-0.0000005](#,##0.0);"-"',
     "pct": '0.00%;(0.00%);"-"',
     "pct1": '0.0%;(0.0%);"-"',
     "bp": '#,##0" bp";(#,##0" bp");"-"',
@@ -76,12 +83,15 @@ def _cell(ws: Worksheet, row: int, col: int, value, fmt: str | None = None, colo
 
 
 def write_table(ws: Worksheet, df: pd.DataFrame, cols: list[Col], top: int, left: int = 1,
-                total_rows: pd.Series | None = None, autofilter: bool = True) -> dict:
+                total_rows: pd.Series | None = None, autofilter: bool = True,
+                labels: dict[str, str] | None = None) -> dict:
     """Write a table with a header (and a group header row when columns are grouped).
 
-    Returns the letters of every column key and the first and last data rows, so formulas on
-    other sheets can reference the table.
+    ``labels`` gives the text of a group header by group key, for example a scenario's label by
+    its id; a group without one shows its key. Returns the letters of every column key and the
+    first and last data rows, so formulas on other sheets can reference the table.
     """
+    shown = {"difference": "Comparison", **(labels or {})}
     letters = {c.key: get_column_letter(left + i) for i, c in enumerate(cols)}
     tokens = {"{" + key + "}": letter for key, letter in letters.items()}
     tokens["{r}"] = ""
@@ -93,8 +103,7 @@ def write_table(ws: Worksheet, df: pd.DataFrame, cols: list[Col], top: int, left
             end = start
             while end + 1 < len(cols) and cols[end + 1].group == cols[start].group:
                 end += 1
-            label = {"baseline": "Baseline", "adverse": "Adverse",
-                     "difference": "Comparison"}.get(cols[start].group, cols[start].group)
+            label = shown.get(cols[start].group, cols[start].group)
             cell = ws.cell(row=row, column=left + start, value=label or None)
             if end > start:
                 ws.merge_cells(start_row=row, start_column=left + start, end_row=row,
@@ -196,15 +205,14 @@ def _order(name: str) -> tuple:
 
 
 def sheet_results(wb: Workbook, imp: pd.DataFrame, by_stage: pd.DataFrame, scenarios: list[str],
-                  years: list[int]) -> dict:
-    """The main comparison: per portfolio and year, baseline next to adverse."""
+                  years: list[int], labels: dict[str, str]) -> dict:
+    """The main comparison: per portfolio and year, the run's scenarios side by side."""
     ws = wb.create_sheet("Results by portfolio")
     _title(ws, "Results by portfolio: scenarios side by side",
-           "EUR millions at each year-end. Coverage = provisions / GCA. Cost of risk = charge / GCA. "
+           "EUR millions at each year-end. Provisions = on-balance allowance + off-balance provision. "
+           "Coverage = on-balance allowance / GCA. Cost of risk = charge / GCA. "
            "S3 = credit-impaired exposure; it never cures (EXP-02).")
-    stage = by_stage.copy()
-    stage["provisions"] = stage["allowance_on"] + stage["provision_off"]
-    gca = stage.groupby(["scenario", "year", "portfolio", "stage"])["gca"].sum().unstack(
+    gca = by_stage.groupby(["scenario", "year", "portfolio", "stage"])["gca"].sum().unstack(
         "stage", fill_value=0.0).reindex(columns=[1, 2, 3], fill_value=0.0)  # a book can lack a stage
     gca.columns = [f"s{c}" for c in gca.columns]
     gca = gca.reset_index()
@@ -212,7 +220,6 @@ def sheet_results(wb: Workbook, imp: pd.DataFrame, by_stage: pd.DataFrame, scena
     total["portfolio"] = "Total"
     gca = pd.concat([gca, total], ignore_index=True)
     merged = imp.merge(gca, on=["scenario", "year", "portfolio"], how="left")
-    merged["provisions"] = merged["closing_on"] + merged["closing_off"]
     merged = merged[merged["year"].isin(years)]
     portfolios = sorted(p for p in merged["portfolio"].unique() if p != "Total") + ["Total"]
     rows = []
@@ -226,7 +233,7 @@ def sheet_results(wb: Workbook, imp: pd.DataFrame, by_stage: pd.DataFrame, scena
                 m = m.iloc[0]
                 rec["gca"] = (m["s1"] + m["s2"] + m["s3"]) / MILLION
                 rec[f"{s}_gca"] = rec["gca"]
-                for k in ("s1", "s2", "s3", "provisions", "charge_total", "cumulative_charge"):
+                for k in ("s1", "s2", "s3", "closing_on", "closing_off", "charge_total", "cumulative_charge"):
                     rec[f"{s}_{k}"] = m[k] / MILLION
             rows.append(rec)
     df = pd.DataFrame(rows)
@@ -238,46 +245,55 @@ def sheet_results(wb: Workbook, imp: pd.DataFrame, by_stage: pd.DataFrame, scena
             Col(f"{s}_s2", "S2 GCA", value=f"{s}_s2", group=s),
             Col(f"{s}_s3", "S3 GCA", value=f"{s}_s3", group=s),
             Col(f"{s}_s3r", "S3 ratio", "pct", formula=f"=IFERROR({{{s}_s3}}{{r}}/{{{s}_gca}}{{r}},0)", group=s, width=9),
-            Col(f"{s}_prov", "Provisions", value=f"{s}_provisions", group=s),
-            Col(f"{s}_cov", "Coverage", "pct", formula=f"=IFERROR({{{s}_prov}}{{r}}/{{{s}_gca}}{{r}},0)", group=s, width=9),
+            # Both parts of the provisions as amounts; only the on-balance allowance is in coverage (A45).
+            Col(f"{s}_on", "Allowance (on)", value=f"{s}_closing_on", group=s),
+            Col(f"{s}_off", "Provision (off)", value=f"{s}_closing_off", group=s),
+            Col(f"{s}_prov", "Provisions", formula=f"={{{s}_on}}{{r}}+{{{s}_off}}{{r}}", group=s),
+            Col(f"{s}_cov", "Coverage", "pct", formula=f"=IFERROR({{{s}_on}}{{r}}/{{{s}_gca}}{{r}},0)", group=s, width=9),
             Col(f"{s}_chg", "Charge in year", value=f"{s}_charge_total", group=s),
             Col(f"{s}_cor", "Cost of risk", "bp", formula=f"=IFERROR({{{s}_chg}}{{r}}/{{{s}_gca}}{{r}}*10000,0)", group=s, width=10),
             Col(f"{s}_cum", "Cumulative charge", value=f"{s}_cumulative_charge", group=s),
         ]
+    shown = dict(labels)
     if len(scenarios) == 2:
         b, a = scenarios
         difference = f"{a} - {b}"
+        shown[difference] = f"{labels[a]} - {labels[b]}"
         cols += [
             Col("d_s3", "S3 GCA", formula=f"={{{a}_s3}}{{r}}-{{{b}_s3}}{{r}}", group=difference),
             Col("d_prov", "Provisions", formula=f"={{{a}_prov}}{{r}}-{{{b}_prov}}{{r}}", group=difference),
             Col("d_cov", "Coverage", "pct", formula=f"={{{a}_cov}}{{r}}-{{{b}_cov}}{{r}}", group=difference, width=9),
             Col("d_cum", "Cumulative charge", formula=f"={{{a}_cum}}{{r}}-{{{b}_cum}}{{r}}", group=difference),
         ]
-    table = write_table(ws, df, cols, top=4, total_rows=df["portfolio"] == "Total")
+    table = write_table(ws, df, cols, top=4, total_rows=df["portfolio"] == "Total", labels=shown)
     ws.freeze_panes = ws.cell(row=table["first"], column=4)
     table["portfolios"] = portfolios
     return table
 
 
-def sheet_portfolios(wb: Workbook, start: pd.DataFrame, portfolio: pd.DataFrame, names: dict) -> dict:
+def sheet_portfolios(wb: Workbook, start: pd.DataFrame, portfolio: pd.DataFrame, names: dict,
+                     variant: str) -> dict:
     """The book at the starting point (end-2026), by portfolio."""
     ws = wb.create_sheet("Portfolios")
     _title(ws, "Portfolios at the starting point (31 December 2026)",
-           "EUR millions; counts in facilities. Converted commitments at the input-set CCF. "
-           "Opening provisions are the frozen O4 allowances (SYN-PAR-09).")
+           "EUR millions; counts in facilities. Converted commitments at the input-set CCF and at "
+           f"the CCF the run applied (variant {variant}); GCA + converted uses the applied CCF. "
+           "Opening provisions are the frozen O4 allowances (SYN-PAR-09). "
+           "Opening coverage = on-balance allowance / GCA.")
     cells = start[start["stage"] != "all"].copy()
     cells["stage"] = cells["stage"].astype(int)
     by = cells.pivot_table(index="portfolio", columns="stage", values="accepted_gca", aggfunc="sum", fill_value=0.0)
     by = by.reindex(columns=[1, 2, 3], fill_value=0.0)  # a book without S2 or S3 still has the column
     agg = cells.groupby("portfolio").agg(
         facilities=("accepted_count", "sum"), undrawn=("undrawn", "sum"),
-        converted=("converted_commitments", "sum"), allowance=("opening_allowance_on", "sum"),
-        provision=("opening_provision_off", "sum"))
+        converted=("converted_commitments", "sum"),
+        converted_applied=("converted_commitments_applied_ccf", "sum"),
+        allowance=("opening_allowance_on", "sum"), provision=("opening_provision_off", "sum"))
     irb = portfolio[portfolio["regulatory_approach"] == "IRB"].groupby("portfolio")["gca"].sum()
     df = agg.join(by).reset_index()
     df["name"] = df["portfolio"].map(names).fillna("")
     df["irb"] = df["portfolio"].map(irb).fillna(0.0)
-    for c in ("undrawn", "converted", "allowance", "provision", 1, 2, 3, "irb"):
+    for c in ("undrawn", "converted", "converted_applied", "allowance", "provision", 1, 2, 3, "irb"):
         df[c] = df[c] / MILLION
     df = df.rename(columns={1: "s1", 2: "s2", 3: "s3"})
     df["facilities"] = df["facilities"].astype(int)
@@ -295,17 +311,19 @@ def sheet_portfolios(wb: Workbook, start: pd.DataFrame, portfolio: pd.DataFrame,
         Col("share", "Share of book", "pct1", formula=f"=IFERROR({{gca}}{{r}}/{{gca}}{first + n},0)", width=9),
         Col("s3r", "S3 ratio", "pct", formula="=IFERROR({s3}{r}/{gca}{r},0)", width=9),
         Col("und", "Undrawn", value="undrawn"),
-        Col("conv", "Converted commitments", value="converted"),
-        Col("ead", "GCA + converted", formula="={gca}{r}+{conv}{r}"),
+        Col("conv", "Converted commitments (input-set CCF)", value="converted", width=24),
+        Col("conva", "Converted commitments (applied CCF)", value="converted_applied", width=24),
+        Col("ead", "GCA + converted (applied CCF)", formula="={gca}{r}+{conva}{r}", width=17),
         Col("allow", "Opening allowance (on)", value="allowance"),
         Col("prov", "Opening provision (off)", value="provision"),
-        Col("cov", "Opening coverage", "pct", formula="=IFERROR(({allow}{r}+{prov}{r})/{gca}{r},0)", width=10),
+        # The off-balance provision is an amount beside it, not part of the ratio (A45).
+        Col("cov", "Opening coverage", "pct", formula="=IFERROR({allow}{r}/{gca}{r},0)", width=10),
         Col("irb", "IRB GCA", value="irb"),
         Col("irbs", "IRB share", "pct1", formula="=IFERROR({irb}{r}/{gca}{r},0)", width=9),
     ]
     table = write_table(ws, df, cols, top=4, total_rows=is_total, autofilter=False)
     total_row = table["last"]
-    for key in ("fac", "s1", "s2", "s3", "und", "conv", "allow", "prov", "irb"):
+    for key in ("fac", "s1", "s2", "s3", "und", "conv", "conva", "allow", "prov", "irb"):
         letter = table["letters"][key]
         c = ws[f"{letter}{total_row}"]
         c.value = f"=SUM({letter}{table['first']}:{letter}{total_row - 1})"
@@ -315,13 +333,19 @@ def sheet_portfolios(wb: Workbook, start: pd.DataFrame, portfolio: pd.DataFrame,
 
 
 def sheet_stage(wb: Workbook, migration: pd.DataFrame) -> dict:
+    """Opening stocks, flows and closing stocks. A dynamic run changes the performing stock before
+    migration, so its sheet shows that volume change and its check allows for it: the check and
+    the subtitle give one formula, which is zero when the stocks tie."""
     ws = wb.create_sheet("Stage migration")
+    df = migration.copy()
+    volume = [s for s in ("S1", "S2") if f"volume_change_{s}" in df]  # only a dynamic run has them
+    stated = ("Volume change is the supplied change of the performing stock, applied before migration. "
+              "Check = closing - (opening + volume change)" if volume else "Check = closing - opening")
     _title(ws, "Stage migration: opening stocks, flows during the year, closing stocks",
            "EUR millions of GCA. Flows are sums of rating-matrix cells grouped by each facility's "
-           "SICR line (MIG-08); S3 never cures. Check = closing - (opening + flows in - flows out).")
-    df = migration.copy()
+           f"SICR line (MIG-08); S3 never cures. {stated}: zero when the stocks tie.")
     df["year"] = df["year"].astype(str)
-    money = [c for c in df.columns if c.startswith(("opening_", "flow_", "closing_"))]
+    money = [c for c in df.columns if c.startswith(("opening_", "flow_", "closing_", "volume_change_"))]
     df = _m(df, money)
     df = df.sort_values(["scenario", "portfolio", "year"], key=lambda s: s.map(_order) if s.name == "scenario" else s)
     flow_cols = [c for c in ("flow_S1_S1", "flow_S1_S2", "flow_S1_S3", "flow_S2_S1", "flow_S2_S2", "flow_S2_S3", "flow_S3_S3") if c in df]
@@ -329,9 +353,14 @@ def sheet_stage(wb: Workbook, migration: pd.DataFrame) -> dict:
             Col("year", "Year", "text", "year", width=7),
             Col("portfolio", "Portfolio", "text", "portfolio", width=10)]
     cols += [Col(f"o{s}", f"Opening {s}", value=f"opening_{s}", group="Opening") for s in ("S1", "S2", "S3")]
+    cols += [Col(f"v{s}", f"Volume change {s}", value=f"volume_change_{s}", group="Volume change")
+             for s in volume]
     cols += [Col(c, c.replace("flow_", "").replace("_", " to "), value=c, group="Flows", width=10) for c in flow_cols]
     cols += [Col(f"c{s}", f"Closing {s}", value=f"closing_{s}", group="Closing") for s in ("S1", "S2", "S3")]
-    cols.append(Col("check", "Check total", formula="=({cS1}{r}+{cS2}{r}+{cS3}{r})-({oS1}{r}+{oS2}{r}+{oS3}{r})", width=10))
+    check = "=({cS1}{r}+{cS2}{r}+{cS3}{r})-({oS1}{r}+{oS2}{r}+{oS3}{r})"
+    if volume:
+        check += "-(" + "+".join(f"{{v{s}}}{{r}}" for s in volume) + ")"
+    cols.append(Col("check", "Check total", "tie", formula=check, width=10))
     table = write_table(ws, df, cols, top=4)
     ws.freeze_panes = ws.cell(row=table["first"], column=4)
     return table
@@ -339,7 +368,9 @@ def sheet_stage(wb: Workbook, migration: pd.DataFrame) -> dict:
 
 def sheet_coverage(wb: Workbook, by_stage: pd.DataFrame) -> dict:
     ws = wb.create_sheet("Coverage by stage")
-    _title(ws, "Exposure and provisions by stage", "EUR millions. Coverage = (allowance + provision) / GCA.")
+    _title(ws, "Exposure and provisions by stage",
+           "EUR millions. Coverage = on-balance allowance / GCA, as in impairment_by_stage.csv; the "
+           "off-balance provision is shown as an amount and is not in the ratio.")
     df = _m(by_stage, ["gca", "undrawn", "allowance_on", "provision_off"])
     df["year"] = df["year"].astype(str)
     df["stage"] = "S" + df["stage"].astype(int).astype(str)
@@ -350,7 +381,7 @@ def sheet_coverage(wb: Workbook, by_stage: pd.DataFrame) -> dict:
             Col("stage", "Stage", "text", "stage", width=7),
             Col("gca", "GCA", value="gca"), Col("und", "Undrawn", value="undrawn"),
             Col("on", "Allowance (on)", value="allowance_on"), Col("off", "Provision (off)", value="provision_off"),
-            Col("cov", "Coverage", "pct", formula="=IFERROR(({on}{r}+{off}{r})/{gca}{r},0)", width=9)]
+            Col("cov", "Coverage", "pct", formula="=IFERROR({on}{r}/{gca}{r},0)", width=9)]
     table = write_table(ws, df, cols, top=4)
     ws.freeze_panes = ws.cell(row=table["first"], column=5)
     return table
@@ -360,7 +391,8 @@ def sheet_cohorts(wb: Workbook, cohorts: pd.DataFrame) -> dict:
     ws = wb.create_sheet("S3 cohorts")
     _title(ws, "Credit-impaired (S3) cohorts",
            "EUR millions. The original end-2026 cohort and each new cohort by entry year and origin "
-           "stage (MIG-03); allowances never fall below their floor (ECL-11).")
+           "stage (MIG-03); allowances never fall below their floor (ECL-11). "
+           "Coverage = on-balance allowance / GCA.")
     df = _m(cohorts, ["gca", "undrawn", "allowance_on", "provision_off"])
     df["year"] = df["year"].astype(str)
     df = df.sort_values(["scenario", "portfolio", "year", "cohort"], key=lambda s: s.map(_order) if s.name == "scenario" else s)
@@ -370,14 +402,15 @@ def sheet_cohorts(wb: Workbook, cohorts: pd.DataFrame) -> dict:
             Col("cohort", "Cohort", "text", "cohort", width=20),
             Col("gca", "GCA", value="gca"), Col("und", "Undrawn", value="undrawn"),
             Col("on", "Allowance (on)", value="allowance_on"), Col("off", "Provision (off)", value="provision_off"),
-            Col("cov", "Coverage", "pct", formula="=IFERROR(({on}{r}+{off}{r})/{gca}{r},0)", width=9)]
+            Col("cov", "Coverage", "pct", formula="=IFERROR({on}{r}/{gca}{r},0)", width=9)]
     table = write_table(ws, df, cols, top=4)
     ws.freeze_panes = ws.cell(row=table["first"], column=5)
     return table
 
 
 def sheet_parameters(wb: Workbook, z: pd.DataFrame, pd_tab: pd.DataFrame, lgd_tab: pd.DataFrame,
-                     scenarios: list[str], years: list[int], last_reported: int) -> None:
+                     scenarios: list[str], years: list[int], last_reported: int,
+                     labels: dict[str, str]) -> None:
     ws = wb.create_sheet("Parameters")
     _title(ws, "Scenario drivers and risk parameters",
            "Z > 0 is a better economy than average (SCN-08). One-year PD weighted by drawn exposure "
@@ -404,9 +437,9 @@ def sheet_parameters(wb: Workbook, z: pd.DataFrame, pd_tab: pd.DataFrame, lgd_ta
         pcols += [Col(f"{s}{y}", str(y), "pct", f"{s}_{y}", width=8, group=s) for y in [years[0] - 1, *years] if f"{s}_{y}" in wide]
     if len(scenarios) == 2 and f"{scenarios[1]}_{years[0]}" in wide:
         b, a = scenarios
-        pcols.append(Col("mult", f"{a} / {b} {years[0]}", "x",
+        pcols.append(Col("mult", f"{labels[a]} / {labels[b]} {years[0]}", "x",
                          formula=f"=IFERROR({{{a}{years[0]}}}{{r}}/{{{b}{years[0]}}}{{r}},0)", width=12, group="difference"))
-    t = write_table(ws, wide, pcols, top=row, autofilter=False)
+    t = write_table(ws, wide, pcols, top=row, autofilter=False, labels=labels)
     row = t["last"] + 3
     ws.cell(row=row - 1, column=1, value="LGD of the year, GCA weighted (LGD-12)").font = _font(bold=True)
     lw = lgd_tab.pivot_table(index="segment", columns=["scenario", "year"], values="exposure_weighted_lgd").reset_index()
@@ -414,10 +447,11 @@ def sheet_parameters(wb: Workbook, z: pd.DataFrame, pd_tab: pd.DataFrame, lgd_ta
     lcols = [Col("segment", "Segment", "text", "segment", width=10)]
     for s in scenarios:
         lcols += [Col(f"{s}{y}", str(y), "pct", f"{s}_{y}", width=8, group=s) for y in years if f"{s}_{y}" in lw]
-    write_table(ws, lw, lcols, top=row, autofilter=False)
+    write_table(ws, lw, lcols, top=row, autofilter=False, labels=labels)
 
 
-def sheet_starting_point(wb: Workbook, start: pd.DataFrame, scenarios: list[str]) -> None:
+def sheet_starting_point(wb: Workbook, start: pd.DataFrame, scenarios: list[str],
+                         labels: dict[str, str]) -> None:
     ws = wb.create_sheet("Starting point")
     _title(ws, "Starting-point reconciliation (31 December 2026)",
            "Loaded = accepted + rejected, by portfolio and stage. EUR millions. The engine's own "
@@ -439,7 +473,7 @@ def sheet_starting_point(wb: Workbook, start: pd.DataFrame, scenarios: list[str]
             Col("po", "Frozen provision (off)", value="opening_provision_off")]
     for s in scenarios:
         if f"engine_2026_{s}_on" in df:
-            cols.append(Col(f"e{s}", f"Engine end-2026, {s}", value=f"engine_2026_{s}_on", width=13))
+            cols.append(Col(f"e{s}", f"Engine end-2026, {labels[s]}", value=f"engine_2026_{s}_on", width=13))
     write_table(ws, df, cols, top=4)
 
 
@@ -472,10 +506,10 @@ def sheet_notes(wb: Workbook, meta: dict) -> None:
         ("Status", f"{meta['status']}: a synthetic preparation run. Not an EBA submission, not a bank forecast (OPS-04)."),
         ("Units", "Amounts in EUR millions; rates and ratios as percentages. Values are unrounded; formats round the display only."),
         ("Colours", "Blue numbers are engine results written by the run. Black cells are Excel formulas over them."),
-        ("Scenarios", "Named scenarios run through the same pipeline, never blended (REG-07). Comparison columns are formulas."),
+        ("Scenarios", "Named scenarios run through the same pipeline, never blended (REG-07). Comparison columns are formulas. Group headers show each scenario's label from the Scenarios file; the Scenario columns and the Summary's column headers hold its id, which the formulas match on."),
         ("Balance sheet", "Static: balances maintained. Dynamic: supplied performing-volume changes before migration; see exposure_movements.csv. S3 cohorts remain."),
         ("Charge", "Charge = closing - opening provisions in the year; a negative charge is a release. The 2027 opening is the frozen O4 allowance."),
-        ("Coverage", "Provisions (on- plus off-balance) / GCA."),
+        ("Coverage", "On-balance allowance / GCA on every sheet, as in impairment_by_stage.csv and stress compare (assumption A45). Off-balance provisions are shown as amounts and are not in the ratio."),
         ("Cost of risk", "Charge in the year / GCA, in basis points."),
         ("S3", "Credit-impaired exposure: the original end-2026 cohort plus new cohorts by entry year and origin stage. No cures, sales or write-offs."),
         ("Parameters", f"Parameter set {meta['parameter_set_id']} ({meta['parameter_set_status']}). Open owner inputs and the assumptions taken are in docs/assumptions.md."),
@@ -504,6 +538,8 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
         ("Code version", meta["code_version"]),
         ("Requirements version", meta["spec_version"]),
     ]
+    if meta["specification"]:  # a run from a specification names it, beside its variant
+        info.insert(4, ("Run specification", meta["specification"]))
     for i, (k, v) in enumerate(info, start=4):
         ws.cell(row=i, column=1, value=k).font = _font(bold=True)
         ws.cell(row=i, column=2, value=v).font = _font()
@@ -516,7 +552,8 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
         c.fill = HEADER_FILL
         c.alignment = Alignment(horizontal="center")
     sheet = "Impairment"
-    rng = {k: _range(sheet, imp_t, k) for k in ("scenario", "year", "portfolio", "otot", "ctot", "cltot", "cum")}
+    rng = {k: _range(sheet, imp_t, k)
+           for k in ("scenario", "year", "portfolio", "otot", "ctot", "clon", "cloff", "cltot", "cum")}
     gca_cell = f"'Portfolios'!${portfolios_t['letters']['gca']}${portfolios_t['last']}"
     res_port = _range("Results by portfolio", results_t, "portfolio")
     res_year = _range("Results by portfolio", results_t, "year")
@@ -532,6 +569,10 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
         metrics.append((f"Charge {y}", "eur", lambda col, y=y: sumifs("ctot", col, str(y))))
     metrics.append((f"Cumulative charge {first}-{last}", "eur", lambda col: sumifs("cum", col, last)))
     metrics.append((f"Closing provisions {last}", "eur", lambda col: sumifs("cltot", col, last)))
+    # Both parts as amounts: coverage below takes the on-balance allowance only (A45).
+    allowance, provision = f"  of which on-balance allowance {last}", f"  of which off-balance provision {last}"
+    metrics.append((allowance, "eur", lambda col: sumifs("clon", col, last)))
+    metrics.append((provision, "eur", lambda col: sumifs("cloff", col, last)))
     base_row = top + 1
     rows = {}
     for i, (label, fmt, f) in enumerate(metrics):
@@ -544,32 +585,26 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
     r = base_row + len(metrics)
     extra = []
     gca_row = rows["Opening GCA"]
+    closing_gca = {}  # each scenario's own GCA at the last year-end, the denominator of its ratios
     for j, scen in enumerate(scenarios, start=2):
         extra.append((j, get_column_letter(j), _range("Results by portfolio", results_t, f"{scen}_s3")))
-    labels = [
-        (f"Coverage {last} (provisions / GCA)", "pct", lambda col: f"=IFERROR({col}{rows[f'Closing provisions {last}']}/{col}{gca_row},0)"),
-        ("Average annual cost of risk / opening GCA", "bp",
-         lambda col: f"=IFERROR({col}{rows[f'Cumulative charge {first}-{last}']}/{len(years)}/{col}{gca_row}*10000,0)"),
-    ]
-    for k, (label, fmt, f) in enumerate(labels):
-        ws.cell(row=r + k, column=1, value=label).font = _font()
-        for j, col, _ in extra:
-            _cell(ws, r + k, j, f(col), fmt)
-        rows[label] = r + k
-    r += len(labels)
+        own = _range("Results by portfolio", results_t, f"{scen}_gca")
+        closing_gca[j] = f'SUMIFS({own},{res_port},"Total",{res_year},"{last}")'
+    ws.cell(row=r, column=1, value=f"Coverage {last} (on-balance allowance / GCA)").font = _font()
+    for j, col, _ in extra:
+        _cell(ws, r, j, f"=IFERROR({col}{rows[allowance]}/({closing_gca[j]}),0)", "pct")
+    r += 1
+    ws.cell(row=r, column=1, value="Average annual cost of risk / opening GCA").font = _font()
+    for j, col, _ in extra:
+        cumulative = rows[f"Cumulative charge {first}-{last}"]
+        _cell(ws, r, j, f"=IFERROR({col}{cumulative}/{len(years)}/{col}{gca_row}*10000,0)", "bp")
+    r += 1
     ws.cell(row=r, column=1, value=f"S3 GCA {last}").font = _font()
     for j, col, s3_range in extra:
         _cell(ws, r, j, f'=SUMIFS({s3_range},{res_port},"Total",{res_year},"{last}")', "eur")
-    rows["s3"] = r
     ws.cell(row=r + 1, column=1, value=f"S3 ratio {last}").font = _font()
     for j, col, _ in extra:
-        scen = scenarios[j - 2]
-        closing_gca = _range("Results by portfolio", results_t, f"{scen}_gca")
-        denominator = f'SUMIFS({closing_gca},{res_port},"Total",{res_year},"{last}")'
-        _cell(ws, r + 1, j, f"=IFERROR({col}{r}/({denominator}),0)", "pct")
-        coverage_row = rows[f"Coverage {last} (provisions / GCA)"]
-        _cell(ws, coverage_row, j,
-              f"=IFERROR({col}{rows[f'Closing provisions {last}']}/({denominator}),0)", "pct")
+        _cell(ws, r + 1, j, f"=IFERROR({col}{r}/({closing_gca[j]}),0)", "pct")
     end = r + 1
     if len(scenarios) == 2:
         for rr in range(base_row, end + 1):
@@ -581,9 +616,12 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
     for rr in range(base_row, end + 1):
         for j in range(1, len(header) + 1):
             ws.cell(row=rr, column=j).border = Border(bottom=THIN)
-    ws.column_dimensions["A"].width = 34
+    ws.column_dimensions["A"].width = 42  # the longest metric label, the coverage row
     for j in range(2, len(header) + 1):
         ws.column_dimensions[get_column_letter(j)].width = 18
+    # The charts stand one empty column clear of the last column the tables use, however many
+    # scenarios the run holds: with two scenarios and their difference that is column F.
+    chart_column = get_column_letter(len(header) + 2)
 
     # Chart data: cumulative charge by portfolio, and provisions by year (formulas).
     chart_top = end + 3
@@ -609,7 +647,7 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
     bar.set_categories(Reference(ws, min_col=1, min_row=chart_top + 1, max_row=chart_top + len(ports)))
     bar.height, bar.width = 7.5, 16
     _show_axes(bar)
-    ws.add_chart(bar, "F4")
+    ws.add_chart(bar, f"{chart_column}4")
 
     line_top = chart_top + len(ports) + 3
     ws.cell(row=line_top - 1, column=1, value="Total provisions by year-end").font = _font(bold=True, size=11)
@@ -637,7 +675,7 @@ def sheet_summary(ws: Worksheet, meta: dict, imp_t: dict, results_t: dict, portf
     for series in chart.series:
         series.smooth = False  # year-end points joined by straight lines
     _show_axes(chart)
-    ws.add_chart(chart, "F21")
+    ws.add_chart(chart, f"{chart_column}21")
     ws.freeze_panes = None
 
 
@@ -690,18 +728,21 @@ def _deterministic(data: bytes, stamp: datetime) -> bytes:
 def write_workbook(path: Path, meta: dict, tables: dict) -> None:
     scenarios = sorted(tables["impairment"]["scenario"].unique(), key=_order)
     years = meta["years"]
+    # Group headers show a scenario's label; one without a label shows its id.
+    labels = {s: meta["scenario_labels"].get(s, s) for s in scenarios}
     wb = Workbook()
     summary = wb.active
     summary.title = "Summary"
-    portfolios_t = sheet_portfolios(wb, tables["start"], tables["portfolio"], meta["portfolio_names"])
-    results_t = sheet_results(wb, tables["impairment"], tables["by_stage"], scenarios, years)
+    portfolios_t = sheet_portfolios(wb, tables["start"], tables["portfolio"], meta["portfolio_names"],
+                                    meta["variant_id"])
+    results_t = sheet_results(wb, tables["impairment"], tables["by_stage"], scenarios, years, labels)
     imp_t = sheet_impairment(wb, tables["impairment"])
     sheet_stage(wb, tables["migration"])
     sheet_coverage(wb, tables["by_stage"])
     sheet_cohorts(wb, tables["cohorts"])
     sheet_parameters(wb, tables["z"], tables["portfolio_pd"], tables["lgd"], scenarios, years,
-                     meta["last_reported_year"])
-    sheet_starting_point(wb, tables["start"], scenarios)
+                     meta["last_reported_year"], labels)
+    sheet_starting_point(wb, tables["start"], scenarios, labels)
     sheet_checks(wb, meta["checks"], tables["rejections"])
     sheet_notes(wb, meta)
     sheet_summary(summary, meta, imp_t, results_t, portfolios_t, scenarios, years)

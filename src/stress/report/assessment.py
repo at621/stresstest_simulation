@@ -39,8 +39,10 @@ def mapped_cells(spec: dict, tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
-def portfolio_diagnostics(portfolio: pd.DataFrame, obligors: pd.DataFrame,
-                          facilities: pd.DataFrame, slices: pd.DataFrame) -> dict[str, pd.DataFrame]:
+def portfolio_diagnostics(portfolio: pd.DataFrame, obligors: pd.DataFrame, facilities: pd.DataFrame,
+                          slices: pd.DataFrame, dpd_days: int) -> dict[str, pd.DataFrame]:
+    """Dimension totals, group concentration and the S2 stock by trigger. ``dpd_days`` is the
+    parameter set's ``sicr_triggers.dpd_days``, the days past due from which the trigger holds."""
     dims = ["country", "nace_code", "nace_version", "group_id"]
     obligors = obligors.loc[obligors.obligor_id.isin(portfolio.obligor_id)]
     facilities = facilities.loc[facilities.facility_id.isin(portfolio.facility_id)]
@@ -64,9 +66,12 @@ def portfolio_diagnostics(portfolio: pd.DataFrame, obligors: pd.DataFrame,
     attributed = slices.merge(flags, on="facility_id", validate="many_to_one")
     attributed = attributed.loc[attributed.stage.eq(2)].copy()
     attributed["trigger"] = np.where(attributed.qualitative_trigger, "qualitative_present", "grade_only")
-    # Flag combinations remain visible without counting the same exposure several times.
-    attributed["flags"] = ("dpd=" + attributed.dpd.astype(str) + ";watchlist="
-                            + attributed.watchlist.astype(str) + ";forborne=" + attributed.forborne.astype(str))
+    # Flag combinations remain visible without counting the same exposure several times. The key
+    # is whether the days past due reach the trigger (MIG-05), not their number: three flags,
+    # eight combinations at most.
+    past_due = attributed.dpd >= dpd_days
+    attributed["flags"] = (f"dpd_at_least_{dpd_days}=" + past_due.astype(str) + ";watchlist="
+                           + attributed.watchlist.astype(str) + ";forborne=" + attributed.forborne.astype(str))
     attribution = attributed.groupby(["scenario", "year", "trigger", "flags"])[measures].sum().reset_index()
     return {"dimensions": dimensions, "concentration": concentration, "sicr_attribution": attribution}
 
