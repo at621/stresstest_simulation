@@ -85,7 +85,7 @@ uv run stress run --inputs inputs/5a296ffe0e198705 --scenarios baseline,adverse 
 Runs need input set `57bf340df85d5a54` or later. Since 6 November 2026 the parameter set names each segment's models and matrix file (A42), and since 18 October 2026 the input contract carries `credit_status_date`. The engine blocks at R2 on older sets, and `stress rerun` of a run made on them blocks for the same reason. `57bf340df85d5a54` holds the data of `d62d0386f2c5256e` unchanged, and a run on it gives the same results.
 
 1. The command prints the run ID, the status and two headline lines. Exit code 0 means the run is sealed SYNTHETIC. Exit code 2 means it blocked: the folder is still sealed, with status BLOCKED, and the step, reason code and message are in `manifest.json` under `blocked`.
-2. Open `runs/<run_id>/results/reports/stress_report.xlsx` for the results by portfolio, baseline against adverse. Read `runs/<run_id>/run.log` for what each step did and how long it took. `summary.md` (or `uv run stress report --run runs/<run_id>`) gives the headline in text.
+2. Open `runs/<run_id>/results/reports/stress_report.xlsx` for the results by portfolio, the run's scenarios side by side. Read `runs/<run_id>/run.log` for what each step did and how long it took. `summary.md` (or `uv run stress report --run runs/<run_id>`) gives the headline in text and lists every report the run wrote. It is written last, so a run that blocks in the report step has none.
 3. Check `rejections.parquet`: it is empty for the committed input set. Any row is a rejected record with its reason code.
 4. Run `uv run stress rerun --run runs/<run_id>` on the machine that made the run (C18). It must report "reproduced". Exit code 3 lists the outputs whose hash differs.
 

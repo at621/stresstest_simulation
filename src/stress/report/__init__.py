@@ -1,11 +1,18 @@
 """R10 aggregate and report: money summed from facility and bucket results, ratios with
-numerator and denominator, the four v1 reports. The only place that rounds.
+numerator and denominator. The only place that rounds.
 
 RPT-01, RPT-05, RPT-06, section 11.3.
 
-Reports (results/reports/): starting-point reconciliation, stage migration (with S3 cohorts
-and the grade-level detail), parameters (Z, PiT matrices, PD curves, LGD by Z, EAD profile,
-ECL by bucket) and impairment, plus summary.md. Every report carries the run's status label.
+Reports (results/reports/): the starting-point reconciliation, stage migration (with S3 cohorts
+and the grade-level detail), the parameter reports (Z, driver contributions, property indices,
+TTC and PiT matrices, PD curves, portfolio PD, LGD by Z, EAD profile, ECL by bucket), impairment
+in total and by stage, and the static or dynamic books. Beside them: the segment models, the
+effective specification, the Excel workbook, the ``analysis_*.csv`` diagnostics (those of a
+sidecar only when it is supplied) and summary.md, which lists what was written. Every CSV
+carries the run's status label.
+
+Coverage is the on-balance allowance over GCA in every report, the workbook included, and the
+EAD profile is reported on the performing stock in static and dynamic runs alike (A45).
 """
 
 import json
@@ -20,6 +27,7 @@ from stress.contracts.inputs import CURRENCY, MODEL_SETTINGS, ON_BALANCE_CATEGOR
 from stress.contracts.preparation import ANALYSIS_RATES
 from stress.contracts.run import (
     ADVERSE,
+    BASELINE,
     LGD_TROUGH,
     RUNOFF_REPLACED,
     S2_HELD,
@@ -47,6 +55,10 @@ WORKBOOK_FILE = "stress_report.xlsx"
 AMOUNT_DP = 2  # EUR cents, the output boundary (section 12.3)
 RATE_DP = 10
 MILLION = 1_000_000.0
+# Conflicts between the requirements' text and what the owner decided or the draft says: a
+# reader of the effective specification is pointed at each (docs/assumptions.md).
+KNOWN_METHODOLOGY_CONFLICTS = ("C9", "C10", "C11", "C13", "C14", "C15", "C16", "C20")
+DEFAULT_LABELS = {BASELINE: "Baseline", ADVERSE: "Adverse"}  # for a Scenarios file without labels
 
 
 # --- rounding at the output boundary ------------------------------------------------------------
@@ -89,17 +101,36 @@ def _json_values(value):
     return value
 
 
-# --- the four reports ---------------------------------------------------------------------------
+def _baseline_first(name: str) -> tuple:
+    """The order of scenarios in every report: baseline, then the others by name."""
+    return (name != BASELINE, name)
+
+
+def _by_scenario(table: pd.DataFrame, *then: str) -> pd.DataFrame:
+    return table.sort_values(["scenario", *then],
+                             key=lambda s: s.map(_baseline_first) if s.name == "scenario" else s)
+
+
+def _applied_ccf(params: Parameters) -> pd.Series:
+    """The accounting CCF the run applied per facility: a variant's override included."""
+    return params.lgd_of_year.drop_duplicates("facility_id").set_index("facility_id")["ccf"]
+
+
+# --- the reports --------------------------------------------------------------------------------
 
 def starting_point(loaded: LoadedInputs, routed: RoutedPortfolio, results: dict,
-                   tol: dict) -> pd.DataFrame:
+                   tol: dict, applied_ccf: pd.Series) -> pd.DataFrame:
     """Accounting exposure, provisions, stage and scope bridges with EUR-only and AC-only
-    checks, and the frozen opening allowance next to the engine's own end-2026 view."""
+    checks, and the frozen opening allowance next to the engine's own end-2026 view. Converted
+    commitments are given twice: at the input set's CCF, and at the CCF the run applied, which
+    differs under a variant that overrides it."""
     port = routed.portfolio
     rec = routed.reconciliation.copy()
-    conv = port.assign(converted=port["undrawn"] * port["ccf"].fillna(0.0))
+    conv = port.assign(converted=port["undrawn"] * port["ccf"].fillna(0.0),
+                       converted_applied=port["undrawn"] * port["facility_id"].map(applied_ccf).fillna(0.0))
     by = conv.groupby(["portfolio", "stage"]).agg(
         undrawn=("undrawn", "sum"), converted_commitments=("converted", "sum"),
+        converted_commitments_applied_ccf=("converted_applied", "sum"),
         opening_allowance_on=("opening_allowance_on", "sum"),
         opening_provision_off=("opening_provision_off", "sum")).reset_index()
     rec = rec.merge(by, on=["portfolio", "stage"], how="left").fillna(0.0)
@@ -182,7 +213,7 @@ def segment_models(ps: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def parameter_reports(ctx: RunContext, drivers: Drivers, params: Parameters, results: dict,
+def parameter_reports(drivers: Drivers, params: Parameters, results: dict,
                       portfolio: pd.DataFrame, loaded: LoadedInputs) -> dict[str, pd.DataFrame]:
     out = {}
     out["z_scores.csv"] = drivers.z
@@ -213,21 +244,23 @@ def parameter_reports(ctx: RunContext, drivers: Drivers, params: Parameters, res
         z=("z", "mean"), numerator=("num", "sum"), denominator=("gca", "sum")).reset_index()
     lgd_tab["exposure_weighted_lgd"] = lgd_tab["numerator"] / lgd_tab["denominator"]
     out["lgd_by_z.csv"] = lgd_tab
+    # A45: the profile is reported on the performing stock of each valuation date, in a static run
+    # as in a dynamic one. ParameterRecords stay on each facility's opening reference, so each is
+    # scaled by the part of that reference still performing, drawn and undrawn apart, as R8 does.
     fp = params.facility.merge(portfolio[["facility_id", "portfolio"]], on="facility_id")
-    if "exposure_movements" in results:
-        actual = results["slices"].loc[results["slices"].stage.lt(3)].groupby(
-            ["scenario", "year", "facility_id"])[["gca", "undrawn"]].sum().rename(
-                columns={"gca": "actual_gca", "undrawn": "actual_undrawn"}).reset_index()
-        fp = fp.merge(actual, left_on=["scenario", "valuation_year", "facility_id"],
-                      right_on=["scenario", "year", "facility_id"], how="left", validate="many_to_one")
-        facts = portfolio.set_index("facility_id")
-        for actual_name, reference, columns in (("actual_gca", "gca", ("balance", "ead_drawn")),
-                                                ("actual_undrawn", "undrawn", ("ead_undrawn",))):
-            denominator = fp.facility_id.map(facts[reference]).to_numpy()
-            factor = np.divide(fp[actual_name].fillna(0).to_numpy(), denominator,
-                               out=np.zeros(len(fp)), where=denominator > 0)
-            fp[list(columns)] = fp[list(columns)].mul(factor, axis=0)
-        fp["ead_total"] = fp.ead_drawn + fp.ead_undrawn
+    actual = results["slices"].loc[results["slices"].stage.lt(3)].groupby(
+        ["scenario", "year", "facility_id"])[["gca", "undrawn"]].sum().rename(
+            columns={"gca": "actual_gca", "undrawn": "actual_undrawn"}).reset_index()
+    fp = fp.merge(actual, left_on=["scenario", "valuation_year", "facility_id"],
+                  right_on=["scenario", "year", "facility_id"], how="left", validate="many_to_one")
+    facts = portfolio.set_index("facility_id")
+    for actual_name, reference, columns in (("actual_gca", "gca", ("balance", "ead_drawn")),
+                                            ("actual_undrawn", "undrawn", ("ead_undrawn",))):
+        denominator = fp.facility_id.map(facts[reference]).to_numpy()
+        factor = np.divide(fp[actual_name].fillna(0).to_numpy(), denominator,
+                           out=np.zeros(len(fp)), where=denominator > 0)
+        fp[list(columns)] = fp[list(columns)].mul(factor, axis=0)
+    fp["ead_total"] = fp.ead_drawn + fp.ead_undrawn
     ead = fp.groupby(["scenario", "valuation_year", "portfolio", "default_bucket"]).agg(
         balance=("balance", "sum"), ead_drawn=("ead_drawn", "sum"), ead_undrawn=("ead_undrawn", "sum"),
         ead_total=("ead_total", "sum"), facilities=("facility_id", "size")).reset_index()
@@ -338,11 +371,10 @@ def data_gaps(routed: RoutedPortfolio, start: pd.DataFrame) -> list[str]:
             "(rejections.parquet)")]
 
 
-def summary_lines(ctx: RunContext, impairment_tab: pd.DataFrame, books: pd.DataFrame,
-                  migration: pd.DataFrame, years: list[int]) -> list[str]:
+def summary_lines(impairment_tab: pd.DataFrame, migration: pd.DataFrame, years: list[int]) -> list[str]:
     lines = []
     last = max(years)
-    for scen in sorted(impairment_tab["scenario"].unique(), key=lambda s: (s != "baseline", s)):
+    for scen in sorted(impairment_tab["scenario"].unique(), key=_baseline_first):
         tot = impairment_tab[(impairment_tab["scenario"] == scen) & (impairment_tab["portfolio"] == "Total")]
         cum = tot.loc[tot["year"] == last, "cumulative_charge"].iloc[0] / MILLION
         alloc = (tot.loc[tot["year"] == last, "closing_on"].iloc[0]
@@ -360,16 +392,28 @@ def _selected(ctx: RunContext) -> str:
     return "; ".join(f"{label} {value}" for label, value in ctx.config.selected_methods().items())
 
 
+def _specification_name(loaded: LoadedInputs) -> str:
+    """How a run specification is named in the reports: its own source and version. Never the
+    file's path, which a rerun from the sealed copy does not share."""
+    spec = loaded.specification
+    return f"{spec['source']}, version {spec['version']}" if spec else ""
+
+
 def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFrame, books: pd.DataFrame,
                   migration: pd.DataFrame, start: pd.DataFrame, rejections: pd.DataFrame,
                   loaded: LoadedInputs) -> None:
+    """summary.md, written last: it lists every report the run wrote, itself included. Every
+    table lists the scenarios in the headline's order, baseline first."""
     ps = loaded.parameter_set
+    spec = loaded.specification
+    specification = (f"; run specification \"{spec['source']}\", version {spec['version']} "
+                     f"(sha256 {ctx.config.specification_hash[:16]})") if spec else ""
     md = [
         f"# Stress run summary · {ctx.status_label}",
         "",
         ("Synthetic preparation run: not an EBA submission and not a bank forecast. "
          f"Parameter set {ps['parameter_set_id']} ({ps['status']}); input set "
-         f"{ctx.input_set_hash[:16]}; variant {ctx.variant}; code {ctx.code_version}. "
+         f"{ctx.input_set_hash[:16]}; variant {ctx.variant}{specification}; code {ctx.code_version}. "
          "Amounts in EUR millions, rounded here only."),
         "",
         "## Headline",
@@ -381,7 +425,7 @@ def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFram
         "| Scenario | Year | Opening | Charge | Closing | Cumulative charge |",
         "|---|---:|---:|---:|---:|---:|",
     ]
-    tot = impairment_tab[impairment_tab["portfolio"] == "Total"].sort_values(["scenario", "year"])
+    tot = _by_scenario(impairment_tab[impairment_tab["portfolio"] == "Total"], "year")
     for r in tot.itertuples(index=False):
         md.append(f"| {r.scenario} | {r.year} | {(r.opening_on + r.opening_off) / MILLION:,.1f} | "
                   f"{r.charge_total / MILLION:,.1f} | {(r.closing_on + r.closing_off) / MILLION:,.1f} | "
@@ -389,31 +433,34 @@ def write_summary(ctx: RunContext, lines: list[str], impairment_tab: pd.DataFram
     md += ["", "## Stage mix of GCA (EUR m)", "",
            "| Scenario | Year | S1 | S2 | S3 | Total |", "|---|---:|---:|---:|---:|---:|"]
     mig = migration.groupby(["scenario", "year"])[["closing_S1", "closing_S2", "closing_S3"]].sum().reset_index()
-    for r in mig.itertuples(index=False):
+    for r in _by_scenario(mig, "year").itertuples(index=False):
         total = r.closing_S1 + r.closing_S2 + r.closing_S3
         md.append(f"| {r.scenario} | {r.year} | {r.closing_S1 / MILLION:,.1f} | {r.closing_S2 / MILLION:,.1f} | "
                   f"{r.closing_S3 / MILLION:,.1f} | {total / MILLION:,.1f} |")
-    book_heading = ("Dynamic books per projected year (EUR m)" if ctx.config.balance_sheet == "dynamic"
-                    else "Static books per projected year (AT-44, EUR m)")
+    # The books start at the snapshot: the table holds the starting point and the projected years.
+    book_heading = ("Dynamic books at the starting point and each projected year (EUR m)"
+                    if ctx.config.balance_sheet == "dynamic"
+                    else "Static books at the starting point and each projected year (AT-44, EUR m)")
     md += ["", f"## {book_heading}", "",
            "| Scenario | Year | GCA | Undrawn | Converted | GCA + converted |", "|---|---:|---:|---:|---:|---:|"]
     agg = books.groupby(["scenario", "year"])[["gca", "undrawn", "converted", "gca_plus_converted"]].sum().reset_index()
-    for r in agg.itertuples(index=False):
+    for r in _by_scenario(agg, "year").itertuples(index=False):
         md.append(f"| {r.scenario} | {r.year} | {r.gca / MILLION:,.1f} | {r.undrawn / MILLION:,.1f} | "
                   f"{r.converted / MILLION:,.1f} | {r.gca_plus_converted / MILLION:,.1f} |")
+    md += ["", (f"Converted at the CCF the run applied (variant {ctx.variant}); "
+                "starting_point_reconciliation.csv gives the opening amount at that CCF and at the "
+                "input set's.")]
     whole = start[start["stage"] == "all"]
     accepted = int(start.loc[start["stage"] != "all", "accepted_count"].sum())
     opening = (whole["opening_allowance_on"].sum() + whole["opening_provision_off"].sum()) / MILLION
+    written = sorted({path.name for path in ctx.reports_dir.iterdir()} | {SUMMARY_FILE})
     md += [
         "", "## Starting point", "",
         f"- Facilities accepted: {accepted:,}; rejected records: {len(rejections):,}.",
         f"- Opening allowance (frozen, O4): EUR {opening:,.1f}m.",
         "- Currency EUR only; on-balance assets at amortised cost only.",
         "",
-        ("Reports in this folder: starting_point_reconciliation.csv, stage_migration.csv, "
-         "s3_cohorts.csv, grade_migration.csv, impairment.csv, impairment_by_stage.csv, "
-         f"{ctx.config.balance_sheet}_books.csv and the parameter reports (z_scores.csv, pit_matrices.csv, "
-         "pd_curves.csv, portfolio_pd.csv, lgd_by_z.csv, ead_profile.csv, ecl_by_bucket.csv)."),
+        f"Reports in this folder: {', '.join(written)}.",
         "",
     ]
     (ctx.reports_dir / SUMMARY_FILE).write_text("\n".join(md), encoding="utf-8", newline="\n")
@@ -428,7 +475,7 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         raise BlockingError(STEP, Block.RECONCILIATION, "a non-AC asset reached the reports")
     years = [int(y) for y in ps["horizon"]["projection_years"]]
     books = check_static_books(results, port, params, tol)
-    start = starting_point(loaded, routed, results, tol)
+    start = starting_point(loaded, routed, results, tol, _applied_ccf(params))
     migration, cohorts, grades = stage_migration(results, port, tol)
     imp, by_stage = impairment(results, port, tol)
     bridge = ecl_bridge(results, tol, ps["tolerances"]["amount"])
@@ -445,16 +492,15 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
     rates = ("z", "probability", "conditional_pd", "marginal_pd", "survival", "cumulative_pd",
              "one_year_pd", "exposure_weighted_lgd", "value", "mean", "sd", "beta", "contribution",
              "adverse_weight", "annual_change", "index")
-    param_tables = parameter_reports(ctx, drivers, params, results, port, loaded)
+    param_tables = parameter_reports(drivers, params, results, port, loaded)
     for name, table in param_tables.items():
         _write(ctx, name, table, rates=rates)
     LOG.info("reconciliations within the section 12.3 tolerances: starting point, exposure stocks, "
              "stage flows, charge bridge, ECL by bucket")
-    lines = summary_lines(ctx, imp, books, migration, years)
+    lines = summary_lines(imp, migration, years)
     lines += data_gaps(routed, start)
     if _selected(ctx):  # the headline reaches the console, the manifest and the summary
         lines.append(f"Selected method, not the design's default: {_selected(ctx)}")
-    write_summary(ctx, lines, imp, books, migration, start, routed.rejections, loaded)
     effective = {
         "schema_version": 1, "input_set_hash": ctx.input_set_hash,
         "run": {k: v for k, v in ctx.config.as_dict().items() if k not in ("inputs", "analysis", "specification")},
@@ -462,13 +508,14 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "scenario_values": loaded.scenario_values.to_dict(orient="records"),
         "specification": {k: v for k, v in loaded.specification.items() if k != "run"},
         "preparation_analysis": loaded.analysis,
-        "known_methodology_conflicts": ["C9", "C10", "C11", "C13", "C14", "C15", "C16"],
+        "known_methodology_conflicts": list(KNOWN_METHODOLOGY_CONFLICTS),
         "parameter_exposure_basis": "opening facility reference; R8 scales each grade slice to its current drawn/undrawn stock",
     }
     (ctx.reports_dir / "effective_specification.json").write_text(
         json.dumps(_json_values(effective), indent=2, sort_keys=True, default=str, allow_nan=False),
         encoding="utf-8", newline="\n")
-    _write(ctx, "segment_models.csv", segment_models(ps))
+    # The sensitivities w and v are model coefficients: kept at rate precision, not rounded as EUR.
+    _write(ctx, "segment_models.csv", segment_models(ps), rates=("sensitivity",))
     meta = workbook_meta(ctx, loaded, routed, results, years)
     write_workbook(ctx.reports_dir / WORKBOOK_FILE, meta, {
         "impairment": imp, "by_stage": by_stage, "migration": migration, "cohorts": cohorts,
@@ -476,7 +523,8 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "portfolio_pd": param_tables["portfolio_pd.csv"], "lgd": param_tables["lgd_by_z.csv"],
         "rejections": routed.rejections,
     })
-    extra = portfolio_diagnostics(port, loaded.obligors.data, loaded.facilities.data, results["slices"])
+    extra = portfolio_diagnostics(port, loaded.obligors.data, loaded.facilities.data, results["slices"],
+                                  ps["sicr_triggers"]["dpd_days"])
     extra["ecl_bridge"] = bridge
     extra["ltv"] = stressed_ltv(port, loaded.facilities.data.assign(ltv_status=loaded.facilities.status["ltv"]),
                                 results["slices"], drivers.indices, ctx.config.balance_sheet == "dynamic")
@@ -499,6 +547,8 @@ def build_reports(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         # reverse_stress has its own solver status; preserve it beside the run label.
         table = table.rename(columns={"status": "analysis_status"})
         _write(ctx, f"analysis_{name}.csv", table, rate_columns)
+    # Last, so that it can name every report in the folder.
+    write_summary(ctx, lines, imp, books, migration, start, routed.rejections, loaded)
     written = sorted(p.name for p in ctx.reports_dir.iterdir())
     LOG.info("wrote %d reports to %s: %s", len(written), ctx.reports_dir.relative_to(ctx.run_dir).as_posix(),
              ", ".join(written))
@@ -513,6 +563,17 @@ def _portfolio_names(port: pd.DataFrame) -> dict[str, str]:
         sectors = ", ".join(sorted(part["counterparty_sector"].unique())).replace("_", " ")
         names[p] = f"{products} ({sectors})"
     return names
+
+
+def scenario_labels(loaded: LoadedInputs, scenarios: tuple[str, ...]) -> dict[str, str]:
+    """Each scenario's label from the Scenarios file, for the workbook's group headers. A scenario
+    the file gives no label keeps its id; one a specification adds is labelled with its name."""
+    given = {s["id"]: s.get("label") for s in loaded.scenario_meta["scenarios"]}
+    labels = {}
+    for name in scenarios:
+        label = given.get(name)
+        labels[name] = label if isinstance(label, str) and label.strip() else DEFAULT_LABELS.get(name, name)
+    return labels
 
 
 def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio, results: dict,
@@ -579,6 +640,9 @@ def workbook_meta(ctx: RunContext, loaded: LoadedInputs, routed: RoutedPortfolio
         "parameter_set_status": ps["status"],
         "variant": f"{ctx.variant}; selected method, not the design's default: {_selected(ctx)}"
                    if _selected(ctx) else ctx.variant,
+        "variant_id": ctx.variant,
+        "specification": _specification_name(loaded),
+        "scenario_labels": scenario_labels(loaded, ctx.scenarios),
         "code_version": ctx.code_version,
         "spec_version": ctx.spec_version,
         "horizon": f"starting point {ps['horizon']['snapshot_date']}, projection {min(years)}-{max(years)}",

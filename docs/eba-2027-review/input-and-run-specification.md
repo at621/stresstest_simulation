@@ -179,7 +179,9 @@ set when copying is not the intended modelling assumption.
 change facility membership. `ccf` is a nullable alignment expectation for the supplied
 commitments, not an effective CCF override. A conflicting specification expectation blocks
 the whole run. Use a named base variant's CCF settings for a sensitivity, or package updated
-commitment data. Coefficients are not specification data: point the segment at another model
+commitment data. Under such a variant the reports name the CCF behind each converted amount:
+`starting_point_reconciliation.csv` and the Portfolios sheet give the input-set CCF and the
+applied CCF side by side, and `static_books.csv` and `summary.md` use the applied one. Coefficients are not specification data: point the segment at another model
 of its portfolio instead. Unknown fields and invalid domains block.
 
 `assignments` contains rows with `where`, `segment` and optional `portfolio`. Selectors are
@@ -252,7 +254,9 @@ or charges therefore enter P&L once. No write-off or non-P&L movement is manufac
 
 `exposure_movements.parquet/csv` retains opening exposure, change and migration-opening
 exposure per facility/stage/year/scenario. The stage report reconciles outflows to opening
-stocks plus volume changes; `dynamic_books.csv` reconciles the whole book cumulatively.
+stocks plus volume changes; `dynamic_books.csv` reconciles the whole book cumulatively. The
+workbook's Stage migration sheet shows the volume change of each performing stage, and its
+check is closing − (opening + volume change), which is zero when the stocks tie.
 The original `static_books.csv` and EBA template replica are emitted only in static mode.
 
 This is an externally specified volume forecast for the existing facility prototypes.
@@ -263,11 +267,13 @@ exposure where that component is zero. Post-valuation lifetime EAD retains the c
 contractual/prepayment convention and does not assume future growth of the current cohort.
 
 Facility ParameterRecords remain on the opening-facility reference basis; R8 scales drawn
-and undrawn separately to each current slice. In dynamic runs `ead_profile.csv` reports the
-current performing-exposure-scaled profile. LTV uses current total facility GCA over the
+and undrawn separately to each current slice. `ead_profile.csv` reports the profile scaled to
+the current performing exposure in every run, static or dynamic (A45), so a static run and a
+dynamic run with zero changes give the same file. LTV uses current total facility GCA over the
 original collateral value adjusted by scenario prices; no new collateral is inferred from
 volume growth. Core LGD still uses its statistical model. Workbook stage/default/coverage
-ratios use each scenario's own GCA. Summary average cost of risk uses opening GCA.
+ratios use each scenario's own GCA; coverage is the on-balance allowance over GCA, as in
+`impairment_by_stage.csv` (A45). Summary average cost of risk uses opening GCA.
 
 ## Optional preparation analysis
 
@@ -298,7 +304,7 @@ crisis requires matching rows for any optional analysis whose contract covers al
 | `capital.weights[]` | Unique `scenario`, `year`, `regulatory_approach` (IRB/STA), `regulatory_class`, `grade`; `regulatory_ccf` and `standardised_ccf` in [0,1], nonnegative `risk_weight` and `standardised_risk_weight`, nonempty `model_version`. Must cover all projected and opening slices. |
 | `capital.bridge[]` | One row per charge period: `scenario`, `year`, EUR `other_pnl`, `distributions`, `irb_shortfall_change`, `npl_deduction_change`, `other_cet1_change`, `other_utrea`, `other_strea`; `tax_rate` and `output_floor_factor` in [0,1]. Distributions and other REA are nonnegative. First period needs nonnegative EUR `opening_cet1`; any later supplied opening must equal preceding closing. Tax is the existing symmetric synthetic convention. |
 | `climate[]` | `facility_id`, `channel` (`transition` or `flood`), `scenario: adverse`, `year`, `nace_code`, `energy_bucket`, `geolocation`, `flood_category`, `model_version`, `reference_transition`, `shock_transition`, `reference_loss_rates`, `shock_loss_rates`, nonnegative EUR `insurance_recovery`. Transition matrices are 3×3 stochastic with absorbing S3; loss-rate vectors have 3 entries in [0,1]. Transition requires 2027–2029; flood requires 2027. Insurance cannot exceed positive incremental provision. This separate fixed-exposure diagnostic does not inherit dynamic core volumes. |
-| `template_mapping` | Nonempty `version`, `cells[]` with unique `sheet`, `row`, `column` destinations; each has `table`, numeric `measure`, `filters` mapping exact dimension values. Matching rows are summed; empty selections block. Available tables are the generated analysis tables, including `dimensions`, `concentration`, `sicr_attribution`, `ecl_bridge`, `ltv`, `maturity`, static `template_replica` and supplied optional analyses. This exports long cells rather than filling an official workbook. |
+| `template_mapping` | Nonempty `version`, `cells[]` with unique `sheet`, `row`, `column` destinations; each has `table`, numeric `measure`, `filters` mapping exact dimension values. Matching rows are summed; empty selections block. Available tables are the generated analysis tables, including `dimensions`, `concentration`, `sicr_attribution`, `ecl_bridge`, `ltv`, `maturity`, static `template_replica` and supplied optional analyses. In `sicr_attribution` the `flags` dimension reads `dpd_at_least_<dpd_days>=<True or False>;watchlist=…;forborne=…`, at most eight combinations. This exports long cells rather than filling an official workbook. |
 | `challenge` | Nonempty nonnegative `severity_grid`, nonnegative EUR `loss_limit_eur`, nonnegative `lower` and `upper` severity bounds with lower < upper, nonempty `limit_name`. Runs a separate one-year anchor-PD/EAD/LGD diagnostic, not the selected macro model or dynamic path. |
 | `npe_backstop` | `version`, `source`, ISO `scope_from`/`scope_to`, `calendar[]`: integer `from_year >= 1`, `unsecured`, `secured` factors in [0,1]. Unique periods start at 1; factors cannot decrease. Uses on-balance S3, original/default dates and supplied collateral data. No statutory calendar is embedded. Dynamic growth does not supply the missing legal modification-event classification. |
 | `plausibility` | `version`, `source`, `sources` mapping source IDs to references, `rows[]` with `measure`, `scope` (portfolio or `Total`), finite `published` value, `source` ID. Supported measures: `credit_loss_rate`, `first_year_loss_share`, `s2_share_start`, `s2_share_end`, `s3_share_start`, `s3_share_end`, `gdp_cumulative`, `unemployment_rise`, `residential_price_cumulative`, `cre_price_cumulative`. Compares the named `adverse` scenario only; it does not infer which new crisis should replace that comparison. |
