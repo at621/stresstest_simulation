@@ -262,12 +262,12 @@ def test_summary_charts_stand_clear_of_every_scenario_column(small_runs, name):
 
 # --- 2. the EAD profile on the performing stock -------------------------------------------------
 
-@pytest.mark.req("RPT-06", "EAD-05")
+@pytest.mark.req("EAD-05")
 def test_ead_profile_reports_the_performing_stock_in_static_and_dynamic_runs(small_runs):
     static, tables = small_runs["static"], small_runs["tables"]
     profile = builders.report(static, "ead_profile.csv")
     # A dynamic run that changes no volume holds the same slices, so it reports the same profile.
-    pd.testing.assert_frame_equal(profile, builders.report(small_runs["unchanged"], "ead_profile.csv"))
+    pd.testing.assert_frame_equal(profile, builders.report(small_runs["unchanged"], "ead_profile.csv"), check_exact=True)
     # A bullet book defaults on its balance at the valuation date: bucket 1 is the performing GCA.
     stocks = stage_stocks(static, tables).reset_index()
     performing = stocks[stocks["stage"] < 3].groupby(["scenario", "year", "portfolio"])["gca"].sum()
@@ -486,7 +486,7 @@ def test_segment_models_report_keeps_sensitivities_at_rate_precision(mini, tmp_p
 
 # --- 7. converted commitments say which CCF they use ---------------------------------------------
 
-@pytest.mark.req("EAD-06", "EAD-04")
+@pytest.mark.req("EAD-06")
 @pytest.mark.parametrize("variant", ["core", "utilisation"])
 def test_converted_commitments_are_shown_at_the_input_and_the_applied_ccf(reference_runs, variant):
     ctx, _ = reference_runs[variant]
@@ -533,7 +533,7 @@ def _tables_of(lines: list[str]) -> dict[str, list[list[str]]]:
     return out
 
 
-@pytest.mark.req("OPS-01", "RPT-01")
+@pytest.mark.req("OPS-01")
 def test_summary_lists_the_reports_written_and_keeps_one_scenario_order(small_runs):
     ctx, tables = small_runs["every"], small_runs["tables"]
     lines = summary_of(ctx)
