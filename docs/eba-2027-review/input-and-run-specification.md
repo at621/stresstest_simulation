@@ -33,7 +33,9 @@ opened the run; 3 a rerun that did not reproduce. Every block code is a member o
 
 Only ingestion reads the new file. Its preflight resolves run settings before R1 assigns
 the run identity. R2 captures those exact bytes, verifies the input-set binding, applies
-the experiment in memory and preserves the original seven files unchanged. A replay reads
+the experiment in memory and preserves the original seven files unchanged. It keeps the
+specification, the analysis file and the approval record in `data/` before it checks them, so
+a run that blocks on one of them replays to the same block. A replay reads
 the sealed base input set, specification and optional analysis; it does not need the original
 paths. Changing a specification creates a different run identity and requires a new run.
 The run ID's hash covers the content of the specification and of the analysis file, not their
@@ -130,8 +132,11 @@ index levels; `index_of` maps annual price-change variables to their index varia
 
 R2 checks the shape of both documents and blocks on a section that is missing
 (`MISSING_COLUMN` for scenarios, `MISSING_PARAMETER` for parameters) or of the wrong kind
-(`BAD_VALUE_TYPE`). A scenario `value` is a number or null, where null is a missing value, and a
-`year` is a whole number. A boolean and text are never read as a number, in either document.
+(`BAD_VALUE_TYPE`). A scenario `value` is a number or null, where null is a missing value. A
+`year`, the horizon's years and `reversion_years` are whole numbers as YAML reads them: `2027`,
+not `"2027"` and not `2027.0`. A boolean and text are never read as a number, in either document.
+What no step of the run reads is not checked: `variables`, `conventions` and the variants the
+run does not use.
 
 Units: `decimal` and `index` multiply by 1, `percent` by 0.01. Value types: `level`, `growth`,
 `index`, `cumulative_change`, `pp_change`, `bp_shock`. The engine does not infer economic

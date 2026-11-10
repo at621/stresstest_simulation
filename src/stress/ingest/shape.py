@@ -1,9 +1,14 @@
 """The shape R2 requires of the two YAML documents of an input set.
 
-Every section a later step reads must be there and hold the kind of value that step calculates
-with: a mapping, a list, text, a whole number or a number. A boolean is never a number and text is
-never a number, so ``value: true`` is not 1.0 and ``abs: "0.01"`` is not a tolerance. A wrong shape
-blocks here with a block code, and no later step meets a value it cannot read.
+Every section a step of this run reads must be there and hold the kind of value that step
+calculates with: a mapping, a list, text, a whole number or a number. A boolean is never a number
+and text is never a number, so ``value: true`` is not 1.0 and ``abs: "0.01"`` is not a tolerance. A
+year, and the number of reversion years, is a whole number as YAML reads one: ``2027``, not
+``"2027"`` and not ``2027.0``. A wrong shape blocks here with a block code, and no later step meets
+a value it cannot read.
+
+What no step of this run reads is not checked: ``variables`` and ``conventions``, which are records
+for people, and every variant but the one the run uses.
 
 Whether the values fit together stays where it was checked: a segment's settings, the triggers and
 the variant of the run at R3, the horizon against the terminal rule and the scenario values a model
@@ -85,8 +90,6 @@ def scenarios(doc: dict) -> None:
         names.append(scenario["id"])
     if len(set(names)) != len(names):
         raise BlockingError(STEP, Block.DUPLICATE_KEY, f"{file}: a scenario id appears twice")
-    if not isinstance(doc["variables"], list):
-        _wrong(file, f"variables must be a list, not {_shown(doc['variables'])}")
     _list(doc["values"], file, "values")
     if "index_of" in doc:
         for change, index in _mapping(doc["index_of"], file, "index_of").items():
@@ -120,9 +123,10 @@ def scenario_value(value: dict, n: int) -> None:
 
 # --- parameter_set.yaml -------------------------------------------------------------------------
 
-def parameter_set(doc: dict) -> None:
-    """Every section of the Parameters file but ``portfolios``, whose tree ``segments_of`` reads,
-    and ``sicr_triggers``, which R3 checks with the rule it serves (MIG-05)."""
+def parameter_set(doc: dict, variant: str) -> None:
+    """Every section of the Parameters file that this run reads, but ``portfolios``, whose tree
+    ``segments_of`` reads, and ``sicr_triggers``, which R3 checks with the rule it serves (MIG-05).
+    Of the variants only ``variant``, the one the run uses; R3 blocks one the file does not have."""
     file = PARAMETER_SET.filename
     for name in ("parameter_set_id", "version", "status"):
         if not (is_text(doc[name]) or is_number(doc[name])):
@@ -164,23 +168,20 @@ def parameter_set(doc: dict) -> None:
         for limit in limits:
             _number(tolerance[limit], file, f"tolerances.{name}.{limit}", 0.0)
 
-    _mapping(doc["conventions"], file, "conventions")
-
     variants = doc["variants"]
     if not isinstance(variants, dict) or not variants:
         _wrong(file, f"variants must be a nonempty mapping of variant to settings, not {_shown(variants)}")
-    for name, variant in variants.items():
-        _text(name, file, "a variant's name")
-        _mapping(variant, file, f"variants.{name}", ("repayment_profile",))
-        for product, profile in _mapping(variant["repayment_profile"], file,
-                                         f"variants.{name}.repayment_profile").items():
-            _text(product, file, f"a product in variants.{name}.repayment_profile")
-            _text(profile, file, f"variants.{name}.repayment_profile.{product}")
+    if variant in variants:
+        settings = _mapping(variants[variant], file, f"variants.{variant}", ("repayment_profile",))
+        for product, profile in _mapping(settings["repayment_profile"], file,
+                                         f"variants.{variant}.repayment_profile").items():
+            _text(product, file, f"a product in variants.{variant}.repayment_profile")
+            _text(profile, file, f"variants.{variant}.repayment_profile.{product}")
         # No ccf means no override; a ccf that is there must be a mapping, an empty one included.
-        if "ccf" in variant:
-            for segment, ccf in _mapping(variant["ccf"], file, f"variants.{name}.ccf").items():
-                _text(segment, file, f"a segment in variants.{name}.ccf")
-                _number(ccf, file, f"variants.{name}.ccf.{segment}", 0.0, 1.0)
+        if "ccf" in settings:
+            for segment, ccf in _mapping(settings["ccf"], file, f"variants.{variant}.ccf").items():
+                _text(segment, file, f"a segment in variants.{variant}.ccf")
+                _number(ccf, file, f"variants.{variant}.ccf.{segment}", 0.0, 1.0)
 
 
 def segments(settings_by_segment: dict) -> None:

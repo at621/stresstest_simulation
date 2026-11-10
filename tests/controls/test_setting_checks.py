@@ -9,9 +9,13 @@ import pandas as pd
 import pytest
 import yaml
 
+from foundation.synth.analysis import build as analysis_package
+from stress import ingest, validate
 from stress.cli import EXIT_NOT_REPRODUCED, EXIT_OK, execute, main
 from stress.contracts.errors import RUN_BLOCKING_REASONS, Block, BlockingError, Reason
 from stress.contracts.run import RunConfig
+from stress.ingest.specification import resolve
+from stress.lineage import open_run
 from stress.report.template import TEMPLATE_CLASS
 from tests import builders
 from tests.support import ROOT
@@ -206,6 +210,25 @@ def test_a_facility_without_a_portfolio_is_rejected(mini, tmp_path):
     assert shown in gap, f"the rejected facility's GCA stays visible (OPS-07): {gap}"
 
 
+@pytest.mark.control("Country or taxonomy mapping")
+def test_a_portfolio_that_an_assignment_supplies_is_a_portfolio(mini, tmp_path):
+    """R3 tests the portfolio it routes with, as it does the segment. A facility the file leaves
+    without a portfolio and a specification files under one runs under that portfolio."""
+    fac = mini["facilities"]
+    segment = "P04"
+    blank = fac.index[fac["segment"] == segment][0]
+    filed, portfolio = fac.loc[blank, "facility_id"], fac.loc[blank, "portfolio"]
+    fac["portfolio"] = fac["portfolio"].astype(object)
+    fac.loc[blank, "portfolio"] = None
+    inputs = builders.write(mini, tmp_path / "in")
+    config = specification(inputs, tmp_path, assignments=[{"where": {"facility_id": filed}, "segment": segment,
+                                                           "portfolio": portfolio}])
+    ctx = open_run(resolve(config), tmp_path / "runs")
+    routed = validate.validate_and_route(ingest.load_inputs(ctx), ctx)
+    assert routed.rejections.empty, routed.rejections["reason_code"].tolist()
+    assert routed.portfolio.set_index("facility_id").loc[filed, "portfolio"] == portfolio
+
+
 # --- block codes --------------------------------------------------------------------------------
 
 @pytest.mark.control("Repository rules")
@@ -256,6 +279,56 @@ def test_a_rerun_compares_the_block_and_says_what_it_reproduced(mini_tables, tmp
     assert main(["rerun", "--run", ctx.run_dir.as_posix(), "-q"]) == EXIT_NOT_REPRODUCED
     err = capsys.readouterr().err
     assert Block.INTERNAL_ERROR in err and Block.MISSING_SCENARIO_VALUE in err, err
+
+
+BLOCKS_ON_A_GIVEN_FILE = {
+    "an analysis section about a scenario the run lacks": Block.UNKNOWN_SCENARIO,
+    "an analysis file of another schema": Block.BAD_VALUE_TYPE,
+    "a specification of another input set": Block.INVALID_SPECIFICATION,
+    "an approval of another input set": Block.INPUT_HASH_MISMATCH,
+}
+
+
+@pytest.mark.control("Reproducibility")
+@pytest.mark.parametrize("case", sorted(BLOCKS_ON_A_GIVEN_FILE))
+def test_a_run_that_blocks_on_a_file_it_was_given_reruns_to_the_same_block(mini_tables, tmp_path, capsys, case):
+    """R2 keeps the analysis file, the specification and the approval record in data/ before it
+    checks them. A run that blocked on one of them used to seal a folder without it, so its rerun
+    stopped on the missing copy instead: another block, or the same code for another reason."""
+    inputs = builders.write(builders.copy_tables(mini_tables), tmp_path / "in")
+    config = RunConfig(inputs.as_posix(), ("baseline", "adverse"), "core")
+    given = None
+    if case.startswith("an analysis"):
+        doc = analysis_package(inputs)
+        envelope = {k: doc[k] for k in ("schema_version", "input_set_hash", "status", "source", "version")}
+        if "scenario" in case:
+            doc = {**envelope, "plausibility": doc["plausibility"]}
+            config.scenarios = ("baseline", "severe_adverse")
+        else:
+            doc = {**envelope, "schema_version": envelope["schema_version"] + 1}
+        given = tmp_path / "analysis.yaml"
+        given.write_text(yaml.safe_dump(doc), encoding="utf-8")
+        config.analysis = str(given)
+    elif case.startswith("a specification"):
+        config = specification(inputs, tmp_path)
+        given = tmp_path / "job.yaml"
+        doc = yaml.safe_load(given.read_text(encoding="utf-8"))
+        given.write_text(yaml.safe_dump({**doc, "input_set_hash": doc["input_set_hash"][::-1]}), encoding="utf-8")
+    else:
+        record = json.loads((inputs / "approval.json").read_text(encoding="utf-8"))
+        record["input_set_hash"] = record["input_set_hash"][::-1]
+        (inputs / "approval.json").write_text(json.dumps(record), encoding="utf-8")
+    ctx, first = execute(config, tmp_path / "runs")
+    code = BLOCKS_ON_A_GIVEN_FILE[case]
+    assert first["status"] == "BLOCKED" and (first["blocked"]["step"], first["blocked"]["code"]) == ("R2", code)
+    if given:
+        given.unlink()  # the rerun has only the run folder
+    capsys.readouterr()
+    again = tmp_path / "again"
+    assert main(["rerun", "--run", ctx.run_dir.as_posix(), "--runs-dir", str(again), "-q"]) == EXIT_OK
+    assert f"blocked again at R2 with {code}" in capsys.readouterr().out
+    second = json.loads(next(again.iterdir()).joinpath("manifest.json").read_text(encoding="utf-8"))
+    assert second["blocked"] == first["blocked"], "the rerun stopped for the same reason, not only on the same code"
 
 
 @pytest.mark.control("Reproducibility")

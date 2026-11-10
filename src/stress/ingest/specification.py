@@ -89,6 +89,13 @@ def _read_specification(config) -> None:
     config._specification_bytes = raw
 
 
+def seal(ctx) -> None:
+    """Keep the specification's bytes in data/, as the preflight read them. R2 does this before
+    it checks anything, so a run that blocks at R2 still holds the specification it ran under."""
+    if ctx.config._specification_document:
+        (ctx.data_dir / "specification.yaml").write_bytes(ctx.config._specification_bytes)
+
+
 def apply(loaded, ctx):
     doc = ctx.config._specification_document
     if not doc:
@@ -96,7 +103,6 @@ def apply(loaded, ctx):
     if doc["input_set_hash"] != ctx.input_set_hash:
         invalid("specification belongs to another input set")
     loaded.specification = copy.deepcopy(doc)
-    (ctx.data_dir / "specification.yaml").write_bytes(ctx.config._specification_bytes)
     ctx.lineage["specification"] = {
         "sha256": ctx.config.specification_hash, "source": doc["source"],
         "version": doc["version"], "status": doc["status"],

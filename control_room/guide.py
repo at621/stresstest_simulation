@@ -325,8 +325,8 @@ FILE_RULES = {
          (Block.SCENARIO_PROVENANCE,)),
         (f"Each value has a unit, which is {_words(SCENARIO_UNITS, 'or')}.", (Block.SCENARIO_WITHOUT_UNIT,)),
         (f"value_type is {_words(SCENARIO_VALUE_TYPES, 'or')}.", (Block.BAD_VALUE_TYPE,)),
-        (("Each value is a number or blank and each year is a whole number: true, false or text is not a "
-          "number."), (Block.BAD_VALUE_TYPE,)),
+        (("Each value is a number or blank and each year is a whole number, written 2027 and not as text "
+          "or 2027.0: true, false or text is not a number."), (Block.BAD_VALUE_TYPE,)),
         ("No scenario, variable, country and year appears twice.", (Block.DUPLICATE_KEY,)),
         (("Each variable a segment's models read has a value for every country in the file, every projection year "
          "and every scenario in the run."), (Block.MISSING_SCENARIO_VALUE,)),
@@ -348,9 +348,10 @@ FILE_RULES = {
         ((f"In the variant a run uses, repayment_profile names only products or default, each as "
           f"{_words(REPAYMENT_PROFILES, 'or')}, and ccf names only segments of this file."),
          (Block.UNKNOWN_VARIANT,)),
-        (("horizon, master_scale, terminal_rule, tolerances and variants hold the settings listed for them, "
-          "each of the right kind: a number is not written as text, and reversion_years is a whole number "
-          "of 1 or more."), (Block.MISSING_PARAMETER, Block.BAD_VALUE_TYPE)),
+        (("horizon, master_scale, terminal_rule, tolerances and the variant a run uses hold the settings "
+          "listed for them, each of the right kind: a number is not written as text, a year is a whole "
+          "number, and reversion_years is a whole number of 1 or more."),
+         (Block.MISSING_PARAMETER, Block.BAD_VALUE_TYPE)),
     ),
 }
 

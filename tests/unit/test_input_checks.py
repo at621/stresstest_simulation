@@ -69,7 +69,39 @@ def _drop(*path):
     return change
 
 
+def _twice(*path):
+    """Repeat the first entry of a list."""
+    def change(doc):
+        node = doc
+        for key in path:
+            node = node[key]
+        node.append(node[0])
+    return change
+
+
+def _first_index(value):
+    def change(doc):
+        doc["index_of"][next(iter(doc["index_of"]))] = value
+    return change
+
+
+def _one_pd_short(doc):
+    doc["master_scale"]["ttc_pd"].pop()
+
+
 SCENARIO_DEFECTS = {
+    "a scenario id twice": (_twice("scenarios"), Block.DUPLICATE_KEY),
+    "an index_of that is not a mapping": (_set("index_of", value=["residential_price_change"]), Block.BAD_VALUE_TYPE),
+    "an index_of entry that is not text": (_first_index(3), Block.BAD_VALUE_TYPE),
+    "starting values that are not a list": (_set("starting_values", value={"unemployment": 6.0}),
+                                            Block.BAD_VALUE_TYPE),
+    "a starting value without a country": (_drop("starting_values", 0, "country"), Block.MISSING_COLUMN),
+    "a starting value that is text": (_set("starting_values", 0, "value", value="six"), Block.BAD_VALUE_TYPE),
+    "a starting value in an unknown unit": (_set("starting_values", 0, "unit", value="per mille"),
+                                            Block.SCENARIO_WITHOUT_UNIT),
+    "a country that is not text": (_set("values", 0, "country", value=31), Block.BAD_VALUE_TYPE),
+    "a year that is a float": (_set("values", 0, "year", value=2027.0), Block.BAD_VALUE_TYPE),
+    "a year that is quoted": (_set("values", 0, "year", value="2027"), Block.BAD_VALUE_TYPE),
     "a value that is true": (_set("values", 0, "value", value=True), Block.BAD_VALUE_TYPE),
     "a value that is text": (_set("values", 0, "value", value="n/a"), Block.BAD_VALUE_TYPE),
     "a year that is text": (_set("values", 0, "year", value="FY2027"), Block.BAD_VALUE_TYPE),
@@ -84,8 +116,9 @@ SCENARIO_DEFECTS = {
 @pytest.mark.req("SCN-01", "SCN-02", "DAT-02")
 @pytest.mark.parametrize("defect", sorted(SCENARIO_DEFECTS))
 def test_a_scenarios_file_of_the_wrong_shape_blocks_at_r2(mini, tmp_path, defect):
-    """A boolean is not a number: ``value: true`` used to be read as 1.0 and sealed. The others
-    ended as engine faults."""
+    """A boolean is not a number: ``value: true`` used to be read as 1.0 and sealed. Most of the
+    others ended as engine faults. A year is a whole number as YAML reads one, so a quoted year
+    and ``2027.0``, which the engine used to convert, are refused too (A44)."""
     change, code = SCENARIO_DEFECTS[defect]
     change(mini["scenarios"])
     b = blocked(mini, tmp_path)
@@ -93,6 +126,19 @@ def test_a_scenarios_file_of_the_wrong_shape_blocks_at_r2(mini, tmp_path, defect
 
 
 PARAMETER_DEFECTS = {
+    "a status that is a list": (_set("status", value=["PROPOSED"]), Block.BAD_VALUE_TYPE, "status"),
+    "a version that is true": (_set("version", value=True), Block.BAD_VALUE_TYPE, "version"),
+    "a blank parameter_set_id": (_set("parameter_set_id", value=" "), Block.BAD_VALUE_TYPE, "parameter_set_id"),
+    "a snapshot date in another format": (_set("horizon", "snapshot_date", value="31/12/2026"),
+                                          Block.BAD_VALUE_TYPE, "snapshot_date"),
+    "one master-scale PD short": (_one_pd_short, Block.BAD_VALUE_TYPE, "ttc_pd"),
+    "a master-scale PD above one": (_set("master_scale", "ttc_pd", 0, value=1.5), Block.BAD_VALUE_TYPE, "ttc_pd"),
+    "a grade twice": (_twice("master_scale", "grades"), Block.BAD_VALUE_TYPE, "grades"),
+    "a negative tolerance": (_set("tolerances", "amount", "abs", value=-0.01), Block.BAD_VALUE_TYPE, "amount"),
+    "reversion years as a float": (_set("terminal_rule", "reversion_years", value=6.0), Block.BAD_VALUE_TYPE,
+                                   "reversion_years"),
+    "a projection year that is quoted": (_set("horizon", "projection_years", value=["2027", "2028", "2029"]),
+                                         Block.BAD_VALUE_TYPE, "projection_years"),
     "no last_bucket_year": (_drop("horizon", "last_bucket_year"), Block.MISSING_PARAMETER, "last_bucket_year"),
     "no snapshot_date": (_drop("horizon", "snapshot_date"), Block.MISSING_PARAMETER, "snapshot_date"),
     "no grades": (_drop("master_scale", "grades"), Block.MISSING_PARAMETER, "grades"),
@@ -109,10 +155,10 @@ PARAMETER_DEFECTS = {
     "no variants": (_set("variants", value=None), Block.BAD_VALUE_TYPE, "variants"),
     "a variant without a repayment profile": (_drop("variants", "core", "repayment_profile"),
                                               Block.MISSING_PARAMETER, "repayment_profile"),
-    "a variant ccf that is not a mapping": (_set("variants", "utilisation", "ccf", value=0.75),
-                                            Block.BAD_VALUE_TYPE, "utilisation"),
-    "a variant ccf as text": (_set("variants", "utilisation", "ccf", "P03", value="three quarters"),
-                              Block.BAD_VALUE_TYPE, "utilisation"),
+    "a variant ccf that is not a mapping": (_set("variants", "core", "ccf", value=0.75),
+                                            Block.BAD_VALUE_TYPE, "variants.core.ccf"),
+    "a variant ccf as text": (_set("variants", "core", "ccf", "P03", value="three quarters"),
+                              Block.BAD_VALUE_TYPE, "variants.core.ccf.P03"),
 }
 
 
@@ -158,11 +204,15 @@ def test_a_variant_repayment_profile_the_run_does_not_know_blocks(mini, tmp_path
     assert repr(named) in b["message"], b["message"]
 
 
-@pytest.mark.req("EAD-10")
-def test_a_defect_in_a_variant_the_run_does_not_use_does_not_stop_it(mini, tmp_path):
-    """R3 checks the variant of this run against what this run knows; the shape of every variant
-    is R2's."""
-    mini["parameter_set"]["variants"]["utilisation"]["ccf"] = {"A_SEGMENT_OF_ANOTHER_RUN": 0.75}
+@pytest.mark.req("SYN-PAR-06", "EAD-10")
+def test_what_no_step_of_the_run_reads_does_not_stop_it(mini, tmp_path):
+    """R2 and R3 check what this run reads: its own variant, not the others, and not the records
+    kept for people (``conventions``, ``variables``)."""
+    variants = mini["parameter_set"]["variants"]
+    variants["utilisation"]["ccf"] = {"A_SEGMENT_OF_ANOTHER_RUN": 0.75}
+    variants["linear"] = {"label": "not filled in yet", "ccf": None}
+    mini["parameter_set"]["conventions"] = "see the methodology note"
+    mini["scenarios"]["variables"] = "see the release note"
     ctx = open_run(RunConfig(builders.write(mini, tmp_path / "in").as_posix(), ("baseline", "adverse"), "core"),
                    tmp_path / "runs", NOW)
     routed = validate.validate_and_route(ingest.load_inputs(ctx), ctx)
@@ -197,7 +247,7 @@ def test_a_variant_name_in_a_specification_is_checked_the_same_way(mini_tables, 
 
 # --- duplicates met by a specification (item 5) -------------------------------------------------
 
-@pytest.mark.control("Repository rules")
+@pytest.mark.req("SCP-01", "DAT-02")
 @pytest.mark.parametrize("field", ["country", "nace_code"])
 def test_a_duplicate_obligor_under_an_assignment_by_borrower_blocks_without_a_fault(mini, tmp_path, field):
     obl = mini["obligors"]
@@ -216,7 +266,7 @@ def test_a_duplicate_obligor_under_an_assignment_by_borrower_blocks_without_a_fa
 
 # --- the command line (items 6 and 7) -----------------------------------------------------------
 
-@pytest.mark.req("REG-02")
+@pytest.mark.req("EXP-01")
 def test_dynamic_on_the_command_line_is_refused_at_once(mini_tables, tmp_path, capsys):
     """A dynamic run needs the volume assumptions of a specification, so the flag alone could
     never succeed: it opened a run, loaded the set and blocked."""
@@ -231,7 +281,7 @@ def test_dynamic_on_the_command_line_is_refused_at_once(mini_tables, tmp_path, c
     assert flag.help and "specification" in flag.help
 
 
-@pytest.mark.req("REG-02")
+@pytest.mark.req("EXP-01")
 def test_a_block_on_the_volume_assumptions_names_the_step_that_found_it(mini_tables, tmp_path):
     inputs = builders.write(builders.copy_tables(mini_tables), tmp_path / "in")
     config = specification(inputs, tmp_path / "job.yaml", run={"balance_sheet": "dynamic"})
@@ -256,7 +306,7 @@ def test_a_specification_without_inputs_is_not_told_to_use_a_flag_it_may_not_use
     assert "not both" in capsys.readouterr().err
 
 
-@pytest.mark.control("Repository rules")
+@pytest.mark.req("OPS-04")
 def test_an_engine_fault_seals_the_run_as_blocked_and_exits_with_its_own_code(mini_tables, tmp_path, monkeypatch,
                                                                               capsys):
     """Exit 1 is an engine fault, exit 2 a block: the README and the runbook list both."""
@@ -337,8 +387,11 @@ def test_a_run_whose_specification_changes_the_calculation_is_not_named_as_the_c
     assert "-core-" in plain.run_id and "-core-" in only_run.run_id
     assert "-core+spec-" in swapped.run_id, swapped.run_id
     assert "-core+held+spec-" in added.run_id, added.run_id
+    # The control room lists run folders by its own pattern: read it there, do not retype it.
+    server = (ROOT / "control_room" / "server.py").read_text(encoding="utf-8")
+    run_name = re.search(r'^RUN_NAME = re\.compile\(r"(.+)"\)$', server, re.MULTILINE).group(1)
     for ctx in (plain, only_run, swapped, added):
-        assert re.fullmatch(r"\d{8}T\d{4}Z-[\w+.-]+", ctx.run_id), "the control room lists run folders by this pattern"
+        assert re.fullmatch(run_name, ctx.run_id), f"{ctx.run_id} is not a run name to the control room"
 
 
 # --- an analysis section that needs a scenario the run does not hold (item 9) -------------------

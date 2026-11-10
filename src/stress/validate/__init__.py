@@ -145,6 +145,12 @@ def _usable(status: pd.DataFrame, col: str) -> pd.Series:
     return status[col].isin(USABLE)
 
 
+def _named(values: pd.Series) -> pd.Series:
+    """Which rows hold a name. Tested on the value R3 routes with, as the segment is, because a
+    specification's assignment can supply a portfolio the file left blank."""
+    return (values.notna() & (values.astype("string").str.strip() != "")).fillna(False).astype(bool)
+
+
 # --- checks -------------------------------------------------------------------------------------
 
 def _check_variant(name: str, variant, segments) -> None:
@@ -307,7 +313,7 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     add(f["poci"].eq(True), Reason.POCI_NOT_IN_V1, "POCI has its own treatment, not in v1")
     add(f["counterparty_sector"] == CENTRAL_BANK_SECTOR, Reason.CENTRAL_BANK_NOT_IN_V1,
         "central-bank exposures take the prescribed zero-loss route, not in v1")
-    add(~_usable(fst, "portfolio"), Reason.MISSING_PORTFOLIO, "portfolio missing")
+    add(~_named(f["portfolio"]), Reason.MISSING_PORTFOLIO, "portfolio missing")
     known_segments = set(matrices) & set(ps["segments"])
     add(~f["segment"].isin(known_segments), Reason.UNKNOWN_SEGMENT,
         "segment has no TTC matrix or parameters")
@@ -498,7 +504,7 @@ def validate_and_route(loaded: LoadedInputs, ctx: RunContext) -> RoutedPortfolio
     else:
         for (kind, code), n in rejections.groupby(["record_type", "reason_code"]).size().items():
             LOG.warning("rejected %s %s record(s): %s", f"{n:,}", kind, code)
-    named = f["portfolio"].where(_usable(fst, "portfolio"), NO_PORTFOLIO)
+    named = f["portfolio"].where(_named(f["portfolio"]), NO_PORTFOLIO)
     reconciliation = reconcile(fac.assign(portfolio=named), f.assign(portfolio=named).loc[f["_row"].isin(bad_rows)],
                                portfolio, com, good_com, tol_agg)
     return RoutedPortfolio(portfolio=portfolio, rejections=rejections, grades=grades,

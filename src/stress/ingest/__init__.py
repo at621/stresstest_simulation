@@ -249,7 +249,7 @@ def read_parameter_set(ctx: RunContext) -> dict:
     missing = [k for k in PARAMETER_SET_TOP_KEYS if k not in doc]
     if missing:
         raise BlockingError(STEP, Block.MISSING_PARAMETER, f"parameter_set.yaml lacks {missing}")
-    shape.parameter_set(doc)
+    shape.parameter_set(doc, ctx.variant)
     try:
         doc["segments"] = segments_of(doc)
     except (TypeError, ValueError) as exc:
@@ -364,9 +364,14 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
     manifest = json.loads((ctx.input_dir / INPUT_MANIFEST).read_text(encoding="utf-8"))
     hashes = check_hashes(ctx, manifest)
     copy_raw(ctx, hashes)
+    # Whatever else the run was given is kept as given before any of it is checked: the
+    # specification, the approval record and (in read_analysis) the analysis file. A run that
+    # blocks on one of them can then be rerun from its own folder, and blocks the same way.
+    specification.seal(ctx)
     approval_path = ctx.input_dir / APPROVAL_FILE
     approval = {"status": "MISSING", "input_set_hash": ctx.input_set_hash}
     if approval_path.is_file():
+        shutil.copy2(approval_path, ctx.data_dir / APPROVAL_FILE)
         try:
             approval = json.loads(approval_path.read_text(encoding="utf-8"))
             if not isinstance(approval, dict) or approval.get("status") not in ("APPROVED", "PENDING_OWNER_APPROVAL"):
@@ -379,7 +384,6 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
             raise BlockingError(STEP, Block.BAD_VALUE_TYPE, f"invalid approval evidence: {exc}") from exc
         if approval.get("input_set_hash") != ctx.input_set_hash:
             raise BlockingError(STEP, Block.INPUT_HASH_MISMATCH, "approval belongs to another input set")
-        shutil.copy2(approval_path, ctx.data_dir / APPROVAL_FILE)
     analysis = read_analysis(ctx)
     ctx.lineage["approval"] = approval
     facilities = read_table(ctx, FACILITIES)
@@ -444,7 +448,8 @@ def analysis_scenarios(doc: dict) -> dict[str, set[str]]:
 def read_analysis(ctx: RunContext) -> dict:
     """Optional versioned preparation inputs, captured once and sealed with the run. The bytes are
     the ones the preflight read before R1, which named the run by them; a file it could not read
-    is read here, so that the run is sealed with the block."""
+    is read here, so that the run is sealed with the block. They are written to data/ before they
+    are parsed or checked, so a run that blocks on its analysis file still holds the file."""
     if not ctx.config.analysis:
         return {}
     path = Path(ctx.config.analysis)
@@ -452,6 +457,7 @@ def read_analysis(ctx: RunContext) -> dict:
         raw = ctx.config._analysis_bytes
         if raw is None:
             raw = path.read_bytes()
+        (ctx.data_dir / "analysis.yaml").write_bytes(raw)
         doc = yaml.safe_load(raw)
         allowed = {"schema_version", "input_set_hash", "status", "source", "version", "benchmarks", "recoveries",
                    "capital", "climate", "template_mapping", "challenge", "npe_backstop",
@@ -475,7 +481,6 @@ def read_analysis(ctx: RunContext) -> dict:
                 raise BlockingError(STEP, Block.UNKNOWN_SCENARIO,
                                     f"analysis: {section} is about scenario {', '.join(lacking)}, which this run "
                                     f"does not hold ({', '.join(ctx.scenarios)}); run it too, or leave {section} out")
-        (ctx.data_dir / "analysis.yaml").write_bytes(raw)
         ctx.lineage["analysis"] = {"sha256": hashlib.sha256(raw).hexdigest(),
                                    "version": doc["version"], "source": doc["source"],
                                    "status": doc["status"]}
