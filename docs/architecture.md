@@ -55,8 +55,9 @@ On native Windows, Claude Code's sandbox doesn't run, so protection uses several
 
 1. **Deny rules** in `.claude/settings.json` for Read and Edit on `/archive` and `/archive/**`. On a best-effort basis these also cover Grep, Glob, `@` mentions, the file open in VS Code, and simple shell commands such as `cat`. A leading `/` means the project root, so start Claude Code from the repo root.
 2. **Hook** `.claude/hooks/guard_paths.py`, run before every tool call, including calls by subagents.
-   - It blocks any call whose path, glob or command names `archive` as a path segment, regardless of case or slash direction.
-   - It also blocks `git grep`.
+   - It blocks any call whose path, glob or command holds `archive` as a word of its own, whatever stands around it: a slash, a quote, a brace or comma as in `{archive,docs}/**`, `@` or `!`. Case and slash direction do not matter. Only a longer name passes: a longer word such as `archived`, a name joined by a hyphen such as the PowerShell cmdlet `Expand-Archive`, or a file name with an extension such as `archive.md`.
+   - It also blocks `git grep`, behind any of git's own options.
+   - A control test, `tests/controls/test_guard_hook.py`, loads the hook and holds it to sample calls.
 3. **Git and search:**
    - `archive/` is in `.gitignore`, so git never tracks or shows it. `archive/** -diff` in `.gitattributes` is a second guard in case the folder is ever force-added.
    - `.ignore` keeps ripgrep out when a search starts from the repo root.
@@ -67,7 +68,8 @@ On native Windows, Claude Code's sandbox doesn't run, so protection uses several
 
 **Remaining gaps:**
 - This is not an OS-level block. A script that walks the whole tree could still read the archive.
-- The hook is deliberately strict, so a command that merely mentions `archive` is also blocked.
+- The hook is deliberately strict, so a command that merely mentions `archive` is also blocked, a git exclusion such as `':!archive'` included.
+- The hook reads names, so it cannot see a folder the call does not spell out: a wildcard such as `arch*`, a shell variable, a name split by quotes, a path that goes up and comes down again such as `inputs/<set>/../bank`, or the two parts of `inputs/bank` given in separate words or fields (`cd inputs`, then `ls bank`). There the other layers have to hold.
 
 Check the protection with [runbook.md](runbook.md) after any change to `.claude/`.
 
@@ -82,8 +84,9 @@ Check the protection with [runbook.md](runbook.md) after any change to `.claude/
   3. A full run, compared against the run before the change.
   4. Review.
 - **`change-reviewer`** (`.claude/agents/change-reviewer.md`): a read-only reviewer that must approve every major change before it is merged. It returns APPROVE or CHANGES REQUESTED.
-- **Test gate** `.claude/hooks/test_gate.py`, a Stop hook: when code under `src/`, `foundation/` or `tests/` has changed, it runs pytest, lint-imports and ruff, and blocks the stop until they pass.
-- **Git pre-commit hook** `tests/githooks/pre-commit`: refuses protected paths and run folders, then runs the same three checks. It skips pytest, and checks traceability instead, when every staged file is on the small-change list in the hook. Enable it once per clone with `git config core.hooksPath tests/githooks`.
+- **Test gate** `.claude/hooks/test_gate.py`, a Stop hook: when code under `src/`, `foundation/` or `tests/` has changed, it runs pytest, lint-imports and ruff, and blocks the stop until they pass. It does not run the control room's tests.
+- **Git pre-commit hook** `tests/githooks/pre-commit`: refuses protected paths and run folders, then runs the same three checks and, after them, the control room's tests (`uv run pytest control_room`). It skips both test suites, and checks traceability instead, when every staged file is on the small-change list in the hook. Enable it once per clone with `git config core.hooksPath tests/githooks`.
+- **CI** `.github/workflows/quality.yml` runs `tests/ci_gate.py` on Linux: the O1 check, ruff, the import rules, all tests, and then the control room's tests.
 
 ## 6. Open items
 

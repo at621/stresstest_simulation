@@ -36,6 +36,7 @@ Run and report the outcome of each:
 uv run pytest -q
 uv run lint-imports --cache-dir tests/.import_linter_cache
 uv run ruff check
+uv run pytest control_room -q
 ```
 
 ## Report

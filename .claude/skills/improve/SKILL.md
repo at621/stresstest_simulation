@@ -41,12 +41,13 @@ Never touch the protected folders listed in the root `CLAUDE.md`. `docs/spec/`, 
 
 ## 5. Gate and comparison
 
-Run all three and fix every failure:
+Run all four and fix every failure:
 
 ```
 uv run pytest
 uv run lint-imports --cache-dir tests/.import_linter_cache
 uv run ruff check
+uv run pytest control_room
 ```
 
 Then run the engine again and compare it with the baseline run:

@@ -22,6 +22,9 @@ runs/*
 # Notebook exports are built from local run folders, so they stay local too
 notebooks/output/
 
+# Setups saved from the control room's page; each run keeps its own sealed copy
+control_room/specifications/
+
 # Protected; never committed
 inputs/bank/
 
