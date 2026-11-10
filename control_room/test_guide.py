@@ -9,6 +9,7 @@ import json
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 HERE = Path(__file__).resolve().parent
@@ -17,7 +18,8 @@ sys.path.insert(0, str(HERE))
 import guide
 import server
 
-from stress.contracts.errors import RUN_BLOCKING_REASONS, Block, Reason
+from stress import validate
+from stress.contracts.errors import RUN_BLOCKING_REASONS, Block, BlockingError, Reason
 from stress.contracts.inputs import (
     APPROACHES,
     DATASETS,
@@ -44,6 +46,8 @@ NOT_ABOUT_THE_FILES = {
     Block.INPUT_HASH_MISMATCH, Block.CONTROL_TOTAL_MISMATCH, Block.UNKNOWN_SCENARIO, Block.PD_IDENTITY,
     Block.LGD_OUT_OF_RANGE, Block.STATIC_BALANCE, Block.S3_RELEASE, Block.NOT_PERMITTED_MOVEMENT,
     Block.RECONCILIATION}
+# The packages of the steps after R4, where the sanity checks stop (preflight.dry_run).
+LATER_STEPS = ("cashflows", "params", "projection", "ecl", "accounting", "report", "capital")
 
 
 def test_it_covers_every_kind_of_file_in_the_order_of_the_page():
@@ -93,11 +97,28 @@ def test_a_rule_names_only_reasons_with_the_same_consequence():
             assert len({reason in RUN_BLOCKING_REASONS for reason in reasons}) == 1, text
 
 
+def stops_the_run(reason: Reason) -> bool:
+    """What the engine does with one record rejected for this reason: R3's own gate is asked."""
+    rejected = pd.DataFrame({"reason_code": [str(reason)], "record_id": ["X1"], "detail": ["a defect"]})
+    try:
+        validate.raise_if_blocking(rejected)
+    except BlockingError:
+        return True
+    return False
+
+
 def test_a_record_rule_says_what_the_engine_does():
+    """Each rule's consequence, held against the gate the run passes through after R3 and not against
+    the list the guide reads: a reason the gate stops on is shown as stopping the run, and any other as
+    leaving the record out."""
+    seen = set()
     for name, rules in guide.RECORD_RULES.items():
         shown = {rule["text"]: rule["effect"] for rule in FILES[name]["rules"]}
         for text, reasons in rules:
-            assert shown[text] == (guide.STOPS if reasons[0] in RUN_BLOCKING_REASONS else guide.LEFT_OUT), text
+            for reason in reasons:
+                assert shown[text] == (guide.STOPS if stops_the_run(reason) else guide.LEFT_OUT), (text, reason)
+                seen.add(shown[text])
+    assert seen == {guide.STOPS, guide.LEFT_OUT}, "the gate stops on some reasons and passes the others"
 
 
 def test_every_way_a_file_can_stop_the_run_has_a_place():
@@ -106,10 +127,30 @@ def test_every_way_a_file_can_stop_the_run_has_a_place():
     assert named | set(guide.GENERAL_BLOCKS) | NOT_ABOUT_THE_FILES == set(Block)
 
 
-def test_the_rules_that_pass_the_checks_and_then_stop_the_run_are_shown_apart():
-    for name, rules in guide.LATE_RULES.items():
-        shown = {rule["text"]: rule["effect"] for rule in FILES[name]["rules"]}
-        assert all(shown[text] == guide.LATE for text, _ in rules)
+def raised_in(steps: tuple[str, ...]) -> str:
+    """The source of these steps of the engine, to see which block codes they raise."""
+    return "".join(path.read_text(encoding="utf-8") for step in steps
+                   for path in sorted((server.ROOT / "src" / "stress" / step).rglob("*.py")))
+
+
+def test_a_rule_shown_as_stopping_the_run_partway_names_a_block_raised_after_the_sanity_checks():
+    """The sanity checks end with R4. A rule is shown apart, as stopping the run partway, only if the
+    block it names is raised by a later step: otherwise the checks would have caught it, and the guide
+    would be telling people that a setup passes when it does not."""
+    later = raised_in(LATER_STEPS)
+    named = [(text, block) for rules in guide.LATE_RULES.values() for text, blocks in rules for block in blocks]
+    assert named, "some late rules name the block they end in"
+    for text, block in named:
+        assert f"Block.{block.name}" in later, text
+
+
+def test_no_rule_of_a_file_is_listed_under_two_consequences():
+    """The page groups a file's rules by consequence, so a rule's words appear once."""
+    for name, entry in FILES.items():
+        texts = [rule["text"] for rule in entry["rules"]]
+        assert len(texts) == len(set(texts)), name
+        late = [rule["text"] for rule in entry["rules"] if rule["effect"] == guide.LATE]
+        assert late == [text for text, _ in guide.LATE_RULES.get(name, ())], name
 
 
 def test_an_unsecured_loan_is_told_what_ltv_needs():
