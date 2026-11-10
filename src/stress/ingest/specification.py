@@ -235,9 +235,10 @@ def apply_segments(loaded, definitions, assignments):
             loaded.ttc_pd_matrix = pd.concat([loaded.ttc_pd_matrix, matrix], ignore_index=True)
             # A variant's CCF override is the parent's too: without it the facilities filed under
             # the new segment would run on their own CCF in a run named for the variant.
+            # A variant with no ccf, or a null one, overrides nothing and has nothing to inherit.
             for variant in loaded.parameter_set.get("variants", {}).values():
-                overrides = variant.get("ccf") or {}
-                if parent in overrides and name not in overrides:
+                overrides = variant.get("ccf") if isinstance(variant, dict) else None
+                if isinstance(overrides, dict) and parent in overrides and name not in overrides:
                     overrides[name] = overrides[parent]
         elif "inherits" in definition:
             invalid("existing segments cannot be reparented")

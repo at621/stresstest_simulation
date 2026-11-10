@@ -135,8 +135,9 @@ R2 checks the shape of both documents and blocks on a section that is missing
 (`BAD_VALUE_TYPE`). A scenario `value` is a number or null, where null is a missing value. A
 `year`, the horizon's years and `reversion_years` are whole numbers as YAML reads them: `2027`,
 not `"2027"` and not `2027.0`. A boolean and text are never read as a number, in either document.
-What no step of the run reads is not checked: `variables`, `conventions` and the variants the
-run does not use.
+What no step of the run reads is not checked: `variables` and `conventions`. A variant the run
+does not use need not be complete, but every variant's name is text, every variant is a mapping,
+and a `ccf` that is there and not null maps segments to numbers from 0 to 1.
 
 Units: `decimal` and `index` multiply by 1, `percent` by 0.01. Value types: `level`, `growth`,
 `index`, `cumulative_change`, `pp_change`, `bp_shock`. The engine does not infer economic

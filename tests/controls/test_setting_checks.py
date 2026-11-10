@@ -81,6 +81,48 @@ def test_a_new_segment_takes_its_parents_variant_ccf(mini, tmp_path):
     assert applied["CARVED"] == applied[parent] == variant[parent]
 
 
+UNUSED_VARIANT_SHAPES = {
+    "a ccf that is a number": ("utilisation", {"label": "sensitivity", "ccf": 0.75}),
+    "a ccf that is a list": ("utilisation", {"label": "sensitivity", "ccf": ["P03", "P05"]}),
+    "a variant that is null": ("linear", None),
+}
+
+
+@pytest.mark.control("EAD/CCF contract")
+@pytest.mark.parametrize("shape", sorted(UNUSED_VARIANT_SHAPES))
+def test_a_variant_no_new_segment_can_inherit_from_blocks_at_r2(mini, tmp_path, shape):
+    """A segment a specification creates inherits the ccf of every variant, the unused ones too.
+    One it cannot read blocks at R2 with a block code; it must never end the run as a fault."""
+    name, settings = UNUSED_VARIANT_SHAPES[shape]
+    mini["parameter_set"]["variants"][name] = settings
+    inputs = builders.write(mini, tmp_path / "in")
+    config = specification(inputs, tmp_path, segments={"P05_PART": {"inherits": "P05"}},
+                           assignments=[{"where": {"segment": "P05"}, "segment": "P05_PART"}])
+    _, manifest = execute(config, tmp_path / "runs")
+    b = manifest.get("blocked", {})
+    assert manifest["status"] == "BLOCKED" and (b["step"], b["code"]) == ("R2", Block.BAD_VALUE_TYPE), b
+    assert f"variants.{name}" in b["message"], b["message"]
+
+
+@pytest.mark.control("EAD/CCF contract")
+def test_a_new_segment_inherits_only_from_the_variants_that_override_its_parent(mini, tmp_path):
+    """An unused variant with no ccf, or a null one, overrides nothing: a new segment inherits
+    nothing from it, and the run goes on."""
+    variants = mini["parameter_set"]["variants"]
+    variants["linear"] = {"label": "not filled in yet", "ccf": None}
+    variants["annuity"].pop("ccf", None)
+    parent = next(iter(variants["utilisation"]["ccf"]))
+    inputs = builders.write(mini, tmp_path / "in")
+    config = specification(inputs, tmp_path, segments={"CARVED": {"inherits": parent}},
+                           assignments=[{"where": {"segment": parent}, "segment": "CARVED"}])
+    ctx = open_run(resolve(config), tmp_path / "runs")
+    loaded = ingest.load_inputs(ctx)
+    applied = loaded.parameter_set["variants"]
+    assert applied["utilisation"]["ccf"]["CARVED"] == applied["utilisation"]["ccf"][parent]
+    assert applied["linear"]["ccf"] is None and "ccf" not in applied["annuity"]
+    assert validate.validate_and_route(loaded, ctx).rejections.empty
+
+
 # --- a specification's SICR multiple (MIG-07) ---------------------------------------------------
 
 def _grade_explained_s2(mini, segment) -> pd.Series:

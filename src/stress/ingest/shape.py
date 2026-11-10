@@ -8,7 +8,12 @@ year, and the number of reversion years, is a whole number as YAML reads one: ``
 a value it cannot read.
 
 What no step of this run reads is not checked: ``variables`` and ``conventions``, which are records
-for people, and every variant but the one the run uses.
+for people. Of the variants, the one the run uses must be complete. The others are read in two
+places only, and are checked for just that: a segment that a specification creates inherits the
+``ccf`` override of every variant (R2), and the effective specification lists every variant by name
+(R10). So every variant's name is text, every variant is a mapping, and a ``ccf`` that is there and
+not null maps segments to numbers. An unused variant may lack ``repayment_profile`` or have a null
+``ccf``.
 
 Whether the values fit together stays where it was checked: a segment's settings, the triggers and
 the variant of the run at R3, the horizon against the terminal rule and the scenario values a model
@@ -126,7 +131,8 @@ def scenario_value(value: dict, n: int) -> None:
 def parameter_set(doc: dict, variant: str) -> None:
     """Every section of the Parameters file that this run reads, but ``portfolios``, whose tree
     ``segments_of`` reads, and ``sicr_triggers``, which R3 checks with the rule it serves (MIG-05).
-    Of the variants only ``variant``, the one the run uses; R3 blocks one the file does not have."""
+    Every variant is checked for what is read of all of them, and ``variant``, the one the run uses,
+    for being complete; R3 blocks one the file does not have."""
     file = PARAMETER_SET.filename
     for name in ("parameter_set_id", "version", "status"):
         if not (is_text(doc[name]) or is_number(doc[name])):
@@ -171,17 +177,23 @@ def parameter_set(doc: dict, variant: str) -> None:
     variants = doc["variants"]
     if not isinstance(variants, dict) or not variants:
         _wrong(file, f"variants must be a nonempty mapping of variant to settings, not {_shown(variants)}")
+    for name, settings in variants.items():
+        _text(name, file, "a variant's name")
+        _mapping(settings, file, f"variants.{name}")
+        # No ccf, or a null one, means no override. One that is there maps segments to numbers.
+        if settings.get("ccf") is not None:
+            for segment, ccf in _mapping(settings["ccf"], file, f"variants.{name}.ccf").items():
+                _text(segment, file, f"a segment in variants.{name}.ccf")
+                _number(ccf, file, f"variants.{name}.ccf.{segment}", 0.0, 1.0)
     if variant in variants:
         settings = _mapping(variants[variant], file, f"variants.{variant}", ("repayment_profile",))
         for product, profile in _mapping(settings["repayment_profile"], file,
                                          f"variants.{variant}.repayment_profile").items():
             _text(product, file, f"a product in variants.{variant}.repayment_profile")
             _text(profile, file, f"variants.{variant}.repayment_profile.{product}")
-        # No ccf means no override; a ccf that is there must be a mapping, an empty one included.
+        # R6 reads the ccf of the run's own variant as a mapping: no ccf is no override, null is not.
         if "ccf" in settings:
-            for segment, ccf in _mapping(settings["ccf"], file, f"variants.{variant}.ccf").items():
-                _text(segment, file, f"a segment in variants.{variant}.ccf")
-                _number(ccf, file, f"variants.{variant}.ccf.{segment}", 0.0, 1.0)
+            _mapping(settings["ccf"], file, f"variants.{variant}.ccf")
 
 
 def segments(settings_by_segment: dict) -> None:

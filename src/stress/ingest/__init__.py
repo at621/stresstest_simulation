@@ -371,16 +371,17 @@ def load_inputs(ctx: RunContext) -> LoadedInputs:
     approval_path = ctx.input_dir / APPROVAL_FILE
     approval = {"status": "MISSING", "input_set_hash": ctx.input_set_hash}
     if approval_path.is_file():
-        shutil.copy2(approval_path, ctx.data_dir / APPROVAL_FILE)
         try:
-            approval = json.loads(approval_path.read_text(encoding="utf-8"))
+            evidence = approval_path.read_bytes()  # read once: these bytes are kept and checked
+            (ctx.data_dir / APPROVAL_FILE).write_bytes(evidence)
+            approval = json.loads(evidence)
             if not isinstance(approval, dict) or approval.get("status") not in ("APPROVED", "PENDING_OWNER_APPROVAL"):
                 raise ValueError("unknown approval status")
             if approval.get("status") == "APPROVED":
                 if not approval.get("approved_by") or not approval.get("approved_on"):
                     raise ValueError("approval lacks approver or date")
                 date.fromisoformat(approval["approved_on"])
-        except (ValueError, TypeError) as exc:
+        except (OSError, ValueError, TypeError) as exc:
             raise BlockingError(STEP, Block.BAD_VALUE_TYPE, f"invalid approval evidence: {exc}") from exc
         if approval.get("input_set_hash") != ctx.input_set_hash:
             raise BlockingError(STEP, Block.INPUT_HASH_MISMATCH, "approval belongs to another input set")

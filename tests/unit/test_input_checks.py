@@ -89,6 +89,10 @@ def _one_pd_short(doc):
     doc["master_scale"]["ttc_pd"].pop()
 
 
+def _a_variant_named_by_a_number(doc):
+    doc["variants"][2027] = doc["variants"]["core"]
+
+
 SCENARIO_DEFECTS = {
     "a scenario id twice": (_twice("scenarios"), Block.DUPLICATE_KEY),
     "an index_of that is not a mapping": (_set("index_of", value=["residential_price_change"]), Block.BAD_VALUE_TYPE),
@@ -157,6 +161,15 @@ PARAMETER_DEFECTS = {
                                               Block.MISSING_PARAMETER, "repayment_profile"),
     "a variant ccf that is not a mapping": (_set("variants", "core", "ccf", value=0.75),
                                             Block.BAD_VALUE_TYPE, "variants.core.ccf"),
+    "a null ccf in the run's variant": (_set("variants", "core", "ccf", value=None), Block.BAD_VALUE_TYPE,
+                                        "variants.core.ccf"),
+    "a variant named by a number": (_a_variant_named_by_a_number, Block.BAD_VALUE_TYPE, "variant's name"),
+    "an unused variant whose ccf is a number": (_set("variants", "utilisation", "ccf", value=0.75),
+                                                Block.BAD_VALUE_TYPE, "variants.utilisation.ccf"),
+    "an unused variant whose ccf is a list": (_set("variants", "utilisation", "ccf", value=["P03", "P05"]),
+                                              Block.BAD_VALUE_TYPE, "variants.utilisation.ccf"),
+    "an unused variant that is null": (_set("variants", "linear", value=None), Block.BAD_VALUE_TYPE,
+                                       "variants.linear"),
     "a variant ccf as text": (_set("variants", "core", "ccf", "P03", value="three quarters"),
                               Block.BAD_VALUE_TYPE, "variants.core.ccf.P03"),
 }
@@ -206,8 +219,9 @@ def test_a_variant_repayment_profile_the_run_does_not_know_blocks(mini, tmp_path
 
 @pytest.mark.req("SYN-PAR-06", "EAD-10")
 def test_what_no_step_of_the_run_reads_does_not_stop_it(mini, tmp_path):
-    """R2 and R3 check what this run reads: its own variant, not the others, and not the records
-    kept for people (``conventions``, ``variables``)."""
+    """R2 and R3 check what this run reads. An unused variant need not be complete: it may lack
+    ``repayment_profile``, have a null ``ccf`` or name a segment of another run. The records kept
+    for people (``conventions``, ``variables``) are not checked at all."""
     variants = mini["parameter_set"]["variants"]
     variants["utilisation"]["ccf"] = {"A_SEGMENT_OF_ANOTHER_RUN": 0.75}
     variants["linear"] = {"label": "not filled in yet", "ccf": None}
