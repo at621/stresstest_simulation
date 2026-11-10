@@ -47,7 +47,7 @@ parameter records, so deleted terminal buckets cannot shorten the priced maturit
 | A18 | Scenario units | The input set keeps the §6.2 values in percent with unit `percent`; R2 converts every value to a decimal fraction by its unit. |
 | A19 | Z-score driver moments | Rough long-run euro-area moments: GDP growth 1.5% ± 3%, unemployment 6.5% ± 2%, residential prices 2.5% ± 8%, CRE prices 2% ± 10%, reference rate 2.5% ± 1.5%. The §6.2 adverse path then gives Z ≈ −1.3 in 2027–2028 and the baseline ≈ +0.1. A first, tighter set (GDP σ 2%) gave Z ≈ −2 and a cumulative adverse charge of 7.6% of GCA, which was judged implausibly severe. |
 | A20 | Adverse without baseline | Blocks (BASELINE_REQUIRED): adverse Z reverts toward baseline 2029, and the end-2029 S1 interpolation needs baseline parameters. |
-| A21 | Terminal horizon | Z is extended to 2060 (`terminal_rule.last_bucket_year`). A facility needing a later bucket blocks (AT-41). |
+| A21 | Terminal horizon | Z is extended to 2060 (`terminal_rule.last_bucket_year` in `foundation/parameter_set.yaml`, which O3 writes into every input set as `horizon.last_bucket_year`, where the engine reads it). A facility needing a later bucket blocks (AT-41). |
 | A22 | P06 split | Government and bank facility counts follow 60/40 within each stage; GCA is raked to exactly 60/40. |
 | A23 | Obligors and groups | All facilities of an obligor share its country, sector, current grade, stage and default status (SYN-01, PD-01). The origination grade is per facility. The ten largest groups in P04 and P05 are built from performing obligors. |
 | A24 | Overlays | The v1 data has no overlays (explicit zero, with not-applicable owner and reason). R9 carries opening overlays unchanged, so none is counted twice. |

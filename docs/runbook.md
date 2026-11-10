@@ -186,6 +186,8 @@ The small dataset holds a tenth of the facilities in each portfolio and opening 
 
 Both datasets come back with each restart. To keep a result, download the workbook from the outcomes step. Heroku is not the retention store for approved runs (OPS-03).
 
-**Synthetic data only.** Files added on a hosted page leave this machine for Heroku, and anyone with the address can see them, so never add bank data there.
+**Synthetic data only.** Files added on a hosted page leave this machine for Heroku, and anyone with the address can see them, so never add bank data there. Added files are one list for everyone on the page.
+
+**Upload size.** A hosted page takes an added table of up to 64 MiB and an added YAML file of up to 4 MiB, and refuses a larger one unread. On this machine the limit stays at 8 GiB.
 
 **Why the `Procfile` sets `PYTHONPATH`.** Heroku builds the app in a temporary folder, and the installed project can keep pointing there. `PYTHONPATH` makes the server and the engine import the deployed source, and it lets a run fingerprint that source. A dyno has no `.git`, so a run's code version reads `0.1.0+unknown+source.<hash>`.

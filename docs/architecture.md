@@ -109,7 +109,7 @@ v1 is complete. These items wait on the owner, and until they are settled the en
 9. **Readings of the draft (C13–C16):** decide S2 repricing or held, run-off inside the horizon, and the LGD path. The defaults stay the design's, and the other readings are selectable. Together they add €99.3m adverse and €31.1m baseline. A default run does not meet ECL-06: only the held reading does. Whichever stands, record it in the design, and amend ECL-11 (C13) through O1.
 10. **NPE calendar (A33):** supply the factors of Article 47c, which could not be retrieved, and the capital team's approval (CAP-09). Only the unsecured 35% of the draft's footnote 75 is sourced.
 11. **Sector stress and calibration:** explicit NACE-based segment assignment and supplied sector drivers are available in the configurable extension (A38). Supply and validate sector paths, driver moments and Z calibration from data (A19); none are empirically estimated by this extension. Overrides are hash-bound and sealed as an experiment.
-12. **Unmet requirements with no decision:** REG-03, SCP-05, DAT-07, SYN-02, SYN-03, SCN-03, PD-07, LGD-11 and EAD-07, in the [traceability matrix](traceability/traceability-matrix.md). Accept each, or plan it.
+12. **Unmet requirements with no decision:** REG-03, SCP-05, DAT-07, SYN-02, SYN-03, PD-07, LGD-11 and EAD-07, in the [traceability matrix](traceability/traceability-matrix.md). Accept each, or plan it. SCN-03 is no longer among them: it is recorded as deferred under A38, and what it still needs is item 11.
 13. **Reproducing on another machine (A36, C18):** decide whether a rerun has to reproduce only on the same machine or within a tolerance, and whether to make `largest_remainder` tie-safe so that every system can compare its book with the committed set.
 14. **Assumptions proposed by Claude Code and not yet approved.** Approve or replace each one. Those with their own item above are left out here (A33 is item 10, A36 is item 13).
     - A30: the five settings around the qualitative SICR triggers that the owner's decision of 18 October 2026 did not cover.
@@ -118,4 +118,14 @@ v1 is complete. These items wait on the owner, and until they are settled the en
     - A34: how the traceability matrix links requirements, and that the authorisation of 30 October 2026 is not read as a local approval date.
     - A35: the readings behind the published benchmarks.
     - A43: the paths and descriptions of the three synthetic scenarios.
+    - A44: the readings taken with the input checks of 10 November 2026, among them that a rerun which reproduces a block exits 0 and that a run from a specification carries `+spec` in its name.
+    - A45: the four report choices made beside the owner's two decisions on coverage and the EAD profile.
+    - A46: the reasons written for six requirements in the traceability matrix, and the hand links that make REG-04, MIG-04 and LGD-08 read `tested`.
     - C6: one opening horizon for both lifetime PDs of the SICR line, which the conflict asks the owner to confirm.
+15. **Design sentences that no longer match the build.** The design leads, so each correction needs the owner's approval, as C1, C4 and C5 had on 9 November 2026.
+    - R9's card says overlays are "tracked by risk and year", R10's card says nothing feeds the REA floor functions portfolio REA, and the R10 card still speaks of four v1 reports (C22).
+    - The R2 to R11 overview says "One command runs both scenarios"; a run holds any scenarios of the set (A43).
+    - D1 and C4 count "up to 7 S3 slices": seven is the number of slice names, and one facility holds at most five.
+    - R4's "Blocks on" list does not name the provenance block that R1's line now sends there (C5), and the pipeline figure still labels the parameter set "Z weights, ρ, w, k, CCF, CPR" although the Z weights and w moved to the models (A42).
+    - The page still opens with "Proposal for agreement · 17 October 2026".
+16. **PD-01 is met in part (C23).** The input contract has no opening 12-month PiT PD, no observation date for the grade and no default-event definition, and R3 does not check that one obligor's facilities share a grade. Decide whether the contract gains them or the requirement text changes.
