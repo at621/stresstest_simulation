@@ -35,7 +35,7 @@ runs/<run_id>/
     └── reports/                      # R10: summary.md, stress_report.xlsx and the other reports
 ```
 
-Every run that completes writes three analysis tables: `analysis_calibration.parquet`, `analysis_sicr_horizon.parquet` and `analysis_loss_weighted_lgd.parquet`. A run with an analysis file (`--analysis`) adds one or two for each of the sections benchmarks, recoveries, capital, NPE backstop, climate and challenge that the file supplies, and keeps the file's exact bytes as `data/analysis.yaml`. A run from a specification keeps it as `data/specification.yaml`. A dynamic run also writes `exposure_movements.parquet` (R7).
+Every run that completes writes three analysis tables: `analysis_calibration.parquet`, `analysis_sicr_horizon.parquet` and `analysis_loss_weighted_lgd.parquet`. A run with an analysis file (`--analysis`, or `run.analysis` in a specification) adds one or two for each of the sections benchmarks, recoveries, capital, NPE backstop, climate and challenge that the file supplies, and keeps the file's exact bytes as `data/analysis.yaml`. A run from a specification keeps it as `data/specification.yaml`. A dynamic run also writes `exposure_movements.parquet` (R7).
 
 A static run with no analysis file and no specification writes 32 reports: `summary.md`, which `stress report` prints; the workbook `stress_report.xlsx`; `effective_specification.json`; and 29 CSV files. Those are `starting_point_reconciliation` and `static_books`; `stage_migration`, `grade_migration` and `s3_cohorts`; `impairment`, `impairment_by_stage` and `ecl_by_bucket`; `z_scores`, `driver_contributions`, `property_indices`, `ttc_matrices`, `pit_matrices`, `pd_curves`, `portfolio_pd`, `lgd_by_z`, `ead_profile` and `segment_models` for the parameters; and eleven `analysis_*` reports. A dynamic run writes `dynamic_books.csv` and `exposure_movements.csv` in place of `static_books.csv`, and leaves out `analysis_template_replica.csv`.
 
@@ -49,7 +49,7 @@ A static run with no analysis file and no specification writes 32 reports: `summ
 
 ## Rules
 
-- **One run, every scenario it names.** A run holds any scenarios of its input set, baseline always among them, because the others revert toward it after 2029 (A20, A43). They run through the same code in one run and are never blended (REG-07). A sensitivity, such as the AT-35 utilisation case or the annuity and linear profiles, is a separate run with its own `--variant`.
+- **One run, every scenario it names.** A run holds any scenarios of its input set, and any its specification defines, baseline always among them: unless a specification holds a scenario flat, the others revert toward it after 2029 (A20, A43). They run through the same code in one run and are never blended (REG-07). A sensitivity, such as the AT-35 utilisation case or the annuity and linear profiles, is a separate run with its own `--variant`.
 - **Write-once.** Once R11 seals a run, nothing in its folder changes. A rerun is a new folder, and a rerun from the manifest must give identical output hashes (§12.2).
 - **Status.** Every preparation run is labelled SYNTHETIC. Regulatory mode blocks the run in v1.
 - **Not in git.** Run folders stay local. Approved runs go to the bank's retention store (OPS-03).
