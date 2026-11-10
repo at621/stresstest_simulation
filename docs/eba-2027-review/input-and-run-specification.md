@@ -67,9 +67,10 @@ Non-baseline runs still require `baseline`, which anchors lifetime/terminal calc
 
 ## Base input set: seven datasets
 
-Five Parquet tables plus two YAML documents are mandatory. `manifest.json` contains file
-hashes and control totals; its combined hash names the directory. `approval.json` is separate
-owner evidence. An approval of the base set does not approve experiment overrides.
+Four Parquet tables, one Parquet matrix file per segment and two YAML documents are
+mandatory. `manifest.json` contains file hashes and control totals; its combined hash names
+the directory. `approval.json` is separate owner evidence. An approval of the base set does
+not approve experiment overrides.
 
 Amounts are EUR, probabilities/rates decimal fractions, dates ISO `YYYY-MM-DD`. Booleans are
 strictly parsed. Each table field can carry a `<field>__status` companion: supplied, estimated,

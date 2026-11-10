@@ -34,7 +34,7 @@ In VS Code, open the `.ipynb` and pick the kernel `.venv\Scripts\python.exe` (Py
 
 ## Rules
 
-- Start runs only with `nb.run_engine`. Never wire the steps in a notebook: `cli.py` is the only place that wires the pipeline.
+- Start runs only with `nb.run_engine`. Never wire the steps in a notebook: `cli.py` is the only place that wires the pipeline. Notebook 02 is the one exception to the first sentence: it imports no helper module on purpose, so its own `start_run()` calls `stress.cli.execute`, the same entry point `nb.run_engine` uses.
 - Read `runs/<run_id>/` and `inputs/<hash>/`; never write to them. A notebook that exports files writes them to `notebooks/output/<run_id>/`, which git ignores.
 - No expected value is typed by hand. A check recomputes an identity from the run's own tables.
 - `uv run ruff check` lints the notebooks and `nbtools.py` with the rest of the repo.
