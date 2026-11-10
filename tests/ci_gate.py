@@ -12,11 +12,16 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     import_linter = Path(sys.executable).parent / ("lint-imports.exe" if os.name == "nt" else "lint-imports")
     temporary = root / "tests" / (".ci-" + uuid.uuid4().hex)
+    pytest = [sys.executable, "-m", "pytest", "-q", "--tb=short", "--basetemp", str(temporary)]
     commands = [
         [sys.executable, "-m", "foundation.transcribe", "--check"],
         [sys.executable, "-m", "ruff", "check"],
         [str(import_linter), "--cache-dir", "tests/.import_linter_cache"],
-        [sys.executable, "-m", "pytest", "-q", "--tb=short", "--basetemp", str(temporary)],
+        pytest,
+        # The control room imports the engine, and only its tests read the example specifications
+        # under docs/. They carry no requirement marker, so they sit outside tests/ and run as a
+        # suite of their own.
+        [*pytest, "control_room"],
     ]
     try:
         for command in commands:

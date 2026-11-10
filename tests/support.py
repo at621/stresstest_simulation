@@ -12,6 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC_DIR = ROOT / "docs" / "spec"
 REQUIREMENTS = SPEC_DIR / "EBA_2027_Credit_Portfolio_Stress_Test_Requirements.md"
 INPUTS_DIR = ROOT / "inputs"
+# The committed full input set that O2-O4 produce now. The one place in tests/ that names it:
+# change it when a rebuild writes a new set (docs/runbook.md, "After changing the requirements or
+# the parameter set").
+CURRENT_INPUT_SET = "5a296ffe0e198705"
 
 # Control names for tests of the repository rules themselves (docs/architecture.md section 2).
 REPOSITORY_CONTROL = "Repository rules"

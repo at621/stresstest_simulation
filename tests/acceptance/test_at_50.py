@@ -4,6 +4,7 @@ survival (EAD-11)."""
 import numpy as np
 import pytest
 
+from stress.params.prepay import not_prepaid_share
 from tests import builders
 from tests.support import oracle, tolerance
 
@@ -16,6 +17,19 @@ def test_prepayment_in_ead_only(core_run, mini_tables, tmp_path):
     params = builders.result(ctx, "parameters.parquet")
     assert (params["prepayment_rate"] > 0).any(), "the case needs a positive prepayment rate"
     assert (params.loc[params["default_bucket"] == 1, "not_prepaid_share"] == case["expected"]["sp_first_bucket"]).all()
+    # SP[k] = (1 - CPR[1]) x ... x (1 - CPR[k-1]) of the facility's own rates. R6 builds the share
+    # itself and takes the EAD from it, so EAD = B x SP holds for any share: the share is held to
+    # the kernel here, for every facility, scenario and valuation date.
+    profile = ["facility_id", "scenario", "valuation_year"]
+    params = params.sort_values([*profile, "default_bucket"], kind="mergesort").reset_index(drop=True)
+    assert (params["default_bucket"] == params.groupby(profile).cumcount() + 1).all(), "buckets run 1..K"
+    first = np.flatnonzero(params["default_bucket"].to_numpy() == 1)
+    rates = np.split(params["prepayment_rate"].to_numpy(), first[1:])
+    expected = np.concatenate([not_prepaid_share(of_profile) for of_profile in rates])
+    assert np.all(np.abs(params["not_prepaid_share"].to_numpy() - expected) <= tol), (
+        "SP[k] is the product of (1 - CPR) over the buckets before k")
+    assert (params["not_prepaid_share"] < case["expected"]["sp_first_bucket"]).any(), (
+        "prepayment must reach the buckets after the first")
     assert np.allclose(params["ead_drawn"], params["balance"] * params["not_prepaid_share"], rtol=1e-12, atol=0)
     committed = params[params["undrawn"] > 0]
     assert len(committed) and np.allclose(committed["ead_undrawn"], committed["undrawn"] * committed["ccf"],

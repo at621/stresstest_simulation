@@ -12,14 +12,21 @@ import json
 import re
 import sys
 
-SEP = r"[\\/]"
-START = r"(?:^|[\\/\s\"'`=:;,(|&<>])"
-END = r"(?:[\\/\s\"'`;,)|&<>*]|$)"
+# A protected name counts wherever it stands as a word of its own, whatever is around it: a slash,
+# a quote, a brace or comma ("{archive,docs}/**"), "@", "!" or nothing. Only a longer word, such
+# as "archived" or "make_archive", does not count.
+START = r"(?<!\w)"
+END = r"(?!\w)"
+SEP = r"[\\/]+(?:\.[\\/]+)*"  # one or more slashes of either kind, and "/./"
+IN_BRACES_BEFORE = r"(?:[^{}\s]*\})?"  # "{inputs,docs}/bank"
+IN_BRACES_AFTER = r"(?:\{[^{}]*?" + START + r")?"  # "inputs/{x,bank}"
 PROTECTED = {
     "archive/": re.compile(START + r"archive" + END, re.IGNORECASE),
-    "inputs/bank/": re.compile(START + r"inputs" + SEP + r"bank" + END, re.IGNORECASE),
+    "inputs/bank/": re.compile(START + r"inputs" + END + IN_BRACES_BEFORE + SEP + IN_BRACES_AFTER
+                               + r"bank" + END, re.IGNORECASE),
 }
-GIT_GREP = re.compile(r"\bgit\s+(?:-\S+\s+)*grep\b", re.IGNORECASE)
+# "git grep" after any of git's own options, with or without a value: "git -C . grep".
+GIT_GREP = re.compile(r"\bgit(?:\s+-\S+(?:\s+[^-\s|;&]\S*)?)*\s+grep\b", re.IGNORECASE)
 
 PATH_FIELDS = {
     "Read": ["file_path"],

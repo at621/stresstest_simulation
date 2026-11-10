@@ -92,9 +92,9 @@ Runs need input set `57bf340df85d5a54` or later. Since 6 November 2026 the param
 
 1. Requirements changed: run `uv run python -m foundation.transcribe`. Check the diff of `docs/spec/`, then have the `change-reviewer` agent and the owner approve it (GOV-03).
 2. Parameter set, scenario library (`foundation/scenarios.yaml`) or generator changed: run `uv run python -m foundation.synth` on the machine that built the current input set. The hash depends on the operating system and the CPU's BLAS kernel, and a rebuild elsewhere can give a different book, not only different bytes (A36). It writes a new `inputs/<hash>/` and never edits an old one. Update the `--inputs` path wherever it is used.
-3. Run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces` fails until the new input set is in `inputs/`. It runs on Windows only and passes only under the kernel that built the set, so CI cannot catch a missing rebuild.
+3. Put the new set's name in `CURRENT_INPUT_SET` in `tests/support.py`, the one place in `tests/` that names the current set, and run `uv run pytest`. The test `test_the_committed_set_is_what_the_generator_produces` fails until the new input set is in `inputs/` and `CURRENT_INPUT_SET` names it. It runs on Windows only and passes only under the kernel that built the set, so CI cannot catch a missing rebuild. On every system the tests check the set that `CURRENT_INPUT_SET` names against its manifest hashes, and its opening allowances against SYN-PAR-09.
 4. Compare the old and new results with `uv run stress compare --base runs/<old> --new runs/<new>` (version-change control). It prints the impairment differences and keeps the full report in `runs/comparisons/<old>__<new>/`: `summary.md`, the differences in impairment, stage stocks and coverage, PD and LGD, and `comparison.json`, which ties them to both runs. Sealed runs are write-once, so the report sits beside them; `--out` chooses another folder outside them.
-5. A new full input set needs a new small dataset too. Put its hash in `BOOKS["large"]` in `control_room/server.py`, run `uv run python control_room/small_set.py`, and put the hash that prints in `BOOKS["small"]`. Add the two replaced hashes to `RETIRED` in `control_room/test_small_set.py`, because old sets stay committed. Update both hashes and the sample's figures in A41 of [the assumptions](assumptions.md), the sample's hash in [Hosting on Heroku](#hosting-on-heroku), and both hashes and the figures in `README.md`. If a new run changes the memory peaks, update them in [Hosting on Heroku](#hosting-on-heroku) too. Then stage the new sets and run `uv run pytest control_room`: it fails until `BOOKS` and those documents name the new sets. The gate does not run it.
+5. A new full input set needs a new small dataset too. Put its hash in `BOOKS["large"]` in `control_room/server.py`, run `uv run python control_room/small_set.py`, and put the hash that prints in `BOOKS["small"]`. Add the two replaced hashes to `RETIRED` in `control_room/test_small_set.py`, because old sets stay committed. Update both hashes and the sample's figures in A41 of [the assumptions](assumptions.md), the sample's hash in [Hosting on Heroku](#hosting-on-heroku), and both hashes and the figures in `README.md`. If a new run changes the memory peaks, update them in [Hosting on Heroku](#hosting-on-heroku) too. Then stage the new sets and run `uv run pytest control_room`: it fails until `BOOKS` and those documents name the new sets. The pre-commit hook and CI run it as well, so a commit of the new sets fails until then; the stop gate does not run it.
 
 ### Adding a scenario to the input set
 
@@ -102,8 +102,9 @@ A scenario that every run should be able to choose goes in `foundation/scenarios
 
 ### Gates
 
-- **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about seven minutes), and blocks the stop until they pass.
-- **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks and refuses protected paths and run folders. When every staged file is on the hook's small-change list, it skips pytest, checks traceability instead and takes seconds. CI still runs everything.
+- **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about seven minutes), and blocks the stop until they pass. It does not run the control room's tests.
+- **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks, then the control room's tests (`uv run pytest control_room`, about two and a half minutes more), and refuses protected paths and run folders. When every staged file is on the hook's small-change list, it skips both test suites, checks traceability instead and takes seconds. CI still runs everything.
+- **Control room tests:** `uv run pytest` does not collect them, because they sit outside `tests/`. The pre-commit hook, `/improve`, `change-reviewer` and CI each run `uv run pytest control_room` as a step of its own. A change to the room alone is a small change: the pre-commit hook skips the tests and only CI would notice a failure, after the push. So run them yourself before committing it.
 - **Traceability:** after changing a test marker, an ID named in code, an acceptance docstring, `docs/assumptions.md` or `docs/traceability/requirement-status.yaml`, run `uv run python -m tests.traceability` to regenerate [the matrix](traceability/traceability-matrix.md) and [the source register](source-register/source-register.md); a control test fails until they are current, and `--check` compares without writing.
 
 ### Draft preparation and replay
@@ -132,12 +133,13 @@ snapshot, including the optional sidecar. It does not require the original input
 Hashes detect accidental alteration; manifests are not cryptographic attestations from an approver.
 
 For the complete local CI gate, run `uv run python tests/ci_gate.py`. It checks O1 drift,
-Ruff, import boundaries and all tests. CI runs the same entry point. Numerical approval
+Ruff, import boundaries and all tests, and then runs the control room's tests. CI runs the same
+entry point, on Linux. Numerical approval
 oracles remain open until supplied by the owner; passing automated checks does not close them.
 
 ## Control room
 
-`uv run python control_room/server.py` opens the page on this machine, on the small dataset. Add `--dataset large` for the full book, and see [its README](../control_room/README.md) for the page itself. Its tests are not part of the gate: run `uv run pytest control_room`, which takes about two and a half minutes.
+`uv run python control_room/server.py` opens the page on this machine, on the small dataset. Add `--dataset large` for the full book, and see [its README](../control_room/README.md) for the page itself. Its tests are a suite of their own, `uv run pytest control_room`, which takes about two and a half minutes. CI runs it on every push, and the pre-commit hook for every commit that is not a small change (see [Gates](#gates)); after a change to the room alone, run it yourself.
 
 ### Hosting on Heroku
 

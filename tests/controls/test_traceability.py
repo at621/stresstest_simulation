@@ -218,9 +218,70 @@ def test_unmet_needs_no_decision_and_is_counted(repo):
 
 @pytest.mark.control("Repository rules")
 def test_needs_review_flags_an_unmet_requirement_a_test_now_names(repo):
-    set_status(repo, {"REG-01": {"status": "deferred", "reason": "x", "decided_in": ["A1"]},
-                      "DAT-04": {"status": "deferred", "reason": tr.UNMET}})
+    deferred = {"status": "deferred", "reason": "x", "decided_in": ["A1"]}
+    set_status(repo, {"REG-01": deferred, "DAT-04": {"status": "deferred", "reason": tr.UNMET}})
     assert tr.needs_review(repo) == ["DAT-04"]
+    # The entry answers by listing the test it has read; the hint then stops.
+    answered = {"status": "deferred", "reason": tr.UNMET, "note": "The test proves too little.",
+                "tests": ["unit/test_mini.py::test_marked"]}
+    set_status(repo, {"REG-01": deferred, "DAT-04": answered})
+    assert tr.needs_review(repo) == []
+    assert "| DAT-04 | Keep attributes apart | `deferred` |" in tr.build(repo)[tr.MATRIX], "a listed test is no evidence"
+    # A test that arrives later is new, so the hint comes back.
+    (repo / "tests/unit/test_later.py").write_text(
+        'import pytest\n\n\n@pytest.mark.req("DAT-04")\ndef test_later():\n    pass\n', encoding="utf-8")
+    assert tr.needs_review(repo) == ["DAT-04"]
+
+
+def code_only(repo, source: str) -> None:
+    """Leave DAT-04 with no test, and with ``source`` as the only code that could name it."""
+    (repo / "tests/unit/test_mini.py").write_text(MINI_TEST.split("@pytest.mark.req")[0], encoding="utf-8")
+    (repo / "src/stress/other.py").write_text(source, encoding="utf-8")
+
+
+@pytest.mark.control("Repository rules")
+@pytest.mark.parametrize("source", [
+    '"""R2 validation: DAT-04."""\n',
+    '"""R2 validation."""\n\n# DAT-03–DAT-04\nSTEP = "R2"\n',
+    '"""R2 validation.\n\nDAT-01–DAT-04, ECL-01.\n"""\n\nSTEP = "R2"\n',
+], ids=["named in a module docstring", "the end of a range in a comment", "a range in a module docstring"])
+def test_a_range_or_a_module_docstring_alone_needs_a_reason(repo, source):
+    code_only(repo, source)
+    with pytest.raises(tr.TraceabilityError, match="range or a module docstring: DAT-04.*give it a reason"):
+        tr.build(repo)
+    set_status(repo, {"REG-01": {"status": "deferred", "reason": "Not yet", "decided_in": ["A1"]},
+                      "DAT-04": {"reason": "Read against the code: R2 keeps the attributes apart."}})
+    row = next(line for line in tr.build(repo)[tr.MATRIX].splitlines() if line.startswith("| DAT-04 "))
+    assert "| `built` |" in row and "`src/stress/other.py`" in row and "Read against the code" in row
+
+
+@pytest.mark.control("Repository rules")
+@pytest.mark.parametrize("source", [
+    '"""R2 validation."""\n\n\ndef check():\n    """Keeps attributes apart (DAT-04)."""\n',
+    '"""R2 validation."""\n\nSTEP = "R2"  # DAT-04\n',
+    '"""R2 validation: DAT-01–DAT-04."""\n\nRULES = ("DAT-04", "ECL-01/02")\n',
+], ids=["in a function docstring", "in a comment", "in a range and again on its own"])
+def test_an_id_written_out_below_the_module_docstring_is_built(repo, source):
+    code_only(repo, source)
+    row = next(line for line in tr.build(repo)[tr.MATRIX].splitlines() if line.startswith("| DAT-04 "))
+    assert "| `built` |" in row and "`src/stress/other.py`" in row
+
+
+@pytest.mark.control("Repository rules")
+def test_a_yaml_file_has_no_docstring_to_discount(repo):
+    code_only(repo, '"""R2 validation."""\n')
+    (repo / "foundation/mini.yaml").write_text("# DAT-04: attributes kept apart\nkey: 1\n", encoding="utf-8")
+    assert "| DAT-04 | Keep attributes apart | `built` |" in tr.build(repo)[tr.MATRIX]
+    (repo / "foundation/mini.yaml").write_text("# DAT-03–DAT-04\nkey: 1\n", encoding="utf-8")
+    with pytest.raises(tr.TraceabilityError, match="DAT-04"):
+        tr.build(repo)
+
+
+@pytest.mark.control("Repository rules")
+def test_without_ranges_only_an_id_written_out_counts():
+    text = "ECL-01–ECL-03, CAP-05/06 and PD-03; EXP-03 – EXP-05"
+    assert tr.find_ids(text, KNOWN) == {"ECL-01", "ECL-02", "ECL-03", "CAP-05", "CAP-06", "PD-03", "EXP-03", "EXP-05"}
+    assert tr.find_ids(text, KNOWN, ranges=False) == {"CAP-05", "CAP-06", "PD-03"}
 
 
 @pytest.mark.control("Repository rules")

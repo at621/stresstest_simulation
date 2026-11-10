@@ -15,7 +15,9 @@ foundation, so a broken engine cannot hide a gap. Sources of links:
 - docs/traceability/requirement-status.yaml, kept by hand: what the scan cannot derive.
 
 ``tested`` and ``built`` are derived from links. ``deferred`` and ``process`` come from the YAML,
-which never states ``tested`` or ``built``. An ID with no status makes the generator fail.
+which never states ``tested`` or ``built``. An ID with no status makes the generator fail. So does
+an ID whose only link is a range or a module docstring in code, unless the YAML gives it a reason:
+such a mention shows where to look and is not evidence that the requirement is met.
 """
 
 import argparse
@@ -87,6 +89,7 @@ How to read a row:
 - `tested` and `built` come from a scan of names, so they show where to look. They do not prove that a test covers everything a requirement says. The last column says where that matters, and finding 6 of `docs/eba-2027-review/eba-2027-review-findings.md` explains why an acceptance test can pass without touching the engine.
 - `deferred` and `process` come from the hand-kept file. If its status differs from what the scan found, the links stay visible and the reason says why they are not enough.
 - A requirement met in the code but not named there is linked by hand in the same file, and the reason says so. The generator checks that each hand link exists.
+- A module docstring lists what a module is about, often as a range such as "PD-01–PD-07". Where that is a requirement's only link, the hand-kept file must give a reason written after reading the requirement against the code, or the generator fails.
 - Acceptance cases come from the oracle's references, the acceptance test's docstring, and requirement text that names the case. Paths under "Other tests" start at `tests/`.
 - Decision references are the A and C numbers of `docs/assumptions.md` that mention the requirement, then the decisions named in the hand-kept file.
 
@@ -125,9 +128,11 @@ class TraceabilityError(Exception):
 
 # --- requirement IDs -----------------------------------------------------------------------------
 
-def find_ids(text: str, known: Iterable[str]) -> set[str]:
+def find_ids(text: str, known: Iterable[str], ranges: bool = True) -> set[str]:
     """Every requirement in ``known`` that ``text`` names. Ranges expand with whichever dash
-    appears and keep only known IDs, because the numbering has gaps (requirements section 1.3)."""
+    appears and keep only known IDs, because the numbering has gaps (requirements section 1.3).
+    With ``ranges`` off a range names nothing, its two ends included: only an ID written out on
+    its own, or in a list such as CAP-05/06, counts."""
     known = set(known)
     families = "|".join(sorted({k.rsplit("-", 1)[0] for k in known}, key=len, reverse=True))
     if not families:
@@ -137,7 +142,8 @@ def find_ids(text: str, known: Iterable[str]) -> set[str]:
 
     def expand(match: re.Match) -> str:
         family, low, high = match.group(1), int(match.group(2)), int(match.group(3))
-        found.update(f"{family}-{n:02d}" for n in range(low, high + 1) or (low, high))
+        if ranges:
+            found.update(f"{family}-{n:02d}" for n in range(low, high + 1) or (low, high))
         return " "
 
     def listed(match: re.Match) -> str:
@@ -289,19 +295,36 @@ def scan_tests(root: Path) -> list[MarkedTest]:
 
 # --- code, oracles, assumptions ------------------------------------------------------------------
 
-def scan_code(root: Path, known: set[str]) -> dict[str, set[str]]:
-    """{requirement ID: code files that name it}. Only Python and YAML count: the CLAUDE.md rule
-    files in the code folders are instructions, not code."""
+def _below_module_docstring(source: str) -> str:
+    """Python source without its module docstring."""
+    body = ast.parse(source).body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        lines = source.splitlines()
+        return "\n".join(lines[:body[0].lineno - 1] + lines[body[0].end_lineno:])
+    return source
+
+
+def scan_code(root: Path, known: set[str]) -> tuple[dict[str, set[str]], set[str]]:
+    """{requirement ID: code files that name it}, and the IDs that code names firmly: written out
+    on their own, below any module docstring. A module docstring lists what its module is about,
+    often as a range, so a mention there shows where to look and is not evidence on its own.
+    Only Python and YAML count: the CLAUDE.md rule files in the code folders are instructions,
+    not code."""
     named: dict[str, set[str]] = defaultdict(set)
+    firm: set[str] = set()
     for folder in CODE_FOLDERS:
         for path in (root / folder).rglob("*"):
             relative = path.relative_to(root)
             if path.suffix not in CODE_SUFFIXES or not path.is_file() \
                     or any(p.startswith((".", "__pycache__")) for p in relative.parts):
                 continue
-            for requirement in find_ids(path.read_text(encoding="utf-8"), known):
+            source = path.read_text(encoding="utf-8")
+            for requirement in find_ids(source, known):
                 named[requirement].add(relative.as_posix())
-    return named
+            firm |= find_ids(_below_module_docstring(source) if path.suffix == ".py" else source,
+                             known, ranges=False)
+    return named, firm
 
 
 def oracle_links(root: Path, known: set[str]) -> dict[str, set[str]]:
@@ -333,6 +356,7 @@ class Links:
     acceptance: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     tests: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     code: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+    firm: set[str] = field(default_factory=set)  # named in code on their own, below a module docstring
     decisions: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
     decision_numbers: set[str] = field(default_factory=set)  # every A and C number
     case_tests: dict[str, str] = field(default_factory=dict)  # acceptance case: its test
@@ -364,7 +388,7 @@ def collect_links(root: Path, text: str, known: set[str]) -> Links:
             continue  # an oracle with no test proves nothing, so it gives no link
         for requirement in requirements:
             links.acceptance[requirement].add(case)
-    links.code = scan_code(root, known)
+    links.code, links.firm = scan_code(root, known)
     assumptions = (root / ASSUMPTIONS).read_text(encoding="utf-8")
     links.decisions = scan_assumptions(assumptions, known)
     links.decision_numbers = set(ASSUMPTION_ROW.findall(assumptions))
@@ -473,7 +497,7 @@ def _reason(entry: Entry) -> str:
 def classify(requirements: dict[str, Requirement], links: Links,
              entries: dict[str, Entry]) -> list[Row]:
     """One row per requirement with exactly one status, or an error naming every gap."""
-    rows, missing = [], []
+    rows, missing, unread = [], [], []
     for requirement in requirements.values():
         key = requirement.id
         entry = entries.get(key, Entry())
@@ -485,12 +509,22 @@ def classify(requirements: dict[str, Requirement], links: Links,
         if not status:
             missing.append(key)
             continue
+        if not (acceptance or tests or entry.reason or key in links.firm):
+            unread.append(key)
         decisions = tuple(dict.fromkeys([*links.decisions.get(key, []), *entry.decided_in]))
         rows.append(Row(requirement, status, acceptance, tests, code, decisions, _reason(entry)))
+    problems = []
     if missing:
-        raise TraceabilityError(
+        problems.append(
             f"{len(missing)} requirement(s) have no status: {', '.join(missing)}. There is no "
             f"'unknown' status: add a test marker, or an entry in {STATUS_FILE.as_posix()}.")
+    if unread:
+        problems.append(
+            f"{len(unread)} requirement(s) are named in code only inside a range or a module "
+            f"docstring: {', '.join(unread)}. That shows where to look, not that the requirement is "
+            f"met: read each against the code and give it a reason in {STATUS_FILE.as_posix()}.")
+    if problems:
+        raise TraceabilityError("\n".join(problems))
     return rows
 
 
@@ -681,10 +715,23 @@ def build(root: Path = ROOT) -> dict[Path, str]:
 
 
 def needs_review(root: Path = ROOT) -> list[str]:
-    """Requirements the YAML calls unmet that a test now names. Not an error: a new marker on
-    another branch must not stop the build, but a person should look at the entry again."""
-    _, _, rows = _rows(root, (root / REQUIREMENTS.relative_to(ROOT)).read_text(encoding="utf-8"))
-    return [r.requirement.id for r in rows if r.reason.startswith(UNMET) and (r.acceptance or r.tests)]
+    """Requirements the YAML calls unmet that a test or acceptance case names, where the entry has
+    not answered for that link. Not an error: a new marker on another branch must not stop the
+    build, but a person should look at the entry again. An entry answers by listing the link
+    under its own ``tests`` or ``acceptance`` and saying in its note why it proves too little; a
+    link that arrives later is new and brings the hint back."""
+    text = (root / REQUIREMENTS.relative_to(ROOT)).read_text(encoding="utf-8")
+    requirements = parse_requirements(text)
+    links = collect_links(root, text, set(requirements))
+    entries = load_status(root, set(requirements), links)
+    return [key for key in requirements
+            if key in entries and entries[key].reason == UNMET
+            and (links.acceptance.get(key, set()) - set(entries[key].acceptance)
+                 or links.tests.get(key, set()) - set(entries[key].tests))]
+
+
+REVIEW_HINT = ("review: {requirement} is unmet in {status_file} but a test now names it. If the entry "
+               "still stands, list that test or acceptance case under it and say why it is not enough")
 
 
 def write(root: Path = ROOT) -> list[Path]:
@@ -714,13 +761,13 @@ def main(argv: list[str] | None = None) -> int:
             for name in stale:
                 print(f"stale: {name}")
             for requirement in needs_review():
-                print(f"review: {requirement} is unmet in {STATUS_FILE.name} but a test now names it")
+                print(REVIEW_HINT.format(requirement=requirement, status_file=STATUS_FILE.name))
             print("traceability files are current" if not stale else f"{len(stale)} file(s) differ")
             return 1 if stale else 0
         for name in write():
             print(f"wrote {name.as_posix()}")
         for requirement in needs_review():
-            print(f"review: {requirement} is unmet in {STATUS_FILE.name} but a test now names it")
+            print(REVIEW_HINT.format(requirement=requirement, status_file=STATUS_FILE.name))
     except TraceabilityError as error:
         print(error, file=sys.stderr)
         return 1
