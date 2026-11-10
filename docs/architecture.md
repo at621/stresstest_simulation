@@ -55,7 +55,7 @@ On native Windows, Claude Code's sandbox doesn't run, so protection uses several
 
 1. **Deny rules** in `.claude/settings.json` for Read and Edit on `/archive` and `/archive/**`. On a best-effort basis these also cover Grep, Glob, `@` mentions, the file open in VS Code, and simple shell commands such as `cat`. A leading `/` means the project root, so start Claude Code from the repo root.
 2. **Hook** `.claude/hooks/guard_paths.py`, run before every tool call, including calls by subagents.
-   - It blocks any call whose path, glob or command holds `archive` as a word of its own, whatever stands around it: a slash, a quote, a brace or comma as in `{archive,docs}/**`, `@` or `!`. Case and slash direction do not matter. Only a longer word, such as `archived`, passes.
+   - It blocks any call whose path, glob or command holds `archive` as a word of its own, whatever stands around it: a slash, a quote, a brace or comma as in `{archive,docs}/**`, `@` or `!`. Case and slash direction do not matter. Only a longer name passes: a longer word such as `archived`, a name joined by a hyphen such as the PowerShell cmdlet `Expand-Archive`, or a file name with an extension such as `archive.md`.
    - It also blocks `git grep`, behind any of git's own options.
    - A control test, `tests/controls/test_guard_hook.py`, loads the hook and holds it to sample calls.
 3. **Git and search:**
@@ -69,7 +69,7 @@ On native Windows, Claude Code's sandbox doesn't run, so protection uses several
 **Remaining gaps:**
 - This is not an OS-level block. A script that walks the whole tree could still read the archive.
 - The hook is deliberately strict, so a command that merely mentions `archive` is also blocked, a git exclusion such as `':!archive'` included.
-- The hook reads names, so it cannot see a folder the call does not spell out: a wildcard such as `arch*`, a shell variable, or a name split by quotes. There the other layers have to hold.
+- The hook reads names, so it cannot see a folder the call does not spell out: a wildcard such as `arch*`, a shell variable, a name split by quotes, a path that goes up and comes down again such as `inputs/<set>/../bank`, or the two parts of `inputs/bank` given in separate words or fields (`cd inputs`, then `ls bank`). There the other layers have to hold.
 
 Check the protection with [runbook.md](runbook.md) after any change to `.claude/`.
 

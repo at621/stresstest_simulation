@@ -29,6 +29,8 @@ NAMED = {
         "ls {archive,docs}/", "ls {docs,archive}/", "{archive,docs}/**", "{docs,archive}/**/*.md",
         "@archive/notes.md", "git ls-files ':!archive'", "git ls-files ':(exclude)archive'",
         "rg marker --glob '!archive/**'", "cat archive?", "ls [archive]", "ls archive.", "ls archive~",
+        # Windows drops a dot at the end of a name, so this is the folder:
+        "cat archive./notes.md", "ls -la archive", "tar --exclude=archive -cf out.tar .",
     ],
     BANK: [
         "inputs/bank", "inputs/bank/", "inputs/bank/loans.parquet", r"inputs\bank\loans.parquet",
@@ -36,19 +38,24 @@ NAMED = {
         "git show HEAD:inputs/bank/loans.parquet", "inputs/bank/**",
         # Forms the hook let through until 9 November 2026:
         "inputs//bank/loans.parquet", r"inputs\\bank", "inputs/./bank/loans.parquet",
-        "ls inputs/{bank,5a296ffe0e198705}/", "ls inputs/{5a296ffe0e198705,bank}/", "inputs/{bank}/**",
+        "ls inputs/{bank,0123456789abcdef}/", "ls inputs/{0123456789abcdef,bank}/", "inputs/{bank}/**",
         "ls {inputs,docs}/bank/", "{docs,inputs}/bank/**", "@inputs/bank/loans.parquet",
-        "git ls-files ':!inputs/bank'", "ls inputs/bank.", "cat inputs/bank?",
+        "git ls-files ':!inputs/bank'", "ls inputs/bank.", "cat inputs/bank?", "cat inputs/bank./loans.parquet",
     ],
 }
 
-# A longer word, or a neighbouring folder, names no protected folder.
+# A longer name, or a neighbouring folder, names no protected folder: a longer word, a name joined
+# by a hyphen (the PowerShell cmdlets, a command's option) or a file name with an extension.
 NOT_NAMED = [
     "docs/archived-notes.md", "archives/2026.md", "tests/unit/test_archiver.py", "unarchive.py",
     "python -c \"import shutil; shutil.make_archive('out', 'zip', 'docs')\"", "archive_2026/notes.md",
-    "inputs/5a296ffe0e198705/facilities.parquet", "inputs/README.md", "inputs/banking.md", "inputs/banks/x",
-    "inputs/{5a296ffe0e198705,d86a3b43d8c3bda3}/manifest.json", "inputs/{x,piggybank}/y", "ls inputs docs",
-    "docs/bank/notes.md", "myinputs/bank/x", "uv run pytest -q", "git status --short",
+    "Expand-Archive -Path docs.zip -DestinationPath out", "Compress-Archive -Path docs -DestinationPath docs.zip",
+    "rsync --archive docs/ backup/", "tar -xf site-archive.tar.gz", "docs/archive.md", "archive-2026/notes.md",
+    "curl https://web.archive.org/web/2026/page",
+    "inputs/0123456789abcdef/facilities.parquet", "inputs/README.md", "inputs/banking.md", "inputs/banks/x",
+    "inputs/{0123456789abcdef,fedcba9876543210}/manifest.json", "inputs/{x,piggybank}/y", "ls inputs docs",
+    "docs/bank/notes.md", "myinputs/bank/x", "my-inputs/bank/x", "inputs/bank-notes.md", "inputs/bank.md",
+    "uv run pytest -q", "git status --short",
 ]
 
 
@@ -131,8 +138,9 @@ def test_a_call_into_a_protected_folder_is_blocked(tool, tool_input):
 @pytest.mark.control("Repository rules")
 @pytest.mark.parametrize("tool, tool_input", [
     ("Read", {"file_path": "docs/architecture.md"}),
-    ("Glob", {"pattern": "inputs/5a296ffe0e198705/*.parquet"}),
+    ("Glob", {"pattern": "inputs/0123456789abcdef/*.parquet"}),
     ("Bash", {"command": "uv run pytest -q"}),
+    ("PowerShell", {"command": "Expand-Archive -Path docs.zip -DestinationPath out"}),
     # Content is not a path: a file or a search may mention a protected folder.
     ("Write", {"file_path": "docs/notes.md", "content": "archive/ and inputs/bank/ are off-limits"}),
     ("Grep", {"pattern": "archive", "path": "docs"}),

@@ -12,11 +12,13 @@ import json
 import re
 import sys
 
-# A protected name counts wherever it stands as a word of its own, whatever is around it: a slash,
-# a quote, a brace or comma ("{archive,docs}/**"), "@", "!" or nothing. Only a longer word, such
-# as "archived" or "make_archive", does not count.
-START = r"(?<!\w)"
-END = r"(?!\w)"
+# A protected name counts wherever it stands as a name of its own, whatever is around it: a slash,
+# a quote, a brace or comma ("{archive,docs}/**"), "@", "!" or nothing. Only a longer name does not
+# count: a longer word ("archived", "make_archive"), a name joined by a hyphen ("Expand-Archive",
+# "--archive") or a file name with an extension ("archive.md"). A dot with nothing after it still
+# counts, because Windows drops it: "archive./notes.md" is the folder.
+START = r"(?<![\w.-])"
+END = r"(?![\w-]|\.\w)"
 SEP = r"[\\/]+(?:\.[\\/]+)*"  # one or more slashes of either kind, and "/./"
 IN_BRACES_BEFORE = r"(?:[^{}\s]*\})?"  # "{inputs,docs}/bank"
 IN_BRACES_AFTER = r"(?:\{[^{}]*?" + START + r")?"  # "inputs/{x,bank}"

@@ -258,8 +258,9 @@ requirements:
       so no second PD model adds default volume.
     note: >-
       AT-29 proves on a reference run that each origin stage's default flow is its opening GCA
-      times its PD. No test or report compares the PD curves with the stage-default flows on the
-      full book: there the demonstration is the design's argument that one matrix drives both.
+      times its PD. A unit test compares the two on the full book: for every scenario, year,
+      segment and origin stage, the flow into Stage 3 equals the opening performing slices times
+      the first-bucket default probability of their PD curves.
     acceptance: [AT-29]
 
   MIG-05:

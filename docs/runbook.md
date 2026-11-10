@@ -21,6 +21,7 @@ Run this after setting up the repo, after any change to `.claude/`, and after up
    - list `archive/` with the Glob tool;
    - run `cat archive/canary.md` and `rg <marker>` from the repo root in Bash;
    - run `Get-Content archive\canary.md` in PowerShell;
+   - list `{archive,docs}/**` with the Glob tool, read `@archive/canary.md`, and run `git ls-files ':!archive'` in Bash: the brace, `@` and exclusion forms;
    - run `git log -p` (once the repo is in git);
    - ask a subagent to read the file.
 4. Every attempt must be blocked or return nothing. If the marker appears anywhere in Claude's output, the protection has a gap. Fix it before putting anything real in `archive/`.
