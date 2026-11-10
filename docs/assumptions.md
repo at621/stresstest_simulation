@@ -160,9 +160,10 @@ the coefficients stay inside the model functions.
 
 The repository review of 9 November 2026 found places where the R10 reports and the Excel workbook
 said something else than the results. The owner approved fixing them and took the two decisions in
-A45. No results table, formula or parameter changed: against the full-book run made before the
-change, `20261109T2136Z-core-13b50509`, `stress compare` shows every difference 0.0, and the six
-output files whose hash changed are all reports (`analysis_sicr_attribution.csv`, `ead_profile.csv`,
+A45. No results table, formula or parameter changed: `stress compare` from the full-book run made
+before the change, `20261109T2136Z-core-13b50509`, to the one made on it,
+`20261110T0444Z-core-ae5c65ab`, shows every difference 0.0, and the six of 50 output files whose
+hash changed are all reports (`analysis_sicr_attribution.csv`, `ead_profile.csv`,
 `effective_specification.json`, `starting_point_reconciliation.csv`, `stress_report.xlsx` and
 `summary.md`).
 
