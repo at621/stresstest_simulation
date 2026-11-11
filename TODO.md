@@ -57,16 +57,14 @@ The owner's two decisions for this item are in `docs/architecture.md` §6: calib
 
 ## Found in the repository review of 9–10 November 2026 and not fixed
 
-The review's findings were fixed on six branches (`improve/document-corrections`, `control-room-fixes`, `input-checks`, `report-fixes`, `tests-gates`, `engine-docs`). These are what the fixes and their reviews left open. None changes a result of a valid plain run.
+The review's findings were fixed on six branches (`improve/document-corrections`, `control-room-fixes`, `input-checks`, `report-fixes`, `tests-gates`, `engine-docs`). They were tested together on `improve/review-fixes-combined`. These are what the fixes and their reviews left open. None changes a result of a valid plain run.
 
 ### After the merge, once
 
 - [ ] A person runs the protection check of `docs/runbook.md`: the guard hook's patterns changed, and neither the author nor the reviewer may try them against the real folders.
 - [ ] Push and see CI: the control room's tests are in the gate now and have only ever run on Windows.
 - [ ] Re-execute notebooks 01 and 04 in the main checkout. Their saved outputs name the worktree they were run in, the summary and coverage they show predate the report fixes, and notebook 01 heads its coverage table "provisions / GCA" over a figure that is on-balance allowance over GCA.
-- [ ] Remove the unused `grades` parameter of `opening_slices` (`src/stress/projection/__init__.py`), whose only caller is `src/stress/cli.py`, and correct the comment in `cli.py` that a run blocked at R10 can have written a summary. Two branches owned the two files.
 - [ ] Look at the control room in a browser: the layout after the unused CSS went, dark mode (it now follows the system only), the rejected-record lines, the "In progress" row after a reload mid-run, the stopped and restart notices, and the over-size message on a hosted page.
-- [ ] `control_room/README.md` says its suite takes about two and a half minutes; with the new tests it takes about four and a half.
 
 ### Engine
 
@@ -77,7 +75,7 @@ The review's findings were fixed on six branches (`improve/document-corrections`
 - [ ] **The "own portfolio" rule for models is checked only inside the parameter set.** A segment filed under another portfolio there seals with that portfolio's models while its facilities report under their own. A specification's carve-out does this on purpose (A42), so a check would apply to the base set only. The owner's call.
 - [ ] **Input fields nothing reads.** `opening_provisions.frozen` (set to False on every row, a run seals unchanged), a stated status beside a value for most columns (`ifrs_stage__status = missing` is ignored), `ttc_matrix.master_scale_pd`, `commitments.ccf_source` and `provision_classification`, and a scenario value's `completeness`.
 - [ ] **A rerun compares only the step and code of a block,** so two different engine faults read as reproduced.
-- [ ] **Smaller.** A volume-assumption block reads R2 in the control room's dry run and R3 in a run, because `invalid()` hard-codes the step. Only the two duplicate cases that crashed now block under a specification. An unreadable analysis file leaves the run hash on its path. `SCENARIOS.key` in `src/stress/contracts/inputs.py` omits `country`, which R2 enforces. The first docstring line of `cli.py` names two of the four commands. A run folder path over 260 characters ends as `INTERNAL_ERROR` on Windows, and `+spec` adds five. A scenario label that starts with `=` is written into the workbook as a formula.
+- [ ] **Smaller.** A volume-assumption block reads R2 in the control room's dry run and R3 in a run, because `invalid()` hard-codes the step. Only the two duplicate cases that crashed now block under a specification. An unreadable analysis file leaves the run hash on its path. `SCENARIOS.key` in `src/stress/contracts/inputs.py` omits `country`, which R2 enforces. The first docstring line of `cli.py` names two of the four commands. A run folder path over 260 characters ends as `INTERNAL_ERROR` on Windows, and `+spec` adds five. A scenario label that starts with `=` is written into the workbook as a formula. The effective specification is written with sorted keys, so a mapping that mixes text and number keys in a part of the parameter set no step reads, such as `conventions` or an unused variant's `repayment_profile`, still ends a run as an engine fault at R10; the fix belongs in that writer (`src/stress/report/__init__.py`).
 
 ### Reports
 
@@ -102,7 +100,6 @@ The review's findings were fixed on six branches (`improve/document-corrections`
 - [ ] A corrupt `manifest.json` of an input set or of a run still breaks `/api/state` for everyone (`nbtools.input_sets()` and `_listed` raise).
 - [ ] "N records will be left out" counts rule hits, so a record that breaks two rules is counted twice.
 - [ ] A rerun that reproduces a block would read "Reproduced: every output matches". It is reachable only by a direct request, because the page disables the button for a blocked run.
-- [ ] `control_room/preflight.py` still types `"INVALID_SPECIFICATION"` as text, where the engine now has a `Block` member.
 - [ ] The walk of the page's own script through all four steps, made under node for this review, could become a committed test if a node dependency is acceptable.
 
 ### Documents

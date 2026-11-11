@@ -206,7 +206,7 @@ def pipeline(ctx) -> dict:
     held = ctx.config.s2_treatment == S2_HELD
     out = {name: [] for name in ("slices", "stage_flows", "grade_flows", "provisions", "ecl_buckets", "charges")}
     for name in parameters.scenario_order(ctx.scenarios):
-        state = projection.opening_slices(routed.portfolio, routed.grades, start, name)
+        state = projection.opening_slices(routed.portfolio, start, name)
         with step("R8", f"{name} {start}, diagnostic of the opening"):
             opening = ecl.year_end_provisions(state, params, drivers.of(MODEL_PD), routed.portfolio, name, start,
                                               routed.grades, last, opening=True)
@@ -381,7 +381,7 @@ def cmd_report(args) -> int:
     manifest = lineage.read_manifest(run_dir)
     summary = run_dir / RESULTS_DIR / REPORTS_DIR / report.SUMMARY_FILE
     print(f"run {manifest['run_id']}: {manifest['status']}")
-    if "blocked" in manifest:  # before the summary: a run blocked at R10 can have written one
+    if "blocked" in manifest:  # a blocked run has no summary: R10 writes it last
         b = manifest["blocked"]
         print(f"blocked at {b['step']}: {b['code']}: {b['message']}")
     elif summary.exists():

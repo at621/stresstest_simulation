@@ -28,7 +28,7 @@ import pyarrow.parquet as pq
 import yaml
 
 from stress import ingest, lineage, scenario, validate
-from stress.contracts.errors import BlockingError, Reason
+from stress.contracts.errors import Block, BlockingError, Reason
 from stress.contracts.inputs import (
     APPROVAL_FILE,
     DATASETS,
@@ -752,9 +752,9 @@ def parse_yaml(text: str, base: Path | None) -> dict:
     try:
         doc = load_yaml(text, SpecificationLoader)
     except TooLarge as exc:
-        raise BlockingError("R2", "INVALID_SPECIFICATION", f"the YAML is not read: {exc}") from exc
+        raise BlockingError("R2", Block.INVALID_SPECIFICATION, f"the YAML is not read: {exc}") from exc
     except yaml.YAMLError as exc:
-        raise BlockingError("R2", "INVALID_SPECIFICATION", f"not valid YAML: {exc}") from exc
+        raise BlockingError("R2", Block.INVALID_SPECIFICATION, f"not valid YAML: {exc}") from exc
     validate_document(doc)
     run = doc["run"]
     for field in ("inputs", "analysis"):

@@ -109,7 +109,7 @@ A scenario that every run should be able to choose goes in `foundation/scenarios
 ### Gates
 
 - **Test gate:** when Claude Code stops after changing code, `.claude/hooks/test_gate.py` runs pytest, lint-imports and ruff (about seven minutes), and blocks the stop until they pass. It does not run the control room's tests.
-- **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks, then the control room's tests (`uv run pytest control_room`, about two and a half minutes more), and refuses protected paths and run folders. When every staged file is on the hook's small-change list, it skips both test suites, checks traceability instead and takes seconds. CI still runs everything.
+- **Pre-commit:** enable once per clone with `git config core.hooksPath tests/githooks`. It runs the same checks, then the control room's tests (`uv run pytest control_room`, about four minutes more), and refuses protected paths and run folders. When every staged file is on the hook's small-change list, it skips both test suites, checks traceability instead and takes seconds. CI still runs everything.
 - **Control room tests:** `uv run pytest` does not collect them, because they sit outside `tests/`. The pre-commit hook, `/improve`, `change-reviewer` and CI each run `uv run pytest control_room` as a step of its own. A change to the room alone is a small change: the pre-commit hook skips the tests and only CI would notice a failure, after the push. So run them yourself before committing it.
 - **Traceability:** after changing a test marker, an ID named in code, an acceptance docstring, `docs/assumptions.md` or `docs/traceability/requirement-status.yaml`, run `uv run python -m tests.traceability` to regenerate [the matrix](traceability/traceability-matrix.md) and [the source register](source-register/source-register.md); a control test fails until they are current, and `--check` compares without writing.
 
@@ -147,7 +147,7 @@ oracles remain open until supplied by the owner; passing automated checks does n
 
 ## Control room
 
-`uv run python control_room/server.py` opens the page on this machine, on the small dataset. Add `--dataset large` for the full book, and see [its README](../control_room/README.md) for the page itself. Its tests are a suite of their own, `uv run pytest control_room`, which takes about two and a half minutes. CI runs it on every push, and the pre-commit hook for every commit that is not a small change (see [Gates](#gates)); after a change to the room alone, run it yourself.
+`uv run python control_room/server.py` opens the page on this machine, on the small dataset. Add `--dataset large` for the full book, and see [its README](../control_room/README.md) for the page itself. Its tests are a suite of their own, `uv run pytest control_room`, which takes about four minutes. CI runs it on every push, and the pre-commit hook for every commit that is not a small change (see [Gates](#gates)); after a change to the room alone, run it yourself.
 
 ### Hosting on Heroku
 
