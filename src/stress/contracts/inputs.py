@@ -172,7 +172,7 @@ TTC_MATRIX = DatasetSpec(
     ),
 )
 
-# The two YAML datasets have nested structure; R2 checks their top-level keys and value fields.
+# The two YAML datasets have nested structure; R2 checks their shape (stress.ingest.shape).
 SCENARIOS = DatasetSpec(name="scenarios", filename="scenarios.yaml", key=("scenario", "variable", "year"))
 PARAMETER_SET = DatasetSpec(name="parameter_set", filename="parameter_set.yaml", key=("parameter_set_id",))
 
@@ -279,3 +279,7 @@ class LoadedInputs:
     analysis: dict = field(default_factory=dict)
     approval: dict = field(default_factory=dict)
     specification: dict = field(default_factory=dict)
+    # The sicr_k each segment had before a specification gave it another one: its own in the input
+    # set, or its parent's for a new segment. R3 blocks when only the new value leaves a reported
+    # stage unexplained (A44).
+    replaced_sicr_k: dict = field(default_factory=dict)

@@ -26,7 +26,9 @@ Held by the engine and its tests:
 
 - Every input enters through R2. No later step reads a file.
 - Optional specification resolution is an R2 preflight before R1 so the resolved settings enter
-  run identity. R2 captures those same bytes and applies overrides to in-memory tables only.
+  run identity. R2 captures those same bytes and applies overrides to in-memory tables only. The
+  preflight reads the optional analysis file too, so the run ID covers what it says and R2 seals
+  the bytes read there.
 - Each segment has its own PD, LGD and prepayment model (6 November 2026, A42): a documented function
   in `src/stress/models/<portfolio>.py` that holds its coefficients. The parameter set and a run
   specification name a model only as `<portfolio>.<function>`, from that closed registry, and only a

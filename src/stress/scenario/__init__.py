@@ -94,7 +94,9 @@ def build_drivers(loaded: LoadedInputs, ctx: RunContext) -> Drivers:
                             a = terminal_weight(ps, scenario, year)
                             z = (a * z_last[(segment, role, country, scenario)]
                                  + (1 - a) * z_last[(segment, role, country, BASELINE)])
-                            source = Z_SOURCE_REVERSION if a > 0 else Z_SOURCE_FLAT
+                            # Flat at the scenario's own last Z under a flat policy (a = 1), and at
+                            # the baseline's once the reversion is over (a = 0); between, reverting.
+                            source = Z_SOURCE_REVERSION if 0 < a < 1 else Z_SOURCE_FLAT
                             z_rows.append((segment, role, country, scenario, year, z, source, a))
     z_table = pd.DataFrame(z_rows, columns=list(Z_SCORES.all_columns))
     contributions = pd.DataFrame(contrib_rows, columns=list(DRIVER_CONTRIBUTIONS.all_columns))

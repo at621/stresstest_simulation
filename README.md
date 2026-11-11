@@ -35,7 +35,9 @@ uv run python -m foundation.synth package --source <prepared-directory> --out in
 
 The example supplies illustrative assumptions, not forecasts or approved models. Dynamic growth
 scales existing facility prototypes; fresh origination vintages, sales, write-offs and cures are
-not implemented. Packaging preserves supplied datasets and records pending owner approval.
+not implemented. Packaging preserves supplied datasets and records pending owner approval. It
+refuses a parameter set in the form used before 6 November 2026, or one whose segments do not each
+name a matrix file of the prepared directory.
 
 ### Segment models and where they live
 
@@ -158,6 +160,15 @@ Calculation controls reject malformed booleans/dates, non-finite scenario values
 synthetic parameter domains. Facility ECL inputs must cover exactly the independent R5
 contractual schedule; a missing middle or final bucket blocks the run.
 
+A wrong setting stops the run with a block code. R2 checks the shape of the Scenarios and
+Parameters files: every section the engine reads must be there and hold the right kind of value,
+and neither `true` nor text is ever read as a number. R2 also blocks a manifest without control
+totals and compares each of them with the files. R3 blocks the run's variant when its `ccf` names a
+segment the run does not have, or when its `repayment_profile` names an unknown product or holds
+another word than bullet, annuity or linear. A variant's name holds only letters, digits, `_`,
+`.` and `-`. `--balance-sheet dynamic` is refused on the command line: a dynamic run needs the
+volume assumptions of a specification.
+
 Optional preparation analyses use the June 2026 EBA draft and explicit synthetic model inputs.
 The [runnable example](docs/examples/README.md) covers benchmark selection, recovery LGD,
 capital, separate climate, reporting mappings and reverse-loss diagnostics. Add
@@ -174,7 +185,8 @@ uv run stress compare --base runs/<a> --new runs/<b>
 ```
 
 `stress compare` keeps its report in `runs/comparisons/<a>__<b>/` (see the [runbook](docs/runbook.md)). Report, compare and rerun verify sealed input/output hashes before reading them. Rerun uses
-the saved `data/` files and checks source-content and runtime identity. CI runs the locked
+the saved `data/` files and checks source-content and runtime identity. For a run that blocked, it
+compares the step and code of the block as well as the outputs written before it. CI runs the locked
 environment, regression suite, import boundaries, lint and generated-spec drift check.
 
 Input sets must include `credit_status_date`, and their parameter set must name each segment's models and matrix file (`portfolios`). Runs and replays using older input sets block at R2; see the [runbook](docs/runbook.md) for input-set compatibility.
@@ -184,7 +196,7 @@ To run it from Jupyter and see each step's intermediate results, open [notebooks
 A run takes about 25 seconds and writes `runs/<run_id>/` (see [runs/README.md](runs/README.md)). Two files show what happened:
 
 - **`results/reports/stress_report.xlsx`**: the Excel report. Sheets: Summary (key results and charts), Portfolios (the book at end-2026), Results by portfolio (the run's scenarios side by side, with differences when there are two), Impairment, Stage migration, Coverage by stage, S3 cohorts, Parameters, Starting point, Checks and Notes. Amounts are in EUR millions. Engine results are written as values (blue) and every derived figure is an Excel formula (black). Coverage is the on-balance allowance over GCA, as in `impairment_by_stage.csv` and `stress compare`; off-balance provisions are shown as amounts (A45 in [docs/assumptions.md](docs/assumptions.md)).
-- **`run.log`**: every step's facts, checks and timings. The console shows the same lines while the run works; use `-q` for warnings only. Variants: `core` (bullet, fixed CCF), `annuity`, `linear` and `utilisation` (the AT-35 CCF sensitivity). Exit codes: 0 sealed, 2 blocked (the folder is sealed with status BLOCKED and the reason), 3 rerun not reproduced.
+- **`run.log`**: every step's facts, checks and timings. The console shows the same lines while the run works; use `-q` for warnings only. Variants: `core` (bullet, fixed CCF), `annuity`, `linear` and `utilisation` (the AT-35 CCF sensitivity). Exit codes: 0 sealed, or for `stress rerun` reproduced; 1 an engine fault (the folder is sealed with status BLOCKED and the code `INTERNAL_ERROR`, and the traceback is in `run.log`); 2 blocked (the folder is sealed with status BLOCKED and the reason, or there is no folder when the block came before the run was opened: an unknown input set, a refused argument or a specification that cannot be read); 3 rerun not reproduced.
 
 To rebuild the one-off material: `uv run python -m foundation.transcribe` (O1, `--check` to compare) and `uv run python -m foundation.synth` (O2–O4, writes a new `inputs/<hash>/` when anything changes, and that includes the machine: see A36 in [docs/assumptions.md](docs/assumptions.md)).
 

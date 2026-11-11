@@ -8,7 +8,7 @@ import pandas as pd
 
 from stress.capital import methodological_floor, output_floor
 from stress.contracts.checks import number, required
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 
 
 def capital_bridge(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame,
@@ -23,17 +23,17 @@ def capital_bridge(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame,
         for field in ("risk_weight", "standardised_risk_weight"):
             number(row[field], field, 0)
         if not row["model_version"]:
-            raise BlockingError("capital", "MISSING_INPUT", "empty risk weight model version")
+            raise BlockingError("capital", Block.MISSING_INPUT, "empty risk weight model version")
     weights = pd.DataFrame(spec["weights"])
     if weights.empty or weights.duplicated(keys).any():
-        raise BlockingError("capital", "DUPLICATE_KEY", "empty or duplicate regulatory model outputs")
+        raise BlockingError("capital", Block.DUPLICATE_KEY, "empty or duplicate regulatory model outputs")
     detail = slices.merge(portfolio[["facility_id", "regulatory_approach", "regulatory_class"]],
                           on="facility_id", validate="many_to_one")
     detail = detail.merge(weights, on=keys, how="left", validate="many_to_one", indicator=True)
     if not detail["_merge"].eq("both").all():
-        raise BlockingError("capital", "MISSING_INPUT", "regulatory weights do not cover every slice")
+        raise BlockingError("capital", Block.MISSING_INPUT, "regulatory weights do not cover every slice")
     if not detail.regulatory_approach.isin(["IRB", "STA"]).all():
-        raise BlockingError("capital", "INVALID_INPUT", "unsupported regulatory approach")
+        raise BlockingError("capital", Block.INVALID_INPUT, "unsupported regulatory approach")
     detail = detail.drop(columns="_merge")
     detail["regulatory_ead"] = detail.gca + detail.undrawn * detail.regulatory_ccf
     detail["raw_rea"] = detail.regulatory_ead * detail.risk_weight
@@ -51,7 +51,7 @@ def capital_bridge(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame,
         required(row, fields, "capital bridge")
         key = (row["scenario"], row["year"])
         if key in bridge:
-            raise BlockingError("capital", "DUPLICATE_KEY", "duplicate capital bridge period")
+            raise BlockingError("capital", Block.DUPLICATE_KEY, "duplicate capital bridge period")
         for field in fields[2:]:
             number(row[field], field)
         for field in ("tax_rate", "output_floor_factor"):
@@ -60,7 +60,7 @@ def capital_bridge(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame,
             number(row[field], field, 0)
         bridge[key] = row
     if set(bridge) != set(losses.index):
-        raise BlockingError("capital", "MISSING_INPUT", "bridge periods must match all charge periods")
+        raise BlockingError("capital", Block.MISSING_INPUT, "bridge periods must match all charge periods")
     out = []
     for scenario in sorted(detail.scenario.unique()):
         start = int(detail.loc[detail.scenario.eq(scenario), "year"].min())
@@ -72,17 +72,17 @@ def capital_bridge(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame,
                 required(row, ("opening_cet1",), "first capital period")
                 previous = number(row["opening_cet1"], "opening_cet1", 0)
             elif "opening_cet1" in row and not np.isclose(row["opening_cet1"], previous, rtol=1e-10, atol=.01):
-                raise BlockingError("capital", "RECONCILIATION", "opening CET1 differs from preceding close")
+                raise BlockingError("capital", Block.RECONCILIATION, "opening CET1 differs from preceding close")
             opening = previous
             raw = grouped.loc[(scenario, year)].to_dict()
             if set(raw) != set(starting):
-                raise BlockingError("capital", "MISSING_INPUT", "regulatory approaches changed")
+                raise BlockingError("capital", Block.MISSING_INPUT, "regulatory approaches changed")
             credit = methodological_floor(starting, raw)["credit_contribution"]
             ut = credit + row["other_utrea"]
             st = float(sta.loc[(scenario, year)]) + row["other_strea"]
             total = output_floor(ut, st, row["output_floor_factor"])["result"]
             if total <= 0:
-                raise BlockingError("capital", "INVALID_INPUT", "total REA must be positive")
+                raise BlockingError("capital", Block.INVALID_INPUT, "total REA must be positive")
             charge = float(losses.loc[(scenario, year)])
             # Symmetric tax is an explicit synthetic convention; no automatic DTA recognition model.
             profit = (row["other_pnl"] - charge) * (1 - row["tax_rate"])

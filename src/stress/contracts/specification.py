@@ -5,17 +5,29 @@ OPS-01, SCN-01, MOD-01. Unknown fields fail closed rather than silently doing no
 
 from math import isfinite
 
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 
-TOP_FIELDS = {"schema_version", "status", "source", "version", "input_set_hash", "run",
-              "scenarios", "segments", "assignments", "reporting", "balance_sheet",
-              "terminal_policies", "additional_values"}
+ENVELOPE_FIELDS = {"schema_version", "status", "source", "version", "input_set_hash", "run"}
+# What a specification can change beyond the settings of its ``run`` section, which the command
+# line can give as well: scenarios, values, segments, assignments, reporting classes, terminal
+# policies and volumes.
+CHANGE_FIELDS = {"scenarios", "segments", "assignments", "reporting", "balance_sheet",
+                 "terminal_policies", "additional_values"}
+TOP_FIELDS = ENVELOPE_FIELDS | CHANGE_FIELDS
 RUN_FIELDS = {"inputs", "scenarios", "variant", "mode", "terminal_treatment", "analysis",
               "s2_treatment", "horizon_runoff", "lgd_path", "balance_sheet"}
+STEP = "R2"  # a specification is read by the R2 preflight and applied by R2
 
 
 def invalid(message: str):
-    raise BlockingError("R2", "INVALID_SPECIFICATION", message)
+    """Block on specification data. The step is R2's; ``cli.step`` gives a block that a later step
+    raises on specification data that step's own name."""
+    raise BlockingError(STEP, Block.INVALID_SPECIFICATION, message)
+
+
+def changes_the_run(document: dict) -> bool:
+    """Whether a specification holds more than run settings: such a run is named for it (R1)."""
+    return any(document.get(name) for name in CHANGE_FIELDS)
 
 
 def mapping(value, allowed: set[str], where: str, required=()) -> dict:

@@ -40,6 +40,9 @@ Start from `docs/examples/configurable-projection.yaml`: it combines a third nam
 a nonlinear consumer model, a separate terminal policy and annual dynamic volume assumptions.
 Run it with `uv run stress run --specification docs/examples/configurable-projection.yaml`.
 Place calculation settings in the YAML; only `--quiet` and `--runs-dir` may accompany it.
+`--balance-sheet dynamic` without a specification is refused at once, because a dynamic run
+needs the specification's volume assumptions. A run whose specification holds more than `run`
+settings carries `+spec` in its run ID, for example `-core+spec-`.
 
 The file is bound to the immutable base input hash. Its exact bytes and resolved inputs are
 sealed with the run. `stress rerun --run runs/<run_id>` reads the sealed copy even after the
@@ -52,7 +55,9 @@ New portfolios use the same four tables, two documents and one matrix file per s
 existing ones, and each needs its models in `src/stress/models/` first (see "Segment models" below).
 Prepare them, then run `uv run python -m foundation.synth package --source <prepared-directory> --out inputs`.
 Supply a reporting class for each new segment. The package command does not generate or
-recalibrate loans and does not grant approval. Model calibration, official inputs and final
+recalibrate loans and does not grant approval. It refuses, with exit code 2 and one line saying
+why, a parameter set in the form used before 6 November 2026 and one whose segments do not each
+name a matrix file of the prepared directory. Model calibration, official inputs and final
 regulatory acceptance remain separate dependencies.
 
 ### Segment models
@@ -84,10 +89,10 @@ uv run stress run --inputs inputs/5a296ffe0e198705 --scenarios baseline,adverse 
 
 Runs need input set `57bf340df85d5a54` or later. Since 6 November 2026 the parameter set names each segment's models and matrix file (A42), and since 18 October 2026 the input contract carries `credit_status_date`. The engine blocks at R2 on older sets, and `stress rerun` of a run made on them blocks for the same reason. `57bf340df85d5a54` holds the data of `d62d0386f2c5256e` unchanged, and a run on it gives the same results.
 
-1. The command prints the run ID, the status and two headline lines. Exit code 0 means the run is sealed SYNTHETIC. Exit code 2 means it blocked: the folder is still sealed, with status BLOCKED, and the step, reason code and message are in `manifest.json` under `blocked`.
+1. The command prints the run ID, the status and two headline lines. Exit code 0 means the run is sealed SYNTHETIC. Exit code 1 means an engine fault: the folder is sealed with status BLOCKED and the code `INTERNAL_ERROR`, and the traceback is in `run.log`. Exit code 2 means it blocked: the folder is still sealed, with status BLOCKED, and the step, reason code and message are in `manifest.json` under `blocked`. A block before R1 has opened the run leaves no folder and also exits with 2: an unknown input set, a refused argument such as a variant name with a path separator, or a specification that cannot be read.
 2. Open `runs/<run_id>/results/reports/stress_report.xlsx` for the results by portfolio, the run's scenarios side by side. Read `runs/<run_id>/run.log` for what each step did and how long it took. `summary.md` (or `uv run stress report --run runs/<run_id>`) gives the headline in text and lists every report the run wrote. It is written last, so a run that blocks in the report step has none.
 3. Check `rejections.parquet`: it is empty for the committed input set. Any row is a rejected record with its reason code.
-4. Run `uv run stress rerun --run runs/<run_id>` on the machine that made the run (C18). It must report "reproduced". Exit code 3 lists the outputs whose hash differs.
+4. Run `uv run stress rerun --run runs/<run_id>` on the machine that made the run (C18). It must report "reproduced". Exit code 3 lists the outputs whose hash differs. A rerun of a run that blocked compares the step and code of the block as well: it reports "reproduced: blocked again at …" with exit code 0 when both are the same, and exit code 3 when the rerun stops elsewhere or does not stop.
 
 ### After changing the requirements or the parameter set
 
@@ -113,7 +118,9 @@ A scenario that every run should be able to choose goes in `foundation/scenarios
 Use [the example commands](examples/README.md) to generate a synthetic analysis sidecar and
 pass it with `--analysis`. R2 validates its schema/status/input-set binding and seals its exact
 bytes. Omitted sections are reported as NOT_PROVIDED; explicitly supplied incomplete sections
-block. `analysis_readiness.csv` records input approval, draft status, model status and remaining
+block. So does a supplied section about a scenario the run does not hold: `plausibility` and
+`climate` need `adverse`, and R2 blocks with `UNKNOWN_SCENARIO` when it is not in `--scenarios`.
+`analysis_readiness.csv` records input approval, draft status, model status and remaining
 bank/owner gates. An approval record is evidence, not a digital signature or a newly granted approval.
 
 `--terminal-treatment z` is the default. `--terminal-treatment parameters` instead linearly

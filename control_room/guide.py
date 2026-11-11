@@ -92,13 +92,11 @@ AFTER_YOU_ADD = (
 )
 
 WARNINGS = {  # what no check catches
-    FACILITIES.name: f"Fill in portfolio on every row, and regulatory_approach as {_words(APPROACHES, 'or')}. Nothing "
-                     "checks either: the run seals with no record left out, and reported figures come out wrong.",
+    FACILITIES.name: f"Fill in regulatory_approach as {_words(APPROACHES, 'or')} on every row. Nothing checks "
+                     "it: the run seals with no record left out, and reported figures come out wrong.",
     SCENARIOS.name: "value is read in its own unit: 1.5% is 1.5 with unit percent, or 0.015 with unit decimal. "
                     "Nothing checks this: a value in the wrong scale can run and give wrong results, or stop "
                     "the run partway.",
-    PARAMETER_SET.name: f"repayment_profile in variants takes {_words(REPAYMENT_PROFILES, 'or')}. Nothing checks "
-                        "this: any other word runs as linear and changes the results.",
 }
 
 MEANINGS = {
@@ -243,6 +241,7 @@ RECORD_RULES = {
         ("credit_status_date is filled in and not after the snapshot date.", (Reason.INVALID_CREDIT_STATUS_DATE,)),
         ("poci is false: purchased or originated credit-impaired loans are not covered.", (Reason.POCI_NOT_IN_V1,)),
         ("The borrower is not a central bank.", (Reason.CENTRAL_BANK_NOT_IN_V1,)),
+        ("portfolio is filled in.", (Reason.MISSING_PORTFOLIO,)),
         ("segment has both rating transitions and parameters.", (Reason.UNKNOWN_SEGMENT,)),
         ("The borrower's country has values in the Scenarios file.", (Reason.UNMAPPED_COUNTRY,)),
         ("product is one of the listed values.", (Reason.UNKNOWN_PRODUCT,)),
@@ -267,6 +266,8 @@ RECORD_RULES = {
         ("principal, accrued_interest, gca and contractual_limit are not negative.", (Reason.NEGATIVE_AMOUNT,)),
         ("principal plus the undrawn amount in the Commitments file does not exceed contractual_limit.",
          (Reason.LIMIT_BREACH,)),
+        (("If a setup changes a segment's sicr_k, the new value still gives back the reported stage of every "
+          "Stage 1 or 2 loan that the saved value explains."), (Reason.SICR_OVERRIDE_CONFLICT,)),
     ),
     OBLIGORS.name: (
         ("Each obligor_id appears once. All copies of a repeated one are left out, with their loans.",
@@ -309,7 +310,8 @@ FILE_RULES = {
          (Block.INVALID_MATRIX,)),
         ("All segments use the same grades, and they match the master scale in the Parameters file.",
          (Block.INVALID_MATRIX,)),
-        (f"from_rank runs 1, 2, 3 and so on, with {DEFAULT_GRADE} last.", (Block.INVALID_MATRIX,)),
+        ((f"from_rank runs 1, 2, 3 and so on, with {DEFAULT_GRADE} last, and to_rank is the position of "
+          "to_grade."), (Block.INVALID_MATRIX,)),
         ("The probabilities from each grade add up to 1, and none is negative.", (Block.INVALID_MATRIX,)),
         (f"{DEFAULT_GRADE} stays in {DEFAULT_GRADE} with probability 1.", (Block.INVALID_MATRIX,)),
         ("The one-year probability of default rises with every grade.", (Block.INVALID_MATRIX,)),
@@ -323,6 +325,8 @@ FILE_RULES = {
          (Block.SCENARIO_PROVENANCE,)),
         (f"Each value has a unit, which is {_words(SCENARIO_UNITS, 'or')}.", (Block.SCENARIO_WITHOUT_UNIT,)),
         (f"value_type is {_words(SCENARIO_VALUE_TYPES, 'or')}.", (Block.BAD_VALUE_TYPE,)),
+        (("Each value is a number or blank and each year is a whole number, written 2027 and not as text "
+          "or 2027.0: true, false or text is not a number."), (Block.BAD_VALUE_TYPE,)),
         ("No scenario, variable, country and year appears twice.", (Block.DUPLICATE_KEY,)),
         (("Each variable a segment's models read has a value for every country in the file, every projection year "
          "and every scenario in the run."), (Block.MISSING_SCENARIO_VALUE,)),
@@ -341,6 +345,13 @@ FILE_RULES = {
         ((f"In sicr_triggers, dpd_days is above 0, hold is {HOLD_UNTIL_DEFAULT}, and each trigger switched on "
          "has a definition."), (Block.MISSING_PARAMETER,)),
         ("variants has core, the variant the page runs by default.", (Block.UNKNOWN_VARIANT,)),
+        ((f"In the variant a run uses, repayment_profile names only products or default, each as "
+          f"{_words(REPAYMENT_PROFILES, 'or')}, and ccf names only segments of this file."),
+         (Block.UNKNOWN_VARIANT,)),
+        (("horizon, master_scale, terminal_rule, tolerances and the variant a run uses hold the settings "
+          "listed for them, each of the right kind: a number is not written as text, a year is a whole "
+          "number, and reversion_years is a whole number of 1 or more."),
+         (Block.MISSING_PARAMETER, Block.BAD_VALUE_TYPE)),
     ),
 }
 
@@ -353,7 +364,8 @@ GENERAL_BLOCKS = (Block.UNREADABLE_FILE, Block.UNKNOWN_COLUMN, Block.MISSING_COL
 LATE_RULES = {
     FACILITIES.name: (
         ((f"A secured loan has an ltv and a collateral_type of {_words(COLLATERAL_INDEX, 'or')}. An unsecured "
-         "loan has both blank, with not_applicable in ltv__status, which is filled in on every row."), ()),
+         "loan has both blank, with not_applicable in ltv__status, which is filled in on every row."),
+         (Block.MISSING_INPUT,)),
         ("residual_maturity reaches no further than last_bucket_year in the Parameters file.",
          (Block.MISSING_TERMINAL_INPUT,)),
     ),
@@ -368,7 +380,7 @@ LATE_RULES = {
          (Block.INVALID_PIT_MATRIX,)),
     ),
     PARAMETER_SET.name: (
-        ("A segment you add has a template_class.", ()),
+        ("A segment you add has a template_class.", (Block.MISSING_INPUT,)),
         ("The core variant gives a repayment profile for every product, or a default.", (Block.UNKNOWN_VARIANT,)),
     ),
 }
