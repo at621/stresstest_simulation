@@ -30,7 +30,7 @@ A green test should prove the engine, not a helper. R7 and R8 use their own vect
 | AT-21 | Pipeline | Core | `charges` and the starting-point report. |
 | AT-22 | Pipeline | Core | The starting-point report accepts the whole allocation, stage by stage. |
 | AT-25 | Pipeline | Reference, core | A chain of matrix rows gives the case's curve in `pd_curves`. The PD-03 identities hold on every curve of the real book. |
-| AT-28 | Kernel-only | None | R8 takes a part year pro rata, `d × m`, by owner decision (A7, C10), so no run output carries this constant-hazard PD. A run would differ from the oracle by design. PD-06's text is the owner's to change (C10). |
+| AT-28 | Kernel-only | None | R8 takes a part year pro rata, `d × m`, by owner decision (A7, C10), so no run output carries this constant-hazard PD, and nothing in a run calls `stub_pd`: the R3 SICR line and O4 each compute the same constant hazard in their own code. A run would differ from the oracle by design. PD-06's text is the owner's to change (C10). |
 | AT-29 | Pipeline | Reference | `stage_flows` and the new S3 cohorts carry the defaults by origin stage. |
 | AT-33 | Step | RPT-06 report | `default_weighted_lgd`, which every run calls, keeps a zero-EAD book as not applicable with zero loss. The real book has no such facility, so the case calls the step on hand-built frames. |
 | AT-34 | Pipeline | Reference | R6's EAD split and R8's `allowance_on` and `provision_off`. |
@@ -48,7 +48,7 @@ A green test should prove the engine, not a helper. R7 and R8 use their own vect
 | AT-47 | Pipeline | Core | Within one grade in `pit_matrices`, the lower a year's Z, the higher its PD. |
 | AT-48 | Pipeline | Core | The SICR rule on every sampled slice. The expected stages are OPEN, so the case proves the rule. |
 | AT-49 | Pipeline | Core, reference | `lgd_of_year` follows LGD-12 and rises as Z falls. The AT-06 facility has w > 0 and Z = 0, and keeps its TTC LGD. The 0 and 1 boundaries are kernel only: no facility has them. |
-| AT-50 | Pipeline | Core, mini | Prepayment in EAD only, with and without it. |
+| AT-50 | Pipeline | Core, mini | Prepayment in EAD only, with and without it. R6 builds the share not yet prepaid in its own code, so the run's share is held to the `not_prepaid_share` kernel for every facility, scenario and valuation date. |
 | AT-51 | Pipeline | Mini | `cf_schedule` under each profile's variant. The values are OPEN, so the case proves the profile rules. |
 | AT-52 | Pipeline | Core, mini | The Z path and its reversion in `drivers`. A missing coefficient blocks. |
 

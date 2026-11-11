@@ -28,7 +28,11 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     args = parser.parse_args(argv or ["build"])
     if args.command == "package":
-        print(f"input set {package(args.source, args.out).as_posix()}")
+        try:
+            print(f"input set {package(args.source, args.out).as_posix()}")
+        except ValueError as exc:  # a source folder that cannot be frozen into a set the engine runs
+            print(f"not packaged: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.command == "approve":
         approve(args.folder, args.approver, date.today().isoformat())

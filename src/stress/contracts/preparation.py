@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 from stress.contracts.status import USABLE_STATUSES, ValueStatus
 from stress.contracts.tables import TableSpec
 
@@ -20,7 +20,7 @@ def usable_ltv(facilities: pd.DataFrame, step: str) -> pd.Series:
     absent = (facilities["ltv"].isna() & facilities["collateral_type"].isna()
               & facilities["ltv_status"].eq(ValueStatus.NOT_APPLICABLE))
     if not (usable | absent).all():
-        raise BlockingError(step, "MISSING_INPUT", "a facility in the book has no usable LTV")
+        raise BlockingError(step, Block.MISSING_INPUT, "a facility in the book has no usable LTV")
     return usable
 
 

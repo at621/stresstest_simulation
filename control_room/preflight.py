@@ -4,14 +4,17 @@
   with each segment's models (read from stress.models, docstring and all) and settings, and its variants.
   Every value is read from the set's own files and the engine's model registry.
 - ``dry_run``: the engine's own verdict on a setup. It calls R1 to R4 as ``cli.pipeline`` does, in a
-  temporary folder, and stops before R5. Nothing is calculated, and nothing reaches runs/.
+  temporary folder, and stops before R5. Nothing is calculated, and nothing reaches runs/. Its answer
+  holds only what the page shows.
 - ``differences``: the base input set against docs/spec/, the one check the engine does not make. The tests use it; the page does not.
 - ``specification_document`` and ``parse_yaml``: the page's setup as the YAML the engine reads, and back.
+- ``load_yaml``: a YAML text from outside, refused before it is built if its aliases expand too far.
 """
 
 import json
 import logging
 import re
+import sys
 import tempfile
 import threading
 import traceback
@@ -25,7 +28,7 @@ import pyarrow.parquet as pq
 import yaml
 
 from stress import ingest, lineage, scenario, validate
-from stress.contracts.errors import RUN_BLOCKING_REASONS, BlockingError, Reason
+from stress.contracts.errors import Block, BlockingError, Reason
 from stress.contracts.inputs import (
     APPROVAL_FILE,
     DATASETS,
@@ -50,8 +53,6 @@ from stress.projection.dynamic import validate_assumptions
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
 SPEC_DIR = ROOT / "docs" / "spec"
 MILLION = 1_000_000.0
-SPECIFICATION_PHASE = "specification"
-PHASES = (SPECIFICATION_PHASE, "R1", "R2", "R3", "R4")
 # A segment's own settings, under the parameter set's names; its models hold their coefficients.
 SEGMENT_FIELDS = ("asset_correlation", "sicr_k", "cpr_ttc", "ccf")
 # What only a specification can carry. A setup with any of these runs from a file, not from flags.
@@ -72,7 +73,9 @@ FILE_GUIDE = {  # what each kind of file is called on the page, and what it hold
     "parameter_set": ("Parameters", "Horizon, master scale, segment parameters and run variants"),
 }
 
-_engine = threading.Lock()  # the stress logger is shared, so one dry run at a time
+YAML_VALUES = 100_000  # what a YAML from outside may expand to, whatever its length; see load_yaml
+
+_engine = threading.Lock()  # one dry run at a time: each loads a whole book, and they share the stress logger
 
 
 def plain(value):
@@ -82,6 +85,51 @@ def plain(value):
     if value is None or value is pd.NA or (isinstance(value, float) and not np.isfinite(value)):
         return None
     return value
+
+
+class TooLarge(yaml.YAMLError):
+    """A YAML text that stands for more values than this room reads."""
+
+
+def _expands_beyond(node: yaml.Node, limit: int) -> bool:
+    """Whether a composed YAML document holds more than `limit` values once every alias is written
+    out, as a JSON answer or a merge key writes it. The count stops at the limit, so a document that
+    expands without end, or refers to itself, costs no more than one that just fails."""
+    count, stack = 1, [node]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, yaml.MappingNode):
+            children = [child for pair in node.value for child in pair]
+        elif isinstance(node, yaml.SequenceNode):
+            children = node.value
+        else:
+            continue
+        count += len(children)
+        if count > limit:
+            return True
+        stack.extend(children)
+    return False
+
+
+def load_yaml(text: str, loader: type[yaml.SafeLoader] = yaml.SafeLoader):
+    """A YAML text from outside, as ``yaml.load`` reads it, refused before it is built if it expands
+    too far. An alias costs a few bytes and stands for everything under its anchor, so ten levels of
+    ten aliases are ten thousand million values from a few hundred bytes, in the answer to the page
+    or, through a merge key, in the parser itself. Aliases are still read: a dump can hold one. A
+    text without aliases holds fewer values than it has characters, so none is refused for its length."""
+    limit = max(YAML_VALUES, len(text))
+    reader = loader(text)
+    try:
+        node = reader.get_single_node()
+        if node is None:
+            return None
+        if _expands_beyond(node, limit):
+            raise TooLarge(f"its aliases expand to more than {limit:,} values")
+        return reader.construct_document(node)
+    except RecursionError as exc:
+        raise TooLarge("it is nested too deeply") from exc
+    finally:
+        reader.dispose()
 
 
 @lru_cache(maxsize=32)
@@ -286,7 +334,9 @@ def inspected(spec: DatasetSpec, path: Path) -> dict:
             view["problem"] = f"Columns the engine does not know: {listed(unknown)}."
         return view
     try:
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        doc = load_yaml(path.read_text(encoding="utf-8"))
+    except TooLarge as exc:
+        return {**view, "problem": f"This YAML file is not read: {exc}."}
     except (OSError, ValueError, yaml.YAMLError):
         return {**view, "problem": "This is not a readable YAML file."}
     keys = SCENARIO_TOP_KEYS if spec.name == "scenarios" else PARAMETER_SET_TOP_KEYS
@@ -305,8 +355,7 @@ def prepared_status(folder: Path) -> dict:
         if row["present"]:
             row.update(inspected(spec, path))
         rows.append(row)
-    return {"folder": folder.as_posix(), "files": rows,
-            "complete": all(r["present"] and not r["problem"] for r in rows)}
+    return {"files": rows, "complete": all(r["present"] and not r["problem"] for r in rows)}
 
 
 def approval_of(folder: Path) -> dict | None:
@@ -401,27 +450,15 @@ def preview(folder: Path, name: str, offset: int = 0, query: str = "") -> dict |
 
 # --- the engine's own verdict -----------------------------------------------------------------------
 
-class _Captured(logging.Handler):
-    """What the engine says about itself while it checks."""
-
-    def __init__(self):
-        super().__init__(logging.INFO)
-        self.lines = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.lines.append({"step": record.name.removeprefix("stress."), "level": record.levelname,
-                           "text": record.getMessage()})
-
-
 def _rejections(rejections: pd.DataFrame) -> list[dict]:
-    """Each rule R3 applied to a record here, with what it rejected."""
+    """What R3 rejected here, one line per reason and detail, each with its own count and its own
+    sample of records. One reason covers several rules, each with its own detail."""
     rows = []
     for reason in Reason:
         hits = rejections[rejections["reason_code"] == str(reason)]
-        if len(hits):
-            rows.append({"code": str(reason), "blocks_run": reason in RUN_BLOCKING_REASONS, "records": len(hits),
-                         "details": sorted(set(hits["detail"]))[:4],
-                         "sample": [str(i) for i in hits["record_id"].head(SAMPLE)]})
+        for detail, part in hits.groupby("detail", sort=True, dropna=False):
+            rows.append({"code": str(reason), "detail": detail if isinstance(detail, str) else None,
+                         "records": len(part), "sample": [str(i) for i in part["record_id"].head(SAMPLE)]})
     return rows
 
 
@@ -436,60 +473,42 @@ def _z_view(loaded, drivers) -> list[dict]:
             for r in grouped.itertuples(index=False)]
 
 
-def _effective_book(routed) -> list[dict]:
-    """The accepted book by portfolio, as the run would see it after a specification is applied."""
-    rows = []
-    for portfolio, part in routed.portfolio.groupby("portfolio"):
-        rows.append({"id": portfolio, "segments": sorted(part["segment"].unique()), "facilities": len(part),
-                     "gca": float(part["gca"].sum()) / MILLION})
-    return rows
-
-
 def dry_run(config: RunConfig) -> dict:
-    """R1 to R4 of the run a setup describes. The order is ``cli.pipeline``'s, up to R5."""
-    captured = _Captured()
+    """R1 to R4 of the run a setup describes. The order is ``cli.pipeline``'s, up to R5. The answer
+    holds what the page shows and no more: the engine's log lines and a fault's traceback name
+    folders of this machine, so they stay here."""
     logger = logging.getLogger("stress")
-    specification = bool(config.specification)
-    reached = SPECIFICATION_PHASE if specification else "R1"
-    blocked = ctx = loaded = routed = drivers = None
-    fault = None
+    quiet = logging.NullHandler()  # the engine's lines have no reader here, and must not reach the console
+    blocked = fault = loaded = routed = drivers = None
     with _engine, tempfile.TemporaryDirectory(prefix="stress-preflight-") as folder:
-        before = logger.level
-        logger.addHandler(captured)
-        logger.setLevel(logging.INFO)
+        logger.addHandler(quiet)
         try:
             config = ingest.specification.resolve(config)
-            reached = "R1"
             ctx = lineage.open_run(config, Path(folder))
-            reached = "R2"
             loaded = ingest.load_inputs(ctx)
-            reached = "R3"
             routed = validate.validate_and_route(loaded, ctx)
             validate.raise_if_blocking(routed.rejections)
             years = [int(y) for y in loaded.parameter_set["horizon"]["projection_years"]]
             validate_assumptions(loaded.specification, ctx.config.balance_sheet, routed.portfolio,
                                  ctx.scenarios, years)
-            reached = "R4"
             drivers = scenario.build_drivers(loaded, ctx)
         except BlockingError as exc:
             blocked = exc
         except Exception as exc:  # noqa: BLE001 - a fault in a check must read as a fault, not as a pass
-            fault = {"message": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()}
+            fault = {"message": f"{type(exc).__name__}: {exc}"}
+            traceback.print_exc(file=sys.stderr)  # for whoever runs the server; the page gets the one line
         finally:
-            logger.removeHandler(captured)
-            logger.setLevel(before)
+            logger.removeHandler(quiet)
     rejections = routed.rejections if routed is not None else None
     verdict = "blocked" if blocked or fault else "rejected" if len(rejections) else "ready"
     return {
-        "verdict": verdict, "reached": reached, "phases": list(PHASES[0 if specification else 1:]),
+        "verdict": verdict,
         "blocked": blocked and {"step": blocked.step, "code": str(blocked.code), "message": blocked.message},
-        "fault": fault, "log": captured.lines,
+        "fault": fault,
         "rejected": None if rejections is None else len(rejections),
         "records": [] if rejections is None else _rejections(rejections),
         "accepted": None if routed is None else len(routed.portfolio),
-        "book": None if routed is None else _effective_book(routed),
         "z": None if drivers is None else _z_view(loaded, drivers),
-        "scenarios": None if loaded is None else [s["id"] for s in loaded.scenario_meta["scenarios"]],
     }
 
 
@@ -731,9 +750,11 @@ def parse_yaml(text: str, base: Path | None) -> dict:
     """A specification's text as the page's setup. The engine's own loader reads it, so a duplicate key
     or an unknown field is refused here as it would be at R2. Paths become repository-relative."""
     try:
-        doc = yaml.load(text, Loader=SpecificationLoader)
+        doc = load_yaml(text, SpecificationLoader)
+    except TooLarge as exc:
+        raise BlockingError("R2", Block.INVALID_SPECIFICATION, f"the YAML is not read: {exc}") from exc
     except yaml.YAMLError as exc:
-        raise BlockingError("R2", "INVALID_SPECIFICATION", f"not valid YAML: {exc}") from exc
+        raise BlockingError("R2", Block.INVALID_SPECIFICATION, f"not valid YAML: {exc}") from exc
     validate_document(doc)
     run = doc["run"]
     for field in ("inputs", "analysis"):

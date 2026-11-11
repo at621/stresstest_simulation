@@ -15,6 +15,15 @@
 #                path and a text that must be in that file, so a stale link fails the generator.
 #   tests        as code, for a test: path under tests/ and test name. Must exist.
 #   acceptance   as code, for an acceptance case. Must have a test.
+#
+# A requirement that code names only inside a range ("PD-01–PD-07") or in a module docstring needs
+# an entry here, written after reading the requirement against the code: the generator fails
+# without one. Say what the code does, which parts are not met, and which test proves it, if any.
+#
+# On an unmet entry, a test or acceptance case listed under `tests` or `acceptance` is not
+# evidence. It records that the link was read and the note says why it proves too little, so the
+# generator stops printing its "review:" hint for that link. A link that appears later brings the
+# hint back.
 
 requirements:
 
@@ -27,6 +36,17 @@ requirements:
       Its required evidence is a scope bridge, and none exists. The input contract keeps the
       accounting category and the regulatory approach as separate fields, but no report bridges
       the two perimeters, and the starting-point report holds no regulatory exposure.
+
+  REG-04:
+    reason: >-
+      Named in code only in R7's module docstring, so linked by hand after reading the code. R7
+      writes every stage flow, and keeps the end-2026 S3 stock apart from one new cohort per entry
+      year and origin stage. R10 blocks unless the flows add up to each closing stage, and writes
+      the cohorts to `s3_cohorts.csv`.
+    note: >-
+      AT-02 reconciles the closing stages to the flows on the full book, and AT-29 follows each
+      origin stage's defaults into its cohort. No test reads `s3_cohorts.csv`.
+    acceptance: [AT-02, AT-29]
 
   REG-06:
     reason: >-
@@ -220,10 +240,42 @@ requirements:
 
   # --- Exposure and stage migration -------------------------------------------------------------------
 
+  EXP-03:
+    reason: >-
+      Named in code only inside a range in R7's module docstring. Met by construction, and no test
+      asserts it: a slice carries its facility ID and no label, so product, country, portfolio and
+      regulatory class are read from the facility's opening record in every year, and no
+      migration, replacement or supplied risk weight changes them.
+    note: >-
+      Which labels the exercise requires is open until the template mappings are approved
+      (architecture §6 item 8).
+
+  MIG-04:
+    reason: >-
+      Named in code only inside a range in R7's module docstring, so linked by hand after reading
+      the code. Defaults have one source: R7 takes each year's new S3 from the D column of that
+      year's PiT matrix, and R6 builds the PD curves from products of the same matrices (PD-11),
+      so no second PD model adds default volume.
+    note: >-
+      AT-29 proves on a reference run that each origin stage's default flow is its opening GCA
+      times its PD. A unit test compares the two on the full book: for every scenario, year,
+      segment and origin stage, the flow into Stage 3 equals the opening performing slices times
+      the first-bucket default probability of their PD curves.
+    acceptance: [AT-29]
+
   MIG-05:
     reason: >-
       The owner decided to use the three triggers, held until default. The five settings in A30
       were proposed by Claude Code and are not owner-approved.
+
+  MIG-06:
+    reason: >-
+      Named in code only inside a range in R7's module docstring. Met by construction, and no test
+      names it: R7 spreads each facility's GCA over its grades by the year's PiT matrix, so slices
+      hold expected, fractional amounts, and the engine has no stochastic simulation.
+    note: >-
+      The Static balance control proves that a facility's slices still add up to its opening
+      amount in every year.
 
   MIG-07:
     reason: >-
@@ -275,6 +327,19 @@ requirements:
     decided_in: [C3]
 
   # --- PD ---------------------------------------------------------------------------------------------
+
+  PD-01:
+    reason: >-
+      Named in code only as the start of a range in R6's module docstring. Met in part, and no test
+      names it. The input contract supplies the obligor ID, segment, IFRS stage, current and
+      origination grade, residual maturity, and the obligor's country and sector, and the
+      scenarios file supplies the driver values. It has no opening 12-month PiT PD, no observation
+      date for the grade and no model default-event definition: the engine reads each PD from the
+      grade's row of the segment's matrix (PD-09 to PD-11).
+    note: >-
+      A difference between regulatory default and S3 is not recorded: R3 rejects a facility where
+      the two disagree. The generator gives the facilities of one obligor one grade (A23), and R3
+      does not check that.
 
   PD-02:
     reason: >-
@@ -339,6 +404,18 @@ requirements:
       recovery periods or higher costs as sensitivities.
     decided_in: [A12, architecture §6 item 2]
 
+  LGD-08:
+    reason: >-
+      Named in code only in two module docstrings, so linked by hand after reading the code. R3
+      rejects a facility whose TTC LGD is missing or outside 0% to 100%. The linked control test
+      proves both rejections, and that every final LGD of a run stays in the range. LGD-12 stays
+      in the range without a cap, so raw and final values are equal and no cap is recorded (C3).
+    note: >-
+      R6 also blocks a final LGD outside the range, and no test reaches that block. The sentence on
+      missing collateral or recovery data does not apply yet: LGD-12 uses neither (A12).
+    tests: [controls/test_input_controls.py::test_lgd_rule]
+    decided_in: [C3, A12]
+
   LGD-10:
     reason: >-
       Named in code only inside a range. Every synthetic segment uses LGD-12, as the last sentence
@@ -381,6 +458,7 @@ requirements:
       AT-38 proves a helper nothing calls. The optional capital analysis calculates regulatory EAD
       inline from supplied CCFs, and no run retains the bridge from accounting exposure through
       adjustments, netting, CCF and CRM. The design's deferral list does not name this requirement.
+    acceptance: [AT-38]
 
   # --- ECL --------------------------------------------------------------------------------------------
 
@@ -568,6 +646,17 @@ requirements:
       - architecture §6 item 7
 
   # --- Operations -------------------------------------------------------------------------------------
+
+  OPS-01:
+    reason: >-
+      The manifest names the input set and each of its files by hash, the scenarios, the parameter
+      set by id, version and status, the code and requirements versions, and the approval record
+      with approver and date. `unit/test_run_identity.py` reads each of them against the input set.
+      The parameter set's id and version do not identify it: four different parameter sets in
+      `inputs/` carry `SYN-PS-0.1-proposed`, version 0.1, and only the hash of the run's own copy
+      tells them apart.
+    note: >-
+      No reporting version is recorded apart from the code version.
 
   OPS-02:
     status: process

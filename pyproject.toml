@@ -1,7 +1,7 @@
 [project]
 name = "stress-engine"
 version = "0.1.0"
-description = "Credit stress-test engine for EBA 2027 preparation (EUR only, amortised cost, no climate)"
+description = "Credit stress-test engine for EBA 2027 preparation (EUR only, amortised cost; climate only as an optional analysis of supplied inputs)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

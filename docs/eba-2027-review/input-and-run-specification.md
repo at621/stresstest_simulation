@@ -23,13 +23,24 @@ With `--specification`, calculation flags must be placed in `run`, not on the co
 `--runs-dir` (default `runs`) and `--quiet` are execution options and may accompany either
 form. Relative `run.inputs` and `run.analysis` paths are relative to the specification file.
 The Python API can supply omitted settings through `RunConfig`; supplied YAML settings take
-precedence. The CLI disallows this ambiguity.
+precedence. The CLI disallows this ambiguity. `--balance-sheet dynamic` is refused on the
+command line, because a dynamic run needs the volume assumptions of a specification.
+
+Exit codes: 0 sealed, or for `stress rerun` reproduced; 1 an engine fault, sealed as BLOCKED with
+`INTERNAL_ERROR`; 2 blocked, sealed as BLOCKED, or with no folder when the block came before R1
+opened the run; 3 a rerun that did not reproduce. Every block code is a member of `Block` or
+`Reason` in `src/stress/contracts/errors.py`.
 
 Only ingestion reads the new file. Its preflight resolves run settings before R1 assigns
 the run identity. R2 captures those exact bytes, verifies the input-set binding, applies
-the experiment in memory and preserves the original seven files unchanged. A replay reads
+the experiment in memory and preserves the original seven files unchanged. It keeps the
+specification, the analysis file and the approval record in `data/` before it checks them, so
+a run that blocks on one of them replays to the same block. A replay reads
 the sealed base input set, specification and optional analysis; it does not need the original
 paths. Changing a specification creates a different run identity and requires a new run.
+The run ID's hash covers the content of the specification and of the analysis file, not their
+paths, so a replay has the hash of the run it repeats. A run whose specification holds more than
+`run` settings carries `+spec` after the variant in its run ID.
 
 ## Required specification envelope
 
@@ -53,9 +64,9 @@ expressions, executable model paths or scripts are evaluated.
 |---|---|---|
 | `inputs` | Required for a standalone specification | Immutable input-set directory |
 | `scenarios` | `[baseline, adverse]` | Nonempty unique list of available scenario identifiers |
-| `variant` | `core` | A variant defined in the base parameter set |
+| `variant` | `core` | A variant defined in the base parameter set. The name holds only letters, digits, `_`, `.` and `-` |
 | `mode` | `synthetic` | `regulatory` is recognised and blocks |
-| `balance_sheet` | `static` | `static` or `dynamic` |
+| `balance_sheet` | `static` | `static` or `dynamic`; dynamic only in a specification, with `balance_sheet.assumptions` |
 | `terminal_treatment` | `z` | `z` or `parameters` |
 | `s2_treatment` | `repriced` | `repriced` or `held` |
 | `horizon_runoff` | `contractual` | `contractual` or `replaced`; replaced supports bullet schedules only |
@@ -67,9 +78,10 @@ Non-baseline runs still require `baseline`, which anchors lifetime/terminal calc
 
 ## Base input set: seven datasets
 
-Five Parquet tables plus two YAML documents are mandatory. `manifest.json` contains file
-hashes and control totals; its combined hash names the directory. `approval.json` is separate
-owner evidence. An approval of the base set does not approve experiment overrides.
+Four Parquet tables, one Parquet matrix file per segment and two YAML documents are
+mandatory. `manifest.json` contains file hashes and control totals; its combined hash names
+the directory. `approval.json` is separate owner evidence. An approval of the base set does
+not approve experiment overrides.
 
 Amounts are EUR, probabilities/rates decimal fractions, dates ISO `YYYY-MM-DD`. Booleans are
 strictly parsed. Each table field can carry a `<field>__status` companion: supplied, estimated,
@@ -91,7 +103,9 @@ Supported products: `mortgage`, `consumer_loan`, `term_loan`, `revolver`, `debt_
 `guarantee`. On-balance scope is AC/EUR; commitments are a separate off-balance dataset.
 Stages are 1/2/3; approaches IRB/STA. Performing grades share a master scale, followed by D.
 Matrices are complete, nonnegative, stochastic, default-absorbing and increasing in default
-probability with grade. A segment must belong to exactly one reporting portfolio.
+probability with grade; `from_rank` and `to_rank` are the positions of their grades on the scale.
+A segment must belong to exactly one reporting portfolio, and a facility that names no
+`portfolio` is rejected (`MISSING_PORTFOLIO`).
 
 New portfolios can supply these same tables and reuse the existing calculations. Freeze
 prepared files without synthetic generation:
@@ -101,7 +115,11 @@ uv run python -m foundation.synth package --source <prepared-directory> --out in
 ```
 
 This preserves supplied exposures and opening provisions, generates hashes/control totals,
-and records pending owner approval. Financial validation still runs at R2/R3. It does not
+and records pending owner approval. It refuses a parameter set in the form used before
+6 November 2026 and one whose segments do not each name a matrix file of the prepared directory.
+R2 blocks a manifest without control totals (`CONTROL_TOTAL_MISMATCH`) and compares each of them
+with the files: rows, count and GCA by portfolio and stage, undrawn by portfolio and the four
+amount totals. Financial validation still runs at R2/R3. It does not
 estimate opening provisions, create new product logic or approve data. The original six-book
 synthetic generator remains available and its Python design constants remain generator inputs.
 
@@ -112,6 +130,15 @@ synthetic generator remains available and its Python design constants remain gen
 `source_type`. Each value requires `scenario`, `variable`, `country`, `year`, `value`, `unit`,
 `value_type`, `source`, `release`, `completeness`, `status`. `starting_values` supply property
 index levels; `index_of` maps annual price-change variables to their index variables.
+
+R2 checks the shape of both documents and blocks on a section that is missing
+(`MISSING_COLUMN` for scenarios, `MISSING_PARAMETER` for parameters) or of the wrong kind
+(`BAD_VALUE_TYPE`). A scenario `value` is a number or null, where null is a missing value. A
+`year`, the horizon's years and `reversion_years` are whole numbers as YAML reads them: `2027`,
+not `"2027"` and not `2027.0`. A boolean and text are never read as a number, in either document.
+What no step of the run reads is not checked: `variables` and `conventions`. A variant the run
+does not use need not be complete, but every variant's name is text, every variant is a mapping,
+and a `ccf` that is there and not null maps segments to numbers from 0 to 1.
 
 Units: `decimal` and `index` multiply by 1, `percent` by 0.01. Value types: `level`, `growth`,
 `index`, `cumulative_change`, `pp_change`, `bp_shock`. The engine does not infer economic
@@ -132,12 +159,15 @@ is likewise `0.01` decimal, not `100` decimal. Annual price changes compound.
 - `terminal_rule`: `method`, `baseline`, `last_scenario_year`, `reversion_years`,
   `s1_end_of_horizon`. Supported execution is the existing linear reversion/flat-baseline
   convention with the selectable treatment above; arbitrary method strings are not plugins.
+  `reversion_years` is a whole number of 1 or more.
 - `conventions`: recorded legacy `sicr_horizon`, `stub_pd`, `default_buckets`, `new_s3_undrawn`,
   `opening_allowance_matrix`, `opening_allowance_schedule`. These describe fixed implemented
   conventions rather than arbitrary executable strategy selectors; see conflicts below.
 - `tolerances`: the existing named `abs`/`rel` probability, amount and aggregate tolerances.
 - `variants`: each named variant has `label`, `repayment_profile` (product/default to bullet,
-  annuity or linear), and `ccf` (segment overrides).
+  annuity or linear), and `ccf` (segment overrides, each from 0 to 1). R3 blocks the variant of
+  the run (`UNKNOWN_VARIANT`) when its `ccf` names a segment the run does not have, or when its
+  `repayment_profile` names an unknown product or holds another word.
 - `sicr_triggers`: `enabled`, `dpd_days`, `hold`, `definitions`, `source`. Supported hold is
   until_default; configured DPD/watchlist/forborne flags are observed at `credit_status_date`.
 
@@ -169,8 +199,14 @@ every model dependency; there is no automatic interpolation or missing-history i
 `segments` maps a segment name to overrides of `portfolio`, `template_class`, `pd_model`,
 `lgd_model`, `prepayment_model`, `asset_correlation`, `sicr_k`, `cpr_ttc`, `ccf`. A new segment
 requires `inherits: <existing-segment>`, which explicitly copies its TTC matrix, models and
-parameter defaults. Its models must stay those of its parent's portfolio, even when `portfolio`
-reports it elsewhere.
+parameter defaults and, in every variant, its parent's `ccf` override. Its models must stay those
+of its parent's portfolio, even when `portfolio` reports it elsewhere.
+
+A `sicr_k` override may not contradict the reported stages, which are data. Where the override
+leaves unexplained a stage that the value it replaces explains, R3 blocks the run with
+`SICR_OVERRIDE_CONFLICT`; the message names the segment and the number of facilities, and
+`rejections.parquet` lists them. An override that contradicts no stage runs. A facility whose
+stage the base value does not explain either is rejected as in any run.
 Existing segments cannot be reparented. Supply a genuinely new matrix through the base input
 set when copying is not the intended modelling assumption.
 
@@ -178,12 +214,16 @@ set when copying is not the intended modelling assumption.
 change facility membership. `ccf` is a nullable alignment expectation for the supplied
 commitments, not an effective CCF override. A conflicting specification expectation blocks
 the whole run. Use a named base variant's CCF settings for a sensitivity, or package updated
-commitment data. Coefficients are not specification data: point the segment at another model
+commitment data. Under such a variant the reports name the CCF behind each converted amount:
+`starting_point_reconciliation.csv` and the Portfolios sheet give the input-set CCF and the
+applied CCF side by side, and `static_books.csv` and `summary.md` use the applied one. Coefficients are not specification data: point the segment at another model
 of its portfolio instead. Unknown fields and invalid domains block.
 
 `assignments` contains rows with `where`, `segment` and optional `portfolio`. Selectors are
 exact matches on `facility_id`, `portfolio`, `segment`, borrower `country` or `nace_code`.
 All predicates in a selector must match. Empty, unmatched or overlapping assignments block.
+A selector on `country` or `nace_code` needs each `obligor_id` once, and a segment `ccf` needs
+each `facility_id` once: a duplicate blocks at R2 with `DUPLICATE_KEY`.
 The assignment changes segmentation only; exposure amounts and opening provisions are retained.
 
 For sector stress, assign the affected NACE population to a dedicated segment and point it
@@ -223,7 +263,8 @@ their contributions are in `driver_contributions.csv`, by model.
 The effective specification retains lag, power, coefficients, inherited assumptions and
 external-score data. This is model execution, not estimation or bank validation.
 
-`terminal_policies.<scenario>` optionally chooses `method: flat` (hold its last score) or
+`terminal_policies.<scenario>` optionally chooses `method: flat` (hold its last score; those
+years are labelled `flat` in `drivers.parquet`) or
 `method: reversion` with positive integer `years` (revert towards baseline's last score).
 Default is the base terminal rule. Baseline stays flat. The same scenario-specific weights
 feed parameter reversion, terminal S1 valuation and the template replica. A run still needs
@@ -251,7 +292,9 @@ or charges therefore enter P&L once. No write-off or non-P&L movement is manufac
 
 `exposure_movements.parquet/csv` retains opening exposure, change and migration-opening
 exposure per facility/stage/year/scenario. The stage report reconciles outflows to opening
-stocks plus volume changes; `dynamic_books.csv` reconciles the whole book cumulatively.
+stocks plus volume changes; `dynamic_books.csv` reconciles the whole book cumulatively. The
+workbook's Stage migration sheet shows the volume change of each performing stage, and its
+check is closing − (opening + volume change), which is zero when the stocks tie.
 The original `static_books.csv` and EBA template replica are emitted only in static mode.
 
 This is an externally specified volume forecast for the existing facility prototypes.
@@ -262,11 +305,13 @@ exposure where that component is zero. Post-valuation lifetime EAD retains the c
 contractual/prepayment convention and does not assume future growth of the current cohort.
 
 Facility ParameterRecords remain on the opening-facility reference basis; R8 scales drawn
-and undrawn separately to each current slice. In dynamic runs `ead_profile.csv` reports the
-current performing-exposure-scaled profile. LTV uses current total facility GCA over the
+and undrawn separately to each current slice. `ead_profile.csv` reports the profile scaled to
+the current performing exposure in every run, static or dynamic (A45), so a static run and a
+dynamic run with zero changes give the same file. LTV uses current total facility GCA over the
 original collateral value adjusted by scenario prices; no new collateral is inferred from
 volume growth. Core LGD still uses its statistical model. Workbook stage/default/coverage
-ratios use each scenario's own GCA. Summary average cost of risk uses opening GCA.
+ratios use each scenario's own GCA; coverage is the on-balance allowance over GCA, as in
+`impairment_by_stage.csv` (A45). Summary average cost of risk uses opening GCA.
 
 ## Optional preparation analysis
 
@@ -287,7 +332,9 @@ and captured with the run. Required envelope: `schema_version: 1`, `status: SYNT
 
 The existing runnable preparation example in `docs/examples/README.md` supplies illustrative
 values for the following fields. Actual inputs are copied into `effective_specification.json`.
-Omitted analyses are reported NOT_PROVIDED. Incomplete supplied sections block. Adding a
+Omitted analyses are reported NOT_PROVIDED. Incomplete supplied sections block. So does a
+section about a scenario the run does not hold: `plausibility` and `climate` need `adverse`, and
+R2 blocks with `UNKNOWN_SCENARIO` without it. Adding a
 crisis requires matching rows for any optional analysis whose contract covers all scenarios.
 
 | Section | Input fields and domains |
@@ -297,7 +344,7 @@ crisis requires matching rows for any optional analysis whose contract covers al
 | `capital.weights[]` | Unique `scenario`, `year`, `regulatory_approach` (IRB/STA), `regulatory_class`, `grade`; `regulatory_ccf` and `standardised_ccf` in [0,1], nonnegative `risk_weight` and `standardised_risk_weight`, nonempty `model_version`. Must cover all projected and opening slices. |
 | `capital.bridge[]` | One row per charge period: `scenario`, `year`, EUR `other_pnl`, `distributions`, `irb_shortfall_change`, `npl_deduction_change`, `other_cet1_change`, `other_utrea`, `other_strea`; `tax_rate` and `output_floor_factor` in [0,1]. Distributions and other REA are nonnegative. First period needs nonnegative EUR `opening_cet1`; any later supplied opening must equal preceding closing. Tax is the existing symmetric synthetic convention. |
 | `climate[]` | `facility_id`, `channel` (`transition` or `flood`), `scenario: adverse`, `year`, `nace_code`, `energy_bucket`, `geolocation`, `flood_category`, `model_version`, `reference_transition`, `shock_transition`, `reference_loss_rates`, `shock_loss_rates`, nonnegative EUR `insurance_recovery`. Transition matrices are 3×3 stochastic with absorbing S3; loss-rate vectors have 3 entries in [0,1]. Transition requires 2027–2029; flood requires 2027. Insurance cannot exceed positive incremental provision. This separate fixed-exposure diagnostic does not inherit dynamic core volumes. |
-| `template_mapping` | Nonempty `version`, `cells[]` with unique `sheet`, `row`, `column` destinations; each has `table`, numeric `measure`, `filters` mapping exact dimension values. Matching rows are summed; empty selections block. Available tables are the generated analysis tables, including `dimensions`, `concentration`, `sicr_attribution`, `ecl_bridge`, `ltv`, `maturity`, static `template_replica` and supplied optional analyses. This exports long cells rather than filling an official workbook. |
+| `template_mapping` | Nonempty `version`, `cells[]` with unique `sheet`, `row`, `column` destinations; each has `table`, numeric `measure`, `filters` mapping exact dimension values. Matching rows are summed; empty selections block. Available tables are the generated analysis tables, including `dimensions`, `concentration`, `sicr_attribution`, `ecl_bridge`, `ltv`, `maturity`, static `template_replica` and supplied optional analyses. In `sicr_attribution` the `flags` dimension reads `dpd_at_least_<dpd_days>=<True or False>;watchlist=…;forborne=…`, at most eight combinations. This exports long cells rather than filling an official workbook. |
 | `challenge` | Nonempty nonnegative `severity_grid`, nonnegative EUR `loss_limit_eur`, nonnegative `lower` and `upper` severity bounds with lower < upper, nonempty `limit_name`. Runs a separate one-year anchor-PD/EAD/LGD diagnostic, not the selected macro model or dynamic path. |
 | `npe_backstop` | `version`, `source`, ISO `scope_from`/`scope_to`, `calendar[]`: integer `from_year >= 1`, `unsecured`, `secured` factors in [0,1]. Unique periods start at 1; factors cannot decrease. Uses on-balance S3, original/default dates and supplied collateral data. No statutory calendar is embedded. Dynamic growth does not supply the missing legal modification-event classification. |
 | `plausibility` | `version`, `source`, `sources` mapping source IDs to references, `rows[]` with `measure`, `scope` (portfolio or `Total`), finite `published` value, `source` ID. Supported measures: `credit_loss_rate`, `first_year_loss_share`, `s2_share_start`, `s2_share_end`, `s3_share_start`, `s3_share_end`, `gdp_cumulative`, `unemployment_rise`, `residential_price_cumulative`, `cre_price_cumulative`. Compares the named `adverse` scenario only; it does not infer which new crisis should replace that comparison. |

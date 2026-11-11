@@ -14,7 +14,7 @@ from foundation.transcribe import check
 from foundation.transcribe.markdown import check_transcribed, numbers
 from stress.ingest import check_hashes
 from tests import builders
-from tests.support import INPUTS_DIR, SPEC_DIR, spec_yaml
+from tests.support import CURRENT_INPUT_SET, INPUTS_DIR, SPEC_DIR, spec_yaml
 
 
 def _yaml(path):
@@ -99,6 +99,7 @@ def test_the_committed_set_is_what_the_generator_produces(full_inputs):
     # The committed input set is the one O2-O4 produce now, byte for byte, under the kernel that built it.
     committed = INPUTS_DIR / full_inputs.name
     assert committed.exists(), f"inputs/ holds no set with the hash O2-O4 produce now ({full_inputs.name})"
+    assert full_inputs.name == CURRENT_INPUT_SET, "tests/support.py names another set as the current one"
     for name in ("facilities.parquet", "opening_provisions.parquet", "parameter_set.yaml", "scenarios.yaml"):
         assert (committed / name).read_bytes() == (full_inputs / name).read_bytes(), name
 
@@ -226,8 +227,10 @@ def test_a_library_that_is_not_built_of_mappings_is_refused(where):
 
 
 @pytest.mark.req("OPS-01")
-def test_the_committed_set_passes_r2_on_every_system():
-    folder = INPUTS_DIR / "5a296ffe0e198705"
+def test_the_committed_set_matches_its_manifest_hashes():
+    # Runs on every system, unlike the byte-for-byte comparison above (A36). It checks the hashes
+    # only: R2's reading of the files is proved by the runs other tests make.
+    folder = INPUTS_DIR / CURRENT_INPUT_SET
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert folder.name == manifest["input_set_hash"][:16]
     check_hashes(SimpleNamespace(input_dir=folder, input_set_hash=manifest["input_set_hash"]), manifest)
@@ -245,7 +248,7 @@ def test_opening_allowances_frozen_by_the_generator_formula(full_tables):
     assert set(off) <= set(full_tables["commitments"]["facility_id"])
 
 
-@pytest.mark.req("PD-09")
+@pytest.mark.req("SYN-PAR-06")
 def test_parameter_set_documents_its_status(full_inputs):
     with (full_inputs / "parameter_set.yaml").open(encoding="utf-8") as fh:
         params = yaml.safe_load(fh)

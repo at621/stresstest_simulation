@@ -7,20 +7,24 @@ and a marked test under tests/ would enter the generated traceability matrix. Th
 makes one real run through the page's own setup and job, which takes about three quarters of a minute.
 """
 
+import dataclasses
 import http.client
 import io
 import json
+import os
 import re
 import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -28,10 +32,13 @@ sys.path.insert(0, str(HERE))
 import preflight
 import server
 
+from stress import cli
+from stress.contracts.errors import BlockingError
 from stress.lineage import CODE_PATHS
 
 nb = server.nb
 INPUTS = f"inputs/{server.BOOKS['large']}"
+SMALL = f"inputs/{server.BOOKS['small']}"
 WALKTHROUGH = "docs/run-workflow/walkthrough.yaml"
 RUN = {"inputs": INPUTS, "scenarios": ["baseline", "adverse"], "variant": "core", "balance_sheet": "static",
        "terminal_treatment": "z", "s2_treatment": "repriced", "horizon_runoff": "contractual", "lgd_path": "annual"}
@@ -71,6 +78,16 @@ def sealed(tmp_path_factory):
     patch.undo()
 
 
+@pytest.fixture(scope="module")
+def plain_run(tmp_path_factory):
+    """One real run started from flags alone, on the small book: no specification is sealed with it.
+    With it come the lines the engine printed, as the job read them."""
+    control = server.Control(tmp_path_factory.mktemp("plain-runs"))
+    job = wait(control.start_run({"document": {**PLAIN, "run": {**RUN, "inputs": SMALL}}, "name": "plain"}))
+    assert job.state == "sealed", list(job.lines)
+    return control, control.runs_dir / job.run_id, list(job.lines)
+
+
 @pytest.fixture
 def site(tmp_path):
     """The real server on a free port, over an empty runs folder."""
@@ -95,6 +112,35 @@ def post(running, path, form, **headers):
     return call(running, "POST", path, json.dumps(form), Content_Type="application/json", **headers)
 
 
+def announce(running, path, length, **headers):
+    """A POST that states its length and sends no body: what the server answers before it reads one."""
+    connection = http.client.HTTPConnection(server.HOST, running.server_port, timeout=20)
+    connection.putrequest("POST", path, skip_host="Host" in headers)
+    connection.putheader("Content-Length", str(length))
+    for name, value in headers.items():
+        connection.putheader(name.replace("_", "-"), value)
+    connection.endheaders()
+    response = connection.getresponse()
+    payload = response.read()
+    connection.close()
+    return response, payload
+
+
+def texts(value) -> list[str]:
+    """Every text in an answer, wherever it sits."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for item in value.values() for text in texts(item)]
+    return [text for item in value for text in texts(item)] if isinstance(value, list) else []
+
+
+def names_the_temporary_folder(value) -> bool:
+    roots = {tempfile.gettempdir(), os.path.realpath(tempfile.gettempdir())}
+    forms = {form for root in roots for form in (root, root.replace("\\", "/"), root.replace("\\", "\\\\"))}
+    return any(form.lower() in text.lower() for text in texts(value) for form in forms)
+
+
 # --- a run from the page is an ordinary sealed run --------------------------------------------------
 
 def test_the_run_is_what_the_setup_said(sealed):
@@ -116,10 +162,25 @@ def test_the_summary_ties_to_the_sealed_headline(sealed):
         if row:
             kpi = view["results"]["kpis"][row[1]]
             shown = [f"{kpi[k]:,.1f}" for k in ("cumulative", "closing", "s3_gca")]
+            assert row[2] == shown[0] == view["headline"][row[1]], "the figure the run history lists"
             assert shown == re.findall(r"EUR ([\d,.\-]+)m", line)
             assert f"{kpi['first_year']:,.1f}" == re.search(r"first year ([\d,.\-]+)m", line)[1]
             tied += 1
     assert tied == 3
+
+
+@pytest.mark.parametrize("cumulative", [129.7, 1_129.7, -5.0, -1_005.25, 0.0])
+def test_the_run_history_reads_a_charge_of_either_sign(tmp_path, cumulative):
+    """A net release is a negative cumulative charge, and the history lists it as the engine wrote it."""
+    line = (f"baseline: cumulative charge 2027-2029 EUR {cumulative:,.1f}m (first year {1.0:,.1f}m); "
+            f"closing provisions 2029 EUR {300.0:,.1f}m; S3 GCA 2029 EUR {80.0:,.1f}m")  # as report.summary_lines writes it
+    run_id = "20261109T1200Z-core-0a1b2c3d"
+    (tmp_path / run_id).mkdir()
+    config = {"inputs": "inputs/0000000000000000", "variant": "core", "scenarios": ["baseline"]}
+    manifest = {"run_id": run_id, "status": "SYNTHETIC", "config": config, "input_set_hash": "0" * 64,
+                "code_version": "x", "created_at": "2026-11-09T12:00:00+00:00", "summary": {"headline": [line]}}
+    (tmp_path / run_id / server.RUN_MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
+    assert server.list_runs(tmp_path)[0]["headline"] == {"baseline": f"{cumulative:,.1f}"}
 
 
 def test_portfolios_and_stages_add_up_to_the_book(sealed):
@@ -150,6 +211,51 @@ def test_the_run_loads_back_as_the_setup_it_was_started_with(sealed):
     written = (folder / "data" / "specification.yaml").read_text(encoding="utf-8").split("\n", 1)[1]
     assert server.specification_text(doc, server.SPECS) == written
     assert control.preflight({"document": doc, "name": loaded["name"]})["verdict"] == "ready"
+
+
+def test_a_plain_run_loads_back_as_a_setup_that_can_be_changed(plain_run):
+    """Running again with changes, from a run that had no specification. The setup that comes back
+    carries a source, a version and its input set's hash, so the first change, which makes it a
+    specification, still passes the engine's reading of one."""
+    control, folder, _ = plain_run
+    assert not (folder / "data" / "specification.yaml").exists()
+    loaded = server.setup_of({"run": folder.name}, control.runs_dir)
+    doc = loaded["document"]
+    assert doc["run"]["inputs"] == SMALL and doc["run"]["scenarios"] == ["baseline", "adverse"]
+    assert doc["source"].startswith("Control room, ") and doc["version"] == loaded["name"]
+    assert doc["input_set_hash"] == preflight.base_of(server.ROOT / SMALL)["hash"]
+    unchanged = control.preflight({"document": doc, "name": loaded["name"]})
+    assert unchanged["verdict"] == "ready" and not unchanged["needs_specification"]
+    changed = {**doc, "segments": {"P01": {"asset_correlation": 0.2}}}
+    answer = control.preflight({"document": changed, "name": loaded["name"]})
+    assert answer["needs_specification"] and answer["verdict"] == "ready", answer["blocked"]
+
+
+def test_the_engine_names_its_run_folder_as_soon_as_it_opens_it(plain_run):
+    """The page tells a run in progress from one that did not finish by the folder the job is writing.
+    The job learns it from R1's own line, so that line must still say it."""
+    _, folder, lines = plain_run
+    assert [found[1] for found in map(server.OPENED_LINE.match, lines) if found] == [folder.name]
+    job = server.Job("run", "stress run")
+    job.add(next(line for line in lines if server.OPENED_LINE.match(line)))
+    assert job.run_id == folder.name and job.exit_code is None
+
+
+def test_a_folder_still_being_written_is_in_progress_and_not_a_run_that_did_not_finish(tmp_path):
+    control = server.Control(tmp_path)
+    writing, abandoned = "20261109T1200Z-core-0a1b2c3d", "20261108T0900Z-core-11111111"
+    for name in (writing, abandoned):
+        (tmp_path / name).mkdir()
+    assert not any(run.get("in_progress") for run in control.state()["runs"])
+    control.job = server.Job("run", "stress run")
+    control.job.add(f"stress.R1  run {writing} opened in runs/{writing}")
+    listed = {run["run_id"]: run for run in control.state()["runs"]}
+    assert listed[writing]["status"] == listed[abandoned]["status"] == "UNSEALED"
+    assert listed[writing]["in_progress"] is True and listed[abandoned]["in_progress"] is False
+    control.job.finish(1)
+    assert not any(run.get("in_progress") for run in control.state()["runs"]), "a job that ended writes no more"
+    page = server.PAGE.read_text(encoding="utf-8")
+    assert "run.in_progress ? 'In progress' : 'Did not finish'" in page
 
 
 def test_a_blocked_run_gives_its_reason_and_no_figures(tmp_path):
@@ -186,7 +292,7 @@ def test_run_files_are_the_sealed_files(sealed, site):
 # --- adding files by hand, packaging and sign-off ----------------------------------------------------
 
 def add(control, name, path, original=None):
-    """A file as the page sends it: its bytes, for one of the seven places."""
+    """A file as the page sends it: its bytes, for one of the six rows."""
     data = Path(path).read_bytes()
     return control.add_file(name, original or Path(path).name, io.BytesIO(data), len(data))
 
@@ -225,6 +331,50 @@ def test_a_broken_transfer_leaves_the_earlier_file(tmp_path):
         control.add_file("scenarios", "x.yaml", io.BytesIO(b"cut"), 1000)
     assert control.added["scenarios"] is view
     assert (control.held / "scenarios.yaml").read_bytes() == source.read_bytes()
+    assert [p.name for p in control.held.iterdir()] == ["scenarios.yaml"], "the broken transfer left no file of its own"
+
+
+class Meeting(io.BytesIO):
+    """A transfer that stops halfway until the other transfer is halfway too."""
+
+    def __init__(self, data: bytes, halfway: threading.Barrier):
+        super().__init__(data)
+        self.halfway, self.met = halfway, False
+
+    def read(self, size=-1):
+        if self.tell() >= len(self.getvalue()) // 2 and not self.met:
+            self.met = True
+            self.halfway.wait(timeout=20)
+        return super().read(min(size, max(1, len(self.getvalue()) // 2)))
+
+
+def test_two_transfers_to_one_row_at_once_each_arrive_whole(tmp_path):
+    """Each writes a file of its own, so neither can write into the other's. The row ends with one of
+    the two files, whole, and with the line that belongs to it."""
+    control = server.Control(tmp_path)
+    first = (server.ROOT / INPUTS / "scenarios.yaml").read_bytes()
+    second = first + b"\n# a second version, sent at the same moment\n"
+    halfway = threading.Barrier(2)
+    answers, faults = {}, []
+
+    def send(label, data):
+        try:
+            answers[label] = control.add_file("scenarios", f"{label}.yaml", Meeting(data, halfway), len(data))
+        except Exception as exc:  # noqa: BLE001 - whatever went wrong is the finding
+            faults.append(exc)
+
+    senders = [threading.Thread(target=send, args=pair) for pair in (("first", first), ("second", second))]
+    for sender in senders:
+        sender.start()
+    for sender in senders:
+        sender.join(timeout=60)
+    assert not faults and set(answers) == {"first", "second"}
+    assert all(answer["problem"] is None for answer in answers.values())
+    held = (control.held / "scenarios.yaml").read_bytes()
+    assert held in (first, second), "one of the two, and not a mix of both"
+    kept = control.added["scenarios"]
+    assert kept["bytes"] == len(held) and kept["original"] == ("first.yaml" if held == first else "second.yaml")
+    assert [p.name for p in control.held.iterdir()] == ["scenarios.yaml"]
 
 
 def test_files_added_by_hand_become_a_set_and_leave_the_list(tmp_path, monkeypatch):
@@ -244,7 +394,7 @@ def test_files_added_by_hand_become_a_set_and_leave_the_list(tmp_path, monkeypat
     assert control.added == {} and not (control.held / "facilities.parquet").exists()
 
 
-def test_replacing_one_file_keeps_the_other_six_and_the_saved_set(tmp_path, monkeypatch):
+def test_replacing_one_file_keeps_the_other_five_the_matrix_files_and_the_saved_set(tmp_path, monkeypatch):
     original = committed_set_in(tmp_path, monkeypatch)
     before = {p.relative_to(original).as_posix(): p.read_bytes() for p in original.rglob("*") if p.is_file()}
     changed = tmp_path / "scenarios_new.yaml"
@@ -286,6 +436,47 @@ def test_a_file_added_during_the_packaging_stays_on_the_list(tmp_path, monkeypat
         control.use_files({"base": INPUTS})
     wait(job)
     assert control.added["obligors"]["original"] == "newer.parquet"
+
+
+def test_a_yaml_file_with_runaway_aliases_is_named_and_cannot_be_packaged(tmp_path, monkeypatch):
+    """Ten aliases to ten aliases, twelve levels deep: a few hundred bytes that stand for a million
+    million values. The file is named as not read when it is added, and it joins no set."""
+    committed_set_in(tmp_path, monkeypatch)
+    control = server.Control(tmp_path)
+    levels = ["a0: &a0 [" + ", ".join(["x"] * 10) + "]"]
+    levels += [f"a{n}: &a{n} [" + ", ".join([f"*a{n - 1}"] * 10) + "]" for n in range(1, 12)]
+    data = (server.ROOT / INPUTS / "scenarios.yaml").read_bytes() + ("\n".join(levels) + "\n").encode()
+    began = time.perf_counter()
+    view = control.add_file("scenarios", "scenarios.yaml", io.BytesIO(data), len(data))
+    assert "aliases expand" in view["problem"] and time.perf_counter() - began < 30
+    with pytest.raises(server.Refused, match="Scenarios: .*aliases expand"):
+        control.use_files({"base": INPUTS})
+    assert control.job is None and sorted(p.name for p in (tmp_path / "inputs").iterdir()) == [INPUTS.split("/")[1]]
+
+
+@pytest.mark.parametrize("spoil", [
+    lambda scenarios, parameters: scenarios["scenarios"][1].update(label=float("nan")),
+    lambda scenarios, parameters: parameters["variants"]["core"].update(label=float("nan")),
+    lambda scenarios, parameters: scenarios["scenarios"][0].update(label=[["a"] * 10] * 10),
+], ids=["a scenario labelled .nan", "a variant labelled .nan", "a label that is a list"])
+def test_a_set_the_page_cannot_list_is_shown_as_unreadable_and_the_state_still_loads(tmp_path, monkeypatch, spoil):
+    """A label that is not text has no place in the state every visitor loads: .nan has no JSON form at
+    all. That one set is listed as unreadable, the others stay, and the state is served."""
+    good = committed_set_in(tmp_path, monkeypatch)
+    bad = tmp_path / "inputs" / ("f" * 16)
+    shutil.copytree(good, bad)
+    scenarios = yaml.safe_load((bad / "scenarios.yaml").read_text(encoding="utf-8"))
+    parameters = yaml.safe_load((bad / "parameter_set.yaml").read_text(encoding="utf-8"))
+    spoil(scenarios, parameters)
+    (bad / "scenarios.yaml").write_text(yaml.safe_dump(scenarios, sort_keys=False), encoding="utf-8")
+    (bad / "parameter_set.yaml").write_text(yaml.safe_dump(parameters, sort_keys=False), encoding="utf-8")
+    state = server.Control(tmp_path, "large").state()
+    json.dumps(state, allow_nan=False)
+    rows = {row["inputs"]: row for row in state["inputs"]}
+    assert rows[INPUTS]["runnable"] and rows[INPUTS]["scenarios"]
+    spoilt = rows[f"inputs/{bad.name}"]
+    assert not spoilt["runnable"] and spoilt["facilities"] is None and "unreadable" in spoilt["gaps"][0]
+    assert spoilt["scenarios"] == [] and spoilt["variants"] == []
 
 
 def test_older_sets_say_in_words_why_they_cannot_run():
@@ -355,10 +546,107 @@ def test_what_a_flag_cannot_say_goes_through_a_file():
     {**PLAIN, "segments": []},
     {"run": "not a mapping"},
     "not a document",
+    # A setup that runs from a specification: its variant names the run folder all the same.
+    {**CRISIS, "run": {**CRISIS["run"], "variant": "x/../../escaped"}},
+    {**CRISIS, "run": {**CRISIS["run"], "variant": "nothing"}},
+    {**CRISIS, "run": {**CRISIS["run"], "variant": ["core"]}},
+    {**PLAIN, "run": {**RUN, "balance_sheet": "dynamic", "variant": "..\\escaped"}},
 ])
 def test_a_setup_outside_the_offer_is_refused(doc):
     with pytest.raises(server.Refused):
         plan(doc)
+
+
+def test_a_variant_the_set_does_not_hold_is_refused_before_anything_is_checked_or_written(tmp_path, monkeypatch):
+    """With flags the variant was always checked. With a specification it reached the engine, which
+    names the run folder by it before it has judged anything. Now neither the sanity checks nor Start
+    take it, and Start writes no file."""
+    monkeypatch.setattr(server, "SPECS", tmp_path / "specifications")
+    monkeypatch.setattr(preflight, "dry_run", lambda config: pytest.fail("the engine was asked"))
+    control = server.Control(tmp_path / "runs")
+    form = {"document": {**with_hash(CRISIS), "run": {**CRISIS["run"], "variant": "x/../../escaped"}}, "name": "escape"}
+    for action in (control.preflight, control.start_run):
+        with pytest.raises(server.Refused, match="variant .* is not on offer"):
+            action(form)
+    assert control.job is None and not (tmp_path / "specifications").exists()
+    doc, flags, _ = plan({**CRISIS, "run": {**CRISIS["run"], "variant": "annuity"}})
+    assert flags is None and doc["run"]["variant"] == "annuity", "a variant of the set is taken on this path too"
+
+
+def test_a_start_refused_because_a_job_is_in_progress_writes_nothing(tmp_path, monkeypatch):
+    """The setup is saved as part of the start, never before it. A second visitor's Start, refused,
+    must not replace the file the first visitor's run is about to read."""
+    monkeypatch.setattr(server, "SPECS", tmp_path / "specifications")
+    control = server.Control(tmp_path / "runs")
+    first = server.save_specification("shared-name", with_hash(CRISIS))  # what the first visitor's Start wrote
+    before = first.read_bytes()
+    running = control.start("run", [sys.executable, "-c", "import time; time.sleep(3)"], "the first visitor's run")
+    other = {**with_hash(CRISIS), "segments": {"P01": {"asset_correlation": 0.99}}}
+    for name in ("shared-name", "another-name"):
+        with pytest.raises(server.Busy):
+            control.start_run({"document": other, "name": name})
+    assert first.read_bytes() == before
+    assert sorted(p.name for p in (tmp_path / "specifications").iterdir()) == ["shared-name.yaml"]
+    wait(running)
+
+
+def test_the_sanity_checks_do_not_need_the_temporary_folder_on_the_repositorys_drive(tmp_path, monkeypatch):
+    """The check writes its specification into a temporary folder, which on Windows can sit on another
+    drive than the repository. No relative path leads from one drive to another, so the file states
+    its input set, and its analysis package, in full."""
+    relative = os.path.relpath
+
+    def across_drives(path, start=os.curdir):
+        if "stress-preflight-" in str(start):
+            raise ValueError("path is on mount 'D:', start on mount 'C:'")
+        return relative(path, start)
+
+    monkeypatch.setattr(os.path, "relpath", across_drives)
+    stated = {}
+    judge = preflight.dry_run
+
+    def reading(config):
+        stated.update(yaml.safe_load(Path(config.specification).read_text(encoding="utf-8"))["run"])
+        return judge(config)
+
+    monkeypatch.setattr(preflight, "dry_run", reading)
+    doc = {**CRISIS, "run": {**CRISIS["run"], "inputs": SMALL},
+           "input_set_hash": preflight.base_of(server.ROOT / SMALL)["hash"]}
+    answer = server.Control(tmp_path).preflight({"document": doc, "name": "another-drive"})
+    assert answer["needs_specification"] and answer["verdict"] == "ready", answer["blocked"] or answer["fault"]
+    assert Path(stated["inputs"]).is_absolute() and Path(stated["inputs"]) == server.ROOT / SMALL
+    saved = yaml.safe_load(answer["yaml"])["run"]["inputs"]
+    assert not Path(saved).is_absolute() and saved == server.relative_to_folder(server.ROOT / SMALL, server.SPECS), \
+        "the setup to be saved still states its paths from its own folder"
+    with_analysis = {**doc, "run": {**doc["run"], "analysis": "docs/examples/analysis.yaml"}}
+    full = yaml.safe_load(server.specification_text(with_analysis, None))["run"]
+    assert Path(full["analysis"]) == server.ROOT / "docs/examples/analysis.yaml" and Path(full["inputs"]).is_absolute()
+
+
+def test_a_setup_that_names_no_scenarios_is_checked_with_the_ones_the_engine_would_run(tmp_path, monkeypatch):
+    """`stress run --specification` runs baseline and adverse when the file names none. The sanity
+    checks build the run as the command does, so they judge what Start would start."""
+    built = []
+
+    def stop_here(config, runs_dir):
+        built.append(config)
+        raise BlockingError("R1", "STOPPED_BY_THE_TEST", "the configuration is all this test needs")
+
+    monkeypatch.setattr(cli, "execute", stop_here)
+    path = tmp_path / "specification.yaml"
+    assert cli.cmd_run(cli.build_parser().parse_args(["run", "--specification", str(path)])) == cli.EXIT_BLOCKED
+    assert dataclasses.asdict(built[0]) == dataclasses.asdict(server.specification_config(path))
+    assert built[0].scenarios == server.ENGINE_SCENARIOS and built[0].variant == server.ENGINE_VARIANT
+    silent = {**with_hash(CRISIS), "run": {**CRISIS["run"], "inputs": SMALL, "scenarios": []}, "scenarios": {},
+              "terminal_policies": {}, "input_set_hash": preflight.base_of(server.ROOT / SMALL)["hash"]}
+    control = server.Control(tmp_path)
+    answer = control.preflight({"document": silent, "name": "silent"})
+    assert answer["needs_specification"] and "scenarios:" not in answer["yaml"].split("segments:")[0]
+    assert {row["scenario"] for row in answer["z"]} == set(server.ENGINE_SCENARIOS)
+    assert tuple(control.state()["default_scenarios"]) == server.ENGINE_SCENARIOS
+    page = server.PAGE.read_text(encoding="utf-8")
+    assert "if (!DOC.run.scenarios?.length) DOC.run.scenarios = [...STATE.default_scenarios];" in page
+    assert page.count("adopt(answer.document)") == 2, "a setup loaded from a run, and one applied as YAML"
 
 
 @pytest.mark.parametrize("name", ["../escape", "docs/x", "a b", "", "x" * 65, None])
@@ -439,6 +727,50 @@ def test_one_job_at_a_time(tmp_path):
     wait(control.start("run", [sys.executable, "-c", "pass"], "quick"))
 
 
+def test_a_job_ends_even_if_what_follows_it_fails(tmp_path):
+    """A job left as running would refuse every later start, for everyone, until the server restarts."""
+    control = server.Control(tmp_path)
+
+    def fails():
+        raise OSError("the held file could not be removed")
+
+    job = wait(control.start("package", [sys.executable, "-c", "print('input set inputs/0123456789abcdef')"], "package",
+                             after=fails), 30)
+    assert job.state == "done" and job.input_set == "0123456789abcdef", "the step itself went through"
+    assert "the held file could not be removed" in job.as_dict()["log"][-1]
+    wait(control.start("run", [sys.executable, "-c", "pass"], "the next job starts"))
+
+
+@pytest.mark.parametrize(("lines", "shown"), [
+    (["stress.R5     BLOCKED STATIC_BALANCE: replaced works on bullet schedules only",
+      "run 20261109T1200Z-annuity+replaced-0a1b2c3d: BLOCKED", "folder runs/20261109T1200Z-annuity+replaced-0a1b2c3d",
+      "blocked at R5: STATIC_BALANCE: replaced works on bullet schedules only"],
+     "replaced works on bullet schedules only"),
+    (["stress.R1     blocked: INVALID_ARGUMENT: no scenario requested",
+      "stress     [R1] INVALID_ARGUMENT: no scenario requested"], "no scenario requested"),
+    (["blocked at engine: INTERNAL_ERROR: KeyError: 'portfolios'"], "KeyError: 'portfolios'"),
+    (["NOT reproduced: 3 output(s) differ"], "NOT reproduced: 3 output(s) differ"),
+    (["Traceback (most recent call last):", "ValueError: no such thing"], "ValueError: no such thing"),
+])
+def test_a_stopped_job_shows_the_engines_message_without_its_step_and_code(lines, shown):
+    """As step 4 shows a sealed run that stopped: the words. The step and the block code stay in the log."""
+    job = server.Job("run", "stress run")
+    for line in lines:
+        job.add(line)
+    job.finish(2)
+    assert job.as_dict()["message"] == shown and job.as_dict()["log"] == lines
+
+
+def test_a_real_block_reads_as_its_message_on_the_page(tmp_path):
+    """The engine's own lines, from a run that R5 stops, through the job the page follows."""
+    control = server.Control(tmp_path)
+    job = wait(control.start("run", *control.command(["run", "--inputs", SMALL, "--variant", "annuity",
+                                                      "--horizon-runoff", "replaced"])))
+    assert job.state == "blocked", list(job.lines)
+    sealed = server.run_view(tmp_path / job.run_id)["blocked"]
+    assert job.as_dict()["message"] == sealed["message"] and sealed["code"] not in job.as_dict()["message"]
+
+
 # --- requests -------------------------------------------------------------------------------------
 
 def test_the_page_is_served_with_its_policy(site):
@@ -480,8 +812,9 @@ def test_a_file_arrives_as_bytes_and_shows_in_the_state(site):
     _, payload = call(site, "GET", "/api/state")
     state = json.loads(payload)
     assert state["added"]["scenarios"]["problem"] is None and "repo" not in state and "files" not in state
-    assert state["anchor"] == "baseline"
+    assert state["anchor"] == "baseline" and "typical_seconds" not in state
     assert [role["label"] for role in state["roles"]][:2] == ["Facilities", "Obligors"]
+    assert {role["limit"] for role in state["roles"]} == {server.FILE_LIMIT}, "a local page takes a file of any likely size"
     response, payload = post(site, "/api/remove-file", {"name": "scenarios"})
     assert response.status == 200 and json.loads(payload)["added"] == {}
 
@@ -490,7 +823,7 @@ def test_the_page_carries_no_status_labels(site):
     _, payload = call(site, "GET", "/")
     for label in (b"Synthetic only", b"engine code committed", b"from flags", b"would block", b"on contract", b"repo-chip",
                   b">Theme<", b"Step ${STEP}", b"reverts to it", b"See what is in the files", b"GCA",
-                  b"Nothing is calculated until"):
+                  b"Nothing is calculated until", b"data-theme", b"localStorage", b"seven"):
         assert label not in payload
 
 
@@ -498,6 +831,69 @@ def test_a_plain_form_post_cannot_start_a_run(site):
     response, _ = call(site, "POST", "/api/start", json.dumps({"document": PLAIN}), Content_Type="text/plain")
     assert response.status == 415
     assert site.RequestHandlerClass.control.job is None
+
+
+@pytest.mark.parametrize("length", [-1, -262145, "many"])
+@pytest.mark.parametrize(("path", "kind"), [("/api/preflight", "application/json"),
+                                            ("/api/files/scenarios", "application/octet-stream")])
+def test_a_length_that_is_no_length_is_refused_before_anything_is_read(site, path, kind, length):
+    """Taken as it stands, a negative length reads until the sender hangs up, however much it sends."""
+    response, payload = announce(site, path, length, Content_Type=kind)
+    assert response.status == 400 and b"Content-Length" in payload
+    assert site.RequestHandlerClass.control.added == {}
+
+
+def test_a_setup_is_saved_only_by_starting_its_run(site, tmp_path, monkeypatch):
+    """There is no route that only saves: it had no caller on the page, and wrote a file for anyone who asked."""
+    monkeypatch.setattr(server, "SPECS", tmp_path / "specifications")
+    response, _ = post(site, "/api/save", {"document": with_hash(CRISIS), "name": "anyone"})
+    assert response.status == 404 and not (tmp_path / "specifications").exists()
+
+
+def test_a_pasted_setup_with_runaway_aliases_gets_a_short_refusal_at_once(site):
+    """Four hundred bytes that stand for ten million values. Written out into the answer, a few levels
+    more would take the server down for everyone; refused, the answer is a line. Seven levels and not
+    twelve, so that this test, should the refusal ever be lost, fails on a long answer and not by
+    exhausting the machine."""
+    levels = ["  a0: &a0 [" + ", ".join(["x"] * 10) + "]"]
+    levels += [f"  a{n}: &a{n} [" + ", ".join([f"*a{n - 1}"] * 10) + "]" for n in range(1, 7)]
+    text = ("schema_version: 1\nstatus: SYNTHETIC\nsource: s\nversion: v\ninput_set_hash: h\n"
+            f"run: {{inputs: {INPUTS}}}\nreporting:\n" + "\n".join(levels) + "\nadditional_values: *a6\n")
+    began = time.perf_counter()
+    response, payload = post(site, "/api/yaml", {"yaml": text})
+    assert response.status == 400 and b"aliases expand" in payload
+    assert len(payload) < 500 and time.perf_counter() - began < 20
+    once = ("schema_version: 1\nstatus: SYNTHETIC\nsource: s\nversion: v\ninput_set_hash: h\n"
+            f"run: {{inputs: {INPUTS}}}\nscenarios:\n"
+            "  deeper: &deeper {inherits: adverse, narrative: A deeper year., overrides: []}\n  deeper_again: *deeper\n")
+    response, payload = post(site, "/api/yaml", {"yaml": once})
+    read = json.loads(payload)["document"]["scenarios"]
+    assert response.status == 200 and read["deeper_again"] == read["deeper"], "an alias as such is read"
+
+
+def test_no_answer_names_a_temporary_folder_of_the_server(site, tmp_path, monkeypatch):
+    """Added files, sanity checks and packaging work in temporary folders, and the engine's messages
+    name them. What reaches the browser says `(temporary folder)` instead. Here the runs folder is one
+    too, as pytest makes it, so the command a sanity check shows would name it."""
+    assert names_the_temporary_folder({"shown": f"--runs-dir {tmp_path}"}), "the check below can fail"
+    response, payload = post(site, "/api/preflight", {"document": with_hash(CRISIS), "name": "x"})
+    answer = json.loads(payload)
+    assert response.status == 200 and "--runs-dir (temporary folder)" in answer["shown"]
+    assert not names_the_temporary_folder(answer)
+    committed_set_in(tmp_path, monkeypatch)
+    control = site.RequestHandlerClass.control
+    add(control, "obligors", server.ROOT / INPUTS / "obligors.parquet")
+    response, payload = post(site, "/api/use-files", {"base": INPUTS})
+    assert response.status == 202 and "shown" not in json.loads(payload), "the packaging command names the held folder"
+    job = wait(control.job)
+    assert str(control.held) in job.shown and job.state == "done", list(job.lines)
+    assert not names_the_temporary_folder(json.loads(call(site, "GET", "/api/job")[1]))
+    held = str(control.held / "assembled" / "facilities.parquet")
+    for message in (f"cannot read {held}", f"[Errno 2] No such file or directory: {held!r}",
+                    f"see {held.replace(os.sep, '/')}", {"log": [held, {"path": Path(held)}]}):
+        cleaned = server.without_temp_paths(message)
+        assert not names_the_temporary_folder(cleaned if isinstance(cleaned, dict) else {"text": cleaned}), message
+        assert "facilities.parquet" in json.dumps(cleaned), "the file's own name stays"
 
 
 # --- hosted ---------------------------------------------------------------------------------------
@@ -518,6 +914,28 @@ def router():
 
 def test_only_a_host_beyond_this_machine_is_hosted(hosted, site):
     assert hosted.RequestHandlerClass.hosted and not site.RequestHandlerClass.hosted
+    assert hosted.RequestHandlerClass.control.hosted and not site.RequestHandlerClass.control.hosted
+
+
+def test_a_hosted_page_takes_a_file_of_limited_size_and_refuses_a_larger_one_unread(hosted, site):
+    """Anyone with the address can send a file, and it is held and read to be checked: 64 MB for a
+    table, 4 MB for a YAML file. A local page keeps the limit that only guards against a mistake."""
+    megabyte = 1024 ** 2
+    assert server.file_limit("facilities", True) == 64 * megabyte and server.file_limit("scenarios", True) == 4 * megabyte
+    assert server.file_limit("facilities", False) == server.file_limit("scenarios", False) == server.FILE_LIMIT > 64 * megabyte
+    limits = {role["name"]: role["limit"] for role in hosted.RequestHandlerClass.control.state()["roles"]}
+    assert limits == {"facilities": 64 * megabyte, "obligors": 64 * megabyte, "commitments": 64 * megabyte,
+                      "opening_provisions": 64 * megabyte, "scenarios": 4 * megabyte, "parameter_set": 4 * megabyte}
+    sent = {"Content_Type": "application/octet-stream", **router()}
+    for name, limit in limits.items():
+        response, payload = announce(hosted, f"/api/files/{name}", limit + 1, **sent)
+        assert response.status == 413 and f"{limit // megabyte} MB".encode() in payload, name
+    assert hosted.RequestHandlerClass.control.added == {}
+    data = (server.ROOT / INPUTS / "scenarios.yaml").read_bytes()
+    response, payload = call(hosted, "POST", "/api/files/scenarios", data, **sent)
+    assert response.status == 200 and json.loads(payload)["problem"] is None, "a file within the limit is taken"
+    page = server.PAGE.read_text(encoding="utf-8")
+    assert "file.size > role.limit" in page, "the page says so before it sends the whole file"
 
 
 def test_plain_http_goes_to_https(hosted):
@@ -595,8 +1013,45 @@ def test_the_room_starts_without_matplotlib():
 
 
 def test_the_notebooks_still_find_their_colour_ramp():
-    assert nb.DIVERGING.name == "diverging"
-    assert not hasattr(nb, "NO_SUCH_NAME")
+    """The room shares nbtools, which loads matplotlib only when a notebook asks for the ramp."""
+    code = ("import sys; import nbtools as nb; assert 'matplotlib' not in sys.modules; "
+            "assert nb.DIVERGING.name == 'diverging' and 'matplotlib' in sys.modules")
+    subprocess.run([sys.executable, "-c", code], cwd=server.ROOT / "notebooks", check=True, capture_output=True)
+
+
+def step_of_the_page(start: str, end: str) -> str:
+    page = server.PAGE.read_text(encoding="utf-8")
+    return page[page.index(start):page.index(end)]
+
+
+def test_a_comparison_does_not_outlive_the_run_it_was_chosen_for():
+    """Left in place, it would set the next run against the last one's choice, or against itself."""
+    body = step_of_the_page("async function selectRun", "async function selectCompare")
+    assert "if (id !== selectedRun) { COMPARE = null; ++compareTicket; }" in body
+    assert body.index("COMPARE = null") < body.index("selectedRun = id")
+
+
+def test_one_failed_request_does_not_end_the_following_of_a_job():
+    """While it follows a job the page keeps asking, and once the server knows no job any more it says
+    that the server restarted, instead of showing a run in progress for good."""
+    body = step_of_the_page("async function poll", "// --- step 4")
+    failed = body[body.index("catch {"):body.index("unanswered = false")]
+    assert "pollIn(3000)" in failed and "unanswered = true" in failed and "jobRunning = false" not in failed
+    assert "if (JOB && (jobRunning || watching)) await jobGone()" in body
+    gone = step_of_the_page("async function jobGone", "async function poll")
+    assert "state: 'gone'" in gone and "await reloadState()" in gone
+    page = server.PAGE.read_text(encoding="utf-8")
+    assert "A run in progress still finishes" not in page and "gone: ['block'" in page
+    assert "if (jobRunning && unanswered) return" in step_of_the_page("function nowOf", "function renderWhere")
+
+
+def test_a_segment_is_offered_the_models_of_its_own_portfolio():
+    """The engine takes a segment's models from the portfolio it is filed under in the parameter set,
+    whatever portfolio a run reports it under. The page offers the same list it reads `Drives` from."""
+    page = server.PAGE.read_text(encoding="utf-8")
+    row = step_of_the_page("function segmentRow", "function segmentsTable")
+    assert "model_choices[base.portfolio]" in row and "model_choices[held.portfolio" not in page
+    assert "base.model_choices[from.portfolio]" in step_of_the_page("function drives", "function drivesText")
 
 
 def test_heroku_starts_this_server():

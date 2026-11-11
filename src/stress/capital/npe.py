@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from stress.contracts.checks import number, required
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 from stress.contracts.preparation import COLLATERAL_INDEX, price_growth, usable_ltv
 from stress.contracts.tables import SLICE_S3_ORIGINAL
 
@@ -29,13 +29,13 @@ def _calendar(spec: dict) -> pd.DataFrame:
     for row in spec["calendar"]:
         required(row, ("from_year", *FACTORS), "NPE calendar row")
         if not isinstance(row["from_year"], int) or row["from_year"] < 1:
-            raise BlockingError(STEP, "INVALID_INPUT", "from_year must be a positive whole year")
+            raise BlockingError(STEP, Block.INVALID_INPUT, "from_year must be a positive whole year")
         rows.append({"from_year": row["from_year"], **{f: number(row[f], f, 0, 1) for f in FACTORS}})
     table = pd.DataFrame(rows, columns=["from_year", *FACTORS]).sort_values("from_year")
     if table.empty or table["from_year"].duplicated().any() or table["from_year"].iloc[0] != 1:
-        raise BlockingError(STEP, "INVALID_INPUT", "the calendar needs one row per period, starting at year 1")
+        raise BlockingError(STEP, Block.INVALID_INPUT, "the calendar needs one row per period, starting at year 1")
     if (table[list(FACTORS)].diff().fillna(0.0) < 0).any().any():
-        raise BlockingError(STEP, "INVALID_INPUT", "a calendar factor cannot fall with time as NPE")
+        raise BlockingError(STEP, Block.INVALID_INPUT, "a calendar factor cannot fall with time as NPE")
     return table
 
 
@@ -52,14 +52,14 @@ def _exposures(spec: dict, slices: pd.DataFrame, portfolio: pd.DataFrame, facili
     original = book["slice"].eq(SLICE_S3_ORIGINAL)
     entered = pd.to_datetime(book["default_date"].where(original), errors="coerce").dt.year
     if entered[original].isna().any():
-        raise BlockingError(STEP, "MISSING_INPUT", "an original S3 exposure has no default date")
+        raise BlockingError(STEP, Block.MISSING_INPUT, "an original S3 exposure has no default date")
     book["npe_entry_year"] = entered.where(original, book["entry_year"])
     book["years_as_npe"] = (book["year"] - book["npe_entry_year"] + 1).astype(int)  # footnote 75: 2027-2029 is three
     if (book["years_as_npe"] < 1).any():
-        raise BlockingError(STEP, "RECONCILIATION", "an exposure is NPE before its entry year")
+        raise BlockingError(STEP, Block.RECONCILIATION, "an exposure is NPE before its entry year")
     dates = pd.to_datetime(book["origination_date"], errors="coerce")
     if dates.isna().any():
-        raise BlockingError(STEP, "MISSING_INPUT", "an S3 exposure has no origination date")
+        raise BlockingError(STEP, Block.MISSING_INPUT, "an S3 exposure has no origination date")
     in_window = dates.between(pd.Timestamp(spec["scope_from"]), pd.Timestamp(spec["scope_to"]))
     # Replaced first, then S3: a replacement counts only if it had happened when the slice defaulted.
     at_entry = book.sort_values("year", kind="mergesort").groupby(["scenario", "facility_id", "slice"])[
@@ -72,14 +72,14 @@ def _split_by_collateral(book: pd.DataFrame, indices: pd.DataFrame) -> pd.DataFr
     secured = book["ltv"].notna()
     variable = book["collateral_type"].where(secured).map(COLLATERAL_INDEX)
     if variable[secured].isna().any():
-        raise BlockingError(STEP, "MISSING_INPUT", "no price index for a collateral type")
+        raise BlockingError(STEP, Block.MISSING_INPUT, "no price index for a collateral type")
     growth = price_growth(indices)[["scenario", "country", "variable", "year", "growth"]]
     out = book.assign(variable=variable).merge(growth, on=["scenario", "country", "variable", "year"], how="left",
                                                validate="many_to_one")
     secured = out["ltv"].notna()
     out["growth"] = out["growth"].where(out["year"] >= indices["year"].min(), 1.0)  # the snapshot
     if out.loc[secured, "growth"].isna().any():
-        raise BlockingError(STEP, "MISSING_INPUT", "no price index for a projected year")
+        raise BlockingError(STEP, Block.MISSING_INPUT, "no price index for a projected year")
     collateral = (out["gca"] / out["ltv"] * out["growth"]).where(secured, 0.0)
     out["secured_part"] = np.minimum(out["gca"], collateral)
     out["unsecured_part"] = out["gca"] - out["secured_part"]

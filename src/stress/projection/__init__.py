@@ -25,11 +25,9 @@ from stress.projection.kernels import stage_of_rank
 
 STEP = "R7"
 LOG = logging.getLogger("stress.R7")
-STAGE_NAMES = {1: "S1", 2: "S2", 3: "S3"}
 
 
-def opening_slices(portfolio: pd.DataFrame, grades: tuple[str, ...], snapshot_year: int,
-                   scenario: str) -> pd.DataFrame:
+def opening_slices(portfolio: pd.DataFrame, snapshot_year: int, scenario: str) -> pd.DataFrame:
     """End-2026 state: one slice per facility at its current grade (or S3_orig), carrying the
     frozen opening allowance and provision."""
     perf = portfolio["route"] == ROUTE_PERFORMING

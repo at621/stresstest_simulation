@@ -1,4 +1,6 @@
-"""R10 REA floor arithmetic as functions. Nothing in v1 feeds them portfolio REA.
+"""R10 REA floor arithmetic as functions. The core run calls neither: it holds no risk weights.
+The capital bridge of the preparation analysis (``capital/assessment.py``) feeds them the
+portfolio's REA by approach, from the risk weights a run's ``capital`` sidecar section supplies.
 
 CAP-03, CAP-04.
 """

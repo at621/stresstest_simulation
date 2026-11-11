@@ -45,17 +45,6 @@ def ead(balance, undrawn, ccf, not_prepaid=1.0) -> Ead:
     return Ead(drawn=drawn, undrawn=undrawn_ead, total=drawn + undrawn_ead)
 
 
-def utilisation_sensitivity(drawn: float, undrawn: float, ccf_from: float, ccf_to: float) -> dict:
-    """EAD-06: change the accounting CCF only; nominal balances stay as they are."""
-    before = ead(drawn, undrawn, ccf_from)
-    after = ead(drawn, undrawn, ccf_to)
-    return {
-        "ead_from": float(before.total), "ead_to": float(after.total),
-        "ead_change": float(after.total - before.total),
-        "nominal_drawn": drawn, "nominal_undrawn": undrawn,
-    }
-
-
 def permitted_transfer(drawn: float, undrawn: float, transfer: float, ccf: float) -> dict:
     """EAD-06: a permitted drawdown moves ``transfer`` from undrawn to drawn before the CCF
     applies to the remainder; the limit is unchanged and the transfer is not counted twice."""

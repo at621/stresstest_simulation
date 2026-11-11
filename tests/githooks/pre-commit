@@ -4,8 +4,9 @@
 #
 # 1. Protected and local-only paths are never committed.
 # 2. Lint and import rules pass.
-# 3. The full test suite passes, unless every staged file is on the small-change list below
-#    (CLAUDE.md, "How to work"). A file not on the list counts as the engine, deleted ones too.
+# 3. The full test suite passes, and then the control room's tests, unless every staged file is on
+#    the small-change list below (CLAUDE.md, "How to work"). A file not on the list counts as the
+#    engine, deleted ones too.
 
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 
@@ -38,3 +39,7 @@ if [ -z "$spec$other" ]; then
 fi
 
 uv run pytest -q -x -p no:cacheprovider || exit 1
+# The control room imports the engine, and only its tests read the example specifications under
+# docs/, so a change outside the small-change list can break it. Its tests sit outside tests/ and
+# run on their own.
+uv run pytest control_room -q -x -p no:cacheprovider || exit 1

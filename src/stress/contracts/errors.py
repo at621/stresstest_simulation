@@ -36,6 +36,7 @@ class Reason(StrEnum):
     OFF_BALANCE_CATEGORY = "OFF_BALANCE_CATEGORY"
     POCI_NOT_IN_V1 = "POCI_NOT_IN_V1"
     CENTRAL_BANK_NOT_IN_V1 = "CENTRAL_BANK_NOT_IN_V1"
+    MISSING_PORTFOLIO = "MISSING_PORTFOLIO"
     UNKNOWN_SEGMENT = "UNKNOWN_SEGMENT"
     UNMAPPED_COUNTRY = "UNMAPPED_COUNTRY"
     UNKNOWN_PRODUCT = "UNKNOWN_PRODUCT"
@@ -43,6 +44,7 @@ class Reason(StrEnum):
     MISSING_GRADE = "MISSING_GRADE"
     UNKNOWN_GRADE = "UNKNOWN_GRADE"
     STAGE_GRADE_CONFLICT = "STAGE_GRADE_CONFLICT"
+    SICR_OVERRIDE_CONFLICT = "SICR_OVERRIDE_CONFLICT"
     DEFAULT_STAGE_CONFLICT = "DEFAULT_STAGE_CONFLICT"
     MISSING_TTC_LGD = "MISSING_TTC_LGD"
     TTC_LGD_OUT_OF_RANGE = "TTC_LGD_OUT_OF_RANGE"
@@ -65,17 +67,21 @@ class Reason(StrEnum):
 
 
 # Defects that block the whole run, not only the record: EAD-04 ("missing CCF for positive
-# undrawn exposure blocks the run") and the blocking defects of EAD-09. R3 logs them in
-# rejections.parquet first, so the log shows every record behind the block. All other reasons
-# reject the record (or "block the facility", EAD-10, SYN-PAR-08, LGD-12) and the run goes on.
+# undrawn exposure blocks the run") and the blocking defects of EAD-09. A facility whose reported
+# stage only a run specification's ``sicr_k`` leaves unexplained blocks too (owner's decision of
+# 9 November 2026, A44): the override would otherwise drop reported exposure from the run. R3 logs
+# them in rejections.parquet first, so the log shows every record behind the block. All other
+# reasons reject the record (or "block the facility", EAD-10, SYN-PAR-08, LGD-12) and the run
+# goes on.
 RUN_BLOCKING_REASONS = frozenset({
     Reason.MISSING_CCF, Reason.CCF_OUT_OF_RANGE, Reason.NEGATIVE_AMOUNT,
-    Reason.DUPLICATE_COMMITMENT, Reason.LIMIT_BREACH,
+    Reason.DUPLICATE_COMMITMENT, Reason.LIMIT_BREACH, Reason.SICR_OVERRIDE_CONFLICT,
 })
 
 
 # Blocking codes. Every BlockingError raised by a step uses one of these, or the Reason that
-# blocked the run (RUN_BLOCKING_REASONS).
+# blocked the run (RUN_BLOCKING_REASONS). tests/controls/test_setting_checks.py reads every raise
+# site, so a code typed there as text fails the gate.
 class Block(StrEnum):
     REGULATORY_MODE = "REGULATORY_MODE"
     INVALID_ARGUMENT = "INVALID_ARGUMENT"
@@ -110,3 +116,18 @@ class Block(StrEnum):
     NOT_PERMITTED_MOVEMENT = "NOT_PERMITTED_MOVEMENT"
     RECONCILIATION = "RECONCILIATION"
     EMPTY_PORTFOLIO = "EMPTY_PORTFOLIO"
+    # An engine fault, sealed as BLOCKED with its traceback in the log; `stress run` exits 1.
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    # A run specification, or a command line that contradicts one.
+    INVALID_SPECIFICATION = "INVALID_SPECIFICATION"
+    # A sealed run read back by report, compare or rerun, and a rerun's source and packages.
+    RUN_INTEGRITY = "RUN_INTEGRITY"
+    SOURCE_MISMATCH = "SOURCE_MISMATCH"
+    ENVIRONMENT_MISMATCH = "ENVIRONMENT_MISMATCH"
+    # The optional analysis file and the diagnostics and reports built from it.
+    INVALID_INPUT = "INVALID_INPUT"
+    MISSING_INPUT = "MISSING_INPUT"
+    INVALID_HORIZON = "INVALID_HORIZON"
+    INVALID_SCOPE = "INVALID_SCOPE"
+    UNSTABLE_SELECTION = "UNSTABLE_SELECTION"
+    NON_MONOTONE = "NON_MONOTONE"

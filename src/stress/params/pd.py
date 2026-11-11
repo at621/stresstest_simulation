@@ -31,18 +31,6 @@ def curve_from_conditional(q: Sequence[float]) -> Curve:
     return Curve(q=q, m=m, s=s, f=1.0 - s)
 
 
-def curve_from_cumulative(f: np.ndarray) -> Curve:
-    """Marginal, survival and conditional PD from a cumulative curve F[1..K] (PD-11)."""
-    f = np.asarray(f, dtype=float)
-    f_prev = np.concatenate(([0.0], f[:-1]))
-    m = f - f_prev
-    s = 1.0 - f
-    s_prev = 1.0 - f_prev
-    with np.errstate(invalid="ignore", divide="ignore"):
-        q = np.where(s_prev > 0, m / np.where(s_prev > 0, s_prev, 1.0), 0.0)
-    return Curve(q=q, m=m, s=s, f=f)
-
-
 def stub_pd(annual_pd, fraction):
     """PD for a stub interval of ``fraction`` years: ``1 - (1 - q)^d`` (PD-06)."""
     return 1.0 - (1.0 - np.asarray(annual_pd, dtype=float)) ** fraction
@@ -89,24 +77,3 @@ def cumulative_pd(matrices: Sequence[np.ndarray]) -> np.ndarray:
     """F[g, k] for every start grade g (rows) and bucket k = 1..K (columns)."""
     dist = grade_distributions(matrices)
     return dist[1:, :-1, -1].T
-
-
-def stub_marginal(distribution: np.ndarray, next_matrix: np.ndarray, fraction: float) -> np.ndarray:
-    """Marginal PD of a stub bucket per start grade.
-
-    ``distribution`` is P[n] (grade distribution at the start of the stub, from each start
-    grade); within the stub each performing grade defaults with ``1 - (1 - PD_j)^d``.
-    """
-    pd_next = stub_pd(next_matrix[:-1, -1], fraction)
-    return distribution[:-1, :-1] @ pd_next
-
-
-def lifetime_pd_ttc(ttc: np.ndarray, horizon: float) -> np.ndarray:
-    """Lifetime PD of every performing grade over ``horizon`` years under the TTC matrix."""
-    whole = int(np.floor(horizon + 1e-9))
-    stub = horizon - whole
-    power = np.linalg.matrix_power(ttc, whole)
-    f = power[:-1, -1].copy()
-    if stub > 1e-9:
-        f = f + stub_marginal(power, ttc, stub)
-    return f

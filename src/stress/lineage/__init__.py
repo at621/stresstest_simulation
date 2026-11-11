@@ -7,9 +7,11 @@ output; a rerun must give identical output hashes. Owns runs/<run_id>/.
 OPS-01, OPS-04, SCN-04, REG-01, section 12.2 reproducibility.
 """
 
+import hashlib
 import json
 import os
 import platform
+import re
 import stat
 import subprocess
 from datetime import UTC, datetime
@@ -36,11 +38,15 @@ from stress.contracts.run import (
     RunConfig,
     RunContext,
 )
+from stress.contracts.specification import changes_the_run
 
 STEP_OPEN = "R1"
 STEP_SEAL = "R11"
 HASH_PREFIX = 16  # input-set folder names use the first 16 hex characters of the set hash
 CODE_PATHS = ("src", "foundation", "pyproject.toml", "uv.lock")
+# The variant is part of the run folder's name, so it is a plain name and never a path.
+VARIANT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+SPECIFICATION_TAG = "spec"
 
 
 def source_fingerprint(root: Path) -> dict:
@@ -95,10 +101,37 @@ def read_input_manifest(input_dir: Path) -> dict:
         raise BlockingError(STEP_OPEN, Block.UNREADABLE_FILE, f"{path}: {exc}") from exc
 
 
+def run_identity(config: RunConfig, input_hash: str) -> dict:
+    """What the run ID's hash covers of the settings: each setting as given, the input set by its
+    hash, and a specification or an analysis file by its content, never by where the file is. A run
+    with neither file has the identity it always had."""
+    identity = {**config.as_dict(), "inputs": input_hash}
+    if config.specification:
+        identity["specification"] = config.specification_hash or config.specification
+    if config.analysis and config._analysis_bytes is not None:
+        identity["analysis"] = hashlib.sha256(config._analysis_bytes).hexdigest()
+    return identity
+
+
+def run_tag(config: RunConfig) -> str:
+    """What follows the variant in the run ID: each reading selected in place of the design's
+    default, then ``+spec`` when a specification changes more than the run settings. A run with a
+    tag never reads as the core run."""
+    tags = list(config.selected_methods().values())
+    if changes_the_run(config._specification_document):
+        tags.append(SPECIFICATION_TAG)
+    return "".join(f"+{tag}" for tag in tags)
+
+
 def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> RunContext:
-    """R1: create runs/<run_id>/ with config.yaml. Blocks on regulatory mode (D9)."""
+    """R1: create runs/<run_id>/ with config.yaml. Blocks on regulatory mode (D9). Every argument
+    is checked before a folder is made."""
     if config.mode not in MODES:
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, f"unknown mode {config.mode!r}")
+    if not isinstance(config.variant, str) or not VARIANT_NAME.fullmatch(config.variant):
+        raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT,
+                            f"variant {config.variant!r} is not a variant's name: it starts with a letter or a "
+                            "digit and holds only letters, digits, '_', '.' and '-'")
     if config.balance_sheet not in ("static", "dynamic"):
         raise BlockingError(STEP_OPEN, Block.INVALID_ARGUMENT, "unknown balance-sheet mode")
     if not config.inputs:
@@ -136,11 +169,10 @@ def open_run(config: RunConfig, runs_dir: Path, now: datetime | None = None) -> 
     spec_version = str(manifest.get("spec_version", "unknown"))
     now = now or datetime.now(UTC)
     run_hash = canonical_hash({
-        "config": {**config.as_dict(), "inputs": input_hash},
+        "config": run_identity(config, input_hash),
         "input_set": input_hash, "code": version, "spec": spec_version,
     })[:8]
-    tag = "".join(f"+{value}" for value in config.selected_methods().values())  # never reads as the core run
-    base = f"{now:%Y%m%dT%H%MZ}-{config.variant}{tag}-{run_hash}"
+    base = f"{now:%Y%m%dT%H%MZ}-{config.variant}{run_tag(config)}-{run_hash}"
     runs_dir.mkdir(parents=True, exist_ok=True)
     run_id = base
     counter = 2
@@ -234,12 +266,21 @@ def check_replay_environment(manifest: dict) -> None:
     """A strict rerun checks its runtime before spending time projecting a different model."""
     root = Path(_git("rev-parse", "--show-toplevel") or Path(__file__).resolve().parents[3])
     if manifest.get("source") and manifest["source"] != source_fingerprint(root):
-        raise BlockingError("rerun", "SOURCE_MISMATCH", "restore the sealed run's source revision before rerunning")
+        raise BlockingError("rerun", Block.SOURCE_MISMATCH, "restore the sealed run's source revision before rerunning")
     if manifest.get("environment") and manifest["environment"] != runtime_environment():
-        raise BlockingError("rerun", "ENVIRONMENT_MISMATCH", "restore the sealed run's Python and package environment")
+        raise BlockingError("rerun", Block.ENVIRONMENT_MISMATCH,
+                            "restore the sealed run's Python and package environment")
 
 
 def compare_outputs(first: dict, second: dict) -> list[str]:
     """Output files whose hash differs between two sealed runs (reproducibility control)."""
     a, b = first.get("outputs", {}), second.get("outputs", {})
     return sorted(name for name in set(a) | set(b) if a.get(name) != b.get(name))
+
+
+def block_of(manifest: dict) -> tuple[str, str] | None:
+    """The step and code a sealed run blocked at, or None for a run that did not block. Two runs
+    reproduce each other only if this is the same: a blocked run has few outputs or none, so equal
+    output hashes alone say nothing about it."""
+    blocked = manifest.get("blocked")
+    return (str(blocked["step"]), str(blocked["code"])) if blocked else None

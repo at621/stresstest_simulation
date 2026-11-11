@@ -141,7 +141,9 @@ def test_scenario_names_are_literal_workbook_labels(mini, tmp_path):
     from openpyxl import load_workbook
     workbook = load_workbook(ctx.reports_dir / "stress_report.xlsx")
     labels = [c.value for row in workbook["Results by portfolio"] for c in row]
-    assert f"{name} - baseline" in labels
+    # Group headers show labels: the new scenario's is its name, the baseline's is the file's.
+    baseline = next(s["label"] for s in mini["scenarios"]["scenarios"] if s["id"] == "baseline")
+    assert f"{name} - {baseline}" in labels
 
 
 @pytest.mark.control("Repository rules")

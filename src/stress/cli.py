@@ -6,6 +6,10 @@ The only module that wires the pipeline steps together, in order R1 to R11.
     stress report --run runs/<run_id>
     stress rerun --run runs/<run_id>      rerun from the manifest, compare output hashes
     stress compare --base runs/<a> --new runs/<b>
+
+Exit codes: 0 the run is sealed with its results, or the rerun reproduced the run; 1 an engine
+fault, sealed as BLOCKED with INTERNAL_ERROR; 2 blocked, either sealed as BLOCKED or, when the
+block came before R1 opened a run, with no folder; 3 a rerun that did not reproduce.
 """
 
 import argparse
@@ -32,7 +36,7 @@ from stress import (
 from stress import params as parameters
 from stress.capital.assessment import capital_bridge
 from stress.capital.npe import npe_backstop
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 from stress.contracts.preparation import ANALYSES
 from stress.contracts.run import (
     HORIZON_RUNOFFS,
@@ -98,11 +102,18 @@ STEPS = {
 
 @contextmanager
 def step(code: str, detail: str = ""):
-    """Log a step's start and end with its duration; a failure is logged by ``execute``."""
+    """Log a step's start and end with its duration; a failure is logged by ``execute``. A block
+    on specification data is raised as R2's, which reads the specification: when a later step is
+    the one that found it, such as R3 on the volume assumptions, it carries that step's name."""
     log = logging.getLogger(f"stress.{code}")
     log.info("start: %s%s", STEPS[code], f" ({detail})" if detail else "")
     began = time.perf_counter()
-    yield log
+    try:
+        yield log
+    except BlockingError as exc:
+        if exc.code == Block.INVALID_SPECIFICATION and exc.step != code:
+            raise BlockingError(code, exc.code, exc.message) from exc
+        raise
     log.info("done in %.1f s", time.perf_counter() - began)
 
 
@@ -195,7 +206,7 @@ def pipeline(ctx) -> dict:
     held = ctx.config.s2_treatment == S2_HELD
     out = {name: [] for name in ("slices", "stage_flows", "grade_flows", "provisions", "ecl_buckets", "charges")}
     for name in parameters.scenario_order(ctx.scenarios):
-        state = projection.opening_slices(routed.portfolio, routed.grades, start, name)
+        state = projection.opening_slices(routed.portfolio, start, name)
         with step("R8", f"{name} {start}, diagnostic of the opening"):
             opening = ecl.year_end_provisions(state, params, drivers.of(MODEL_PD), routed.portfolio, name, start,
                                               routed.grades, last, opening=True)
@@ -306,7 +317,7 @@ def execute(config: RunConfig, runs_dir: Path) -> tuple[object, dict]:
         logging.getLogger(f"stress.{exc.step}").error("BLOCKED %s: %s", exc.code, exc.message)
     except Exception as exc:  # noqa: BLE001 - an engine fault must not leave an unsealed folder
         trace = traceback.format_exc()
-        blocked = BlockingError("engine", "INTERNAL_ERROR", f"{type(exc).__name__}: {exc}")
+        blocked = BlockingError("engine", Block.INTERNAL_ERROR, f"{type(exc).__name__}: {exc}")
         LOG.error("engine fault, run sealed as BLOCKED:\n%s", trace)
     seal = logging.getLogger("stress.R11")
     seal.info("sealing the run as %s after %.1f s", "BLOCKED" if blocked else ctx.status_label,
@@ -340,8 +351,13 @@ def cmd_run(args) -> int:
                                      "analysis", "s2_treatment", "horizon_runoff", "lgd_path", "balance_sheet")
                     if getattr(args, name) is not None]
         if explicit:
-            raise BlockingError("R2", "INVALID_SPECIFICATION",
+            raise BlockingError("R2", Block.INVALID_SPECIFICATION,
                                 f"put calculation settings in the specification, not both sources: {explicit}")
+    elif args.balance_sheet == "dynamic":
+        raise BlockingError("R1", Block.INVALID_ARGUMENT,
+                            "--balance-sheet dynamic cannot run from the command line: a dynamic run needs the "
+                            "yearly volume assumptions of a run specification. Put run.balance_sheet: dynamic "
+                            "and balance_sheet.assumptions in a specification and pass it with --specification")
     config = RunConfig(
         inputs=Path(args.inputs).as_posix() if args.inputs else "",
         scenarios=tuple(s.strip() for s in (args.scenarios or "baseline,adverse").split(",") if s.strip()),
@@ -365,7 +381,7 @@ def cmd_report(args) -> int:
     manifest = lineage.read_manifest(run_dir)
     summary = run_dir / RESULTS_DIR / REPORTS_DIR / report.SUMMARY_FILE
     print(f"run {manifest['run_id']}: {manifest['status']}")
-    if "blocked" in manifest:  # before the summary: a run blocked at R10 can have written one
+    if "blocked" in manifest:  # a blocked run has no summary: R10 writes it last
         b = manifest["blocked"]
         print(f"blocked at {b['step']}: {b['code']}: {b['message']}")
     elif summary.exists():
@@ -394,14 +410,25 @@ def cmd_rerun(args) -> int:
     runs_dir = Path(args.runs_dir) if args.runs_dir else run_dir.parent
     ctx, second = execute(config, runs_dir)
     differing = lineage.compare_outputs(first, second)
+    was, now = lineage.block_of(first), lineage.block_of(second)
     print(f"rerun {ctx.run_id}: {second['status']}")
-    if differing or first["status"] != second["status"]:
+    if differing or first["status"] != second["status"] or was != now:
         print(f"NOT reproduced: {len(differing)} output(s) differ", file=sys.stderr)
+        if was != now:
+            print(f"  the run {_stopped(was)}; the rerun {_stopped(now)}", file=sys.stderr)
         for name in differing:
             print(f"  {name}", file=sys.stderr)
         return EXIT_NOT_REPRODUCED
-    print(f"reproduced: all {len(first['outputs'])} output hashes identical to {first['run_id']}")
+    if was:  # nothing to compare but the block itself and whatever was written before it
+        print(f"reproduced: blocked again at {was[0]} with {was[1]}, as {first['run_id']}; the "
+              f"{len(first['outputs'])} output(s) written before the block have identical hashes")
+    else:
+        print(f"reproduced: all {len(first['outputs'])} output hashes identical to {first['run_id']}")
     return EXIT_OK
+
+
+def _stopped(block: tuple[str, str] | None) -> str:
+    return f"blocked at {block[0]} with {block[1]}" if block else "did not block"
 
 
 def cmd_compare(args) -> int:
@@ -426,7 +453,9 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="run R1-R11 on one input set")
     run.add_argument("--inputs", help="input set folder, inputs/<hash>; may be supplied by the specification")
     run.add_argument("--specification", help="versioned run specification; do not mix with calculation flags")
-    run.add_argument("--balance-sheet", choices=("static", "dynamic"))
+    run.add_argument("--balance-sheet", choices=("static", "dynamic"),
+                     help="static (default). dynamic needs yearly volume assumptions, so it runs only from a "
+                          "specification: set run.balance_sheet there")
     run.add_argument("--scenarios",
                      help="comma-separated scenarios (default: baseline,adverse)")
     run.add_argument("--variant", help="core (default), annuity, linear or utilisation")

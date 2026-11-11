@@ -13,7 +13,7 @@ arithmetic, because the engine does not track provisions by flow.
 import numpy as np
 import pandas as pd
 
-from stress.contracts.errors import BlockingError
+from stress.contracts.errors import Block, BlockingError
 from stress.contracts.run import BASELINE
 from stress.contracts.tables import SLICE_S3_ORIGINAL
 
@@ -100,7 +100,7 @@ def template_replica(slices: pd.DataFrame, flows: pd.DataFrame, lgd: pd.DataFram
     stressed = p[p.index.get_level_values("scenario") != BASELINE]
     missing = set(stressed.index.droplevel("year")) - set(terminal.index)
     if missing:
-        raise BlockingError(STEP, "MISSING_INPUT", f"no terminal weight for {sorted(missing)}")
+        raise BlockingError(STEP, Block.MISSING_INPUT, f"no terminal weight for {sorted(missing)}")
     p["loss_rate_s1_next"] = _next_loss_rate(p, terminal, last)
     engine = book.groupby(["scenario", "segment", "year", "stage"])["allowance_on"].sum().unstack(
         "stage", fill_value=0.0).reindex(columns=[1, 2, 3], fill_value=0.0)
@@ -126,7 +126,7 @@ def template_replica(slices: pd.DataFrame, flows: pd.DataFrame, lgd: pd.DataFram
     p["engine_s3_new"] = s3[~original.loc[s3.index]].groupby(["scenario", "segment", "year"])[
         "allowance_on"].sum().reindex(p.index, fill_value=0.0)
     if not np.all(np.abs(p["exp_s2"] - p["flow_s1_s2"] - stay_s2) <= np.maximum(tol["abs"], tol["rel"] * p["exp_s2"])):
-        raise BlockingError(STEP, "RECONCILIATION", "template S2 flows do not rebuild the S2 stock")
+        raise BlockingError(STEP, Block.RECONCILIATION, "template S2 flows do not rebuild the S2 stock")
     p["old_s3_box_9"] = _old_s3(book, lgd, years).reindex(p.index, fill_value=0.0)
     p["engine_s3_old"] = s3[original.loc[s3.index]].groupby(["scenario", "segment", "year"])[
         "allowance_on"].sum().reindex(p.index, fill_value=0.0)
@@ -136,7 +136,7 @@ def template_replica(slices: pd.DataFrame, flows: pd.DataFrame, lgd: pd.DataFram
     out = p.reset_index()
     out["template_class"] = out["segment"].map({**TEMPLATE_CLASS, **(template_classes or {})})
     if out["template_class"].isna().any():
-        raise BlockingError(STEP, "MISSING_INPUT", "a segment has no Table 4 class")
+        raise BlockingError(STEP, Block.MISSING_INPUT, "a segment has no Table 4 class")
     return out
 
 
