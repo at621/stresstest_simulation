@@ -98,6 +98,18 @@ def site(tmp_path):
     running.server_close()
 
 
+@pytest.fixture
+def temp_site():
+    """The real server over a runs folder in the machine's temporary folder, with that folder. pytest's
+    own folders are not always there: the gate puts them inside the repository (tests/ci_gate.py)."""
+    with tempfile.TemporaryDirectory(prefix="room-runs-", ignore_cleanup_errors=True) as folder:
+        running = server.serve(Path(folder), 0)
+        threading.Thread(target=running.serve_forever, daemon=True).start()
+        yield running, Path(folder)
+        running.shutdown()
+        running.server_close()
+
+
 def call(running, method, path, body=None, **headers):
     connection = http.client.HTTPConnection(server.HOST, running.server_port, timeout=60)
     named = {name.replace("_", "-"): value for name, value in headers.items()}
@@ -871,16 +883,17 @@ def test_a_pasted_setup_with_runaway_aliases_gets_a_short_refusal_at_once(site):
     assert response.status == 200 and read["deeper_again"] == read["deeper"], "an alias as such is read"
 
 
-def test_no_answer_names_a_temporary_folder_of_the_server(site, tmp_path, monkeypatch):
+def test_no_answer_names_a_temporary_folder_of_the_server(temp_site, monkeypatch):
     """Added files, sanity checks and packaging work in temporary folders, and the engine's messages
     name them. What reaches the browser says `(temporary folder)` instead. Here the runs folder is one
-    too, as pytest makes it, so the command a sanity check shows would name it."""
-    assert names_the_temporary_folder({"shown": f"--runs-dir {tmp_path}"}), "the check below can fail"
+    too, so the command a sanity check shows would name it."""
+    site, folder = temp_site
+    assert names_the_temporary_folder({"shown": f"--runs-dir {folder}"}), "the check below can fail"
     response, payload = post(site, "/api/preflight", {"document": with_hash(CRISIS), "name": "x"})
     answer = json.loads(payload)
     assert response.status == 200 and "--runs-dir (temporary folder)" in answer["shown"]
     assert not names_the_temporary_folder(answer)
-    committed_set_in(tmp_path, monkeypatch)
+    committed_set_in(folder, monkeypatch)
     control = site.RequestHandlerClass.control
     add(control, "obligors", server.ROOT / INPUTS / "obligors.parquet")
     response, payload = post(site, "/api/use-files", {"base": INPUTS})
