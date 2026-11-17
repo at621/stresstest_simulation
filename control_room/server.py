@@ -364,7 +364,7 @@ def results_of(run: nb.Run) -> dict:
                       "closing": by_year[name][-1]["closing"], "s3_gca": _money(moved["closing_S3"].sum()),
                       "opening_gca": by_stage[name][0]["gca"], "closing_gca": by_stage[name][-1]["gca"],
                       "coverage": by_stage[name][-1]["coverage"]["all"]}
-    names = run.portfolio_names()
+    names = preflight.portfolio_names()
     portfolios = []
     for portfolio, rows in impairment[impairment["portfolio"] != "Total"].groupby("portfolio"):
         held = stages[stages["portfolio"] == portfolio]

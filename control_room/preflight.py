@@ -161,8 +161,8 @@ def base_of(folder: Path) -> dict:
     ps = read_yaml(folder / "parameter_set.yaml")
     paths = read_yaml(folder / "scenarios.yaml")
     fac = read_table(folder, "facilities.parquet")
-    names = read_yaml(SPEC_DIR / "targets.yaml")["portfolios"]
-    portfolios = [{"id": portfolio, "name": names.get(portfolio, {}).get("name"), "facilities": len(part),
+    names = portfolio_names()
+    portfolios = [{"id": portfolio, "name": names.get(portfolio), "facilities": len(part),
                    "gca": float(part["gca"].sum()) / MILLION, "segments": sorted(part["segment"].unique())}
                   for portfolio, part in fac.groupby("portfolio")]
     values = pd.DataFrame(paths["values"])
@@ -302,6 +302,12 @@ def files_of(folder: Path) -> list[dict]:
     return rows
 
 
+def portfolio_names() -> dict[str, str]:
+    """The plain name of each portfolio, such as Residential mortgages, from the spec. Every step shows these."""
+    return {portfolio: entry["name"] for portfolio, entry in read_yaml(SPEC_DIR / "targets.yaml")["portfolios"].items()
+            if isinstance(entry, dict) and entry.get("name")}
+
+
 def listed(names: list[str], limit: int = 4) -> str:
     """Names in a sentence: the first few, and how many more."""
     shown = ", ".join(names[:limit])
@@ -377,12 +383,12 @@ def table_summary(folder: Path) -> dict:
     files = matrix_files(folder)
     matrix = pd.concat([read_table(folder, path).assign(segment=seg) for seg, path in files.items()],
                        ignore_index=True)
-    names = read_yaml(SPEC_DIR / "targets.yaml")["portfolios"]
+    names = portfolio_names()
     by_portfolio = []
     for portfolio, part in fac.groupby("portfolio"):
         stage = part.groupby("ifrs_stage")["gca"].sum()
         count = part.groupby("ifrs_stage").size()
-        by_portfolio.append({"portfolio": portfolio, "name": names.get(portfolio, {}).get("name"), "facilities": len(part),
+        by_portfolio.append({"portfolio": portfolio, "name": names.get(portfolio), "facilities": len(part),
                              "gca": float(part["gca"].sum()) / MILLION,
                              "stage_gca": {int(s): float(stage.get(s, 0.0)) / MILLION for s in (1, 2, 3)},
                              "stage_count": {int(s): int(count.get(s, 0)) for s in (1, 2, 3)},

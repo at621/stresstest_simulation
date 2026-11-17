@@ -205,6 +205,14 @@ def test_portfolios_and_stages_add_up_to_the_book(sealed):
             assert sum(row["stock"].values()) == pytest.approx(row["gca"])
 
 
+def test_outcomes_name_each_portfolio_as_the_files_step_does(sealed):
+    _, folder = sealed
+    names = preflight.portfolio_names()
+    shown = {p["portfolio"]: p["name"] for p in server.run_view(folder)["results"]["portfolios"]}
+    assert shown and shown == {portfolio: names[portfolio] for portfolio in shown}
+    assert shown.get("P01") == "Residential mortgages"
+
+
 def test_a_rerun_from_the_page_reproduces_the_run(sealed):
     control, folder = sealed
     assert server.run_view(folder)["replay"] == {"possible": True}
